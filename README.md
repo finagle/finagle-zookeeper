@@ -1,6 +1,6 @@
 # finagle-zookeeper
 
-finagle-zookeeper provides basic tools to communicate with a Zookeeper server.
+finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
 ## Terminology
 * **Request** - object sent to a service to be serialize. Sometimes it can be a RequestHeader or (RequestHeader+Body)
