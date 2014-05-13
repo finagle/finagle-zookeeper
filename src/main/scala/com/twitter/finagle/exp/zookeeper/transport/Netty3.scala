@@ -12,30 +12,29 @@ import com.twitter.finagle.exp.zookeeper.watcher.WatchManager
 class PacketFrameDecoder extends FrameDecoder {
 
 
+  /**
+   * When receiving a packet, this method is called
+   */
+
   override def decode(ctx: ChannelHandlerContext, channel: Channel, buffer: ChannelBuffer): BufferedResponse = {
+    // TODO: currently special treatment for notification, step back to normal mode
+    // TODO: log in logger with debug level
 
-    /**
-     * Quick solution to solve notification problem
-     * 1- Read packet size
-     * 2- Read header XID
-     * 3- If == -1 then give it to WatchManager
-     * 4- If != -1 this is a Response
-     */
-
-    println("=== Message Received ===")
+    //println("=== Message Received ===")
     buffer.markReaderIndex()
     val rindex = buffer.readerIndex()
 
-    val size = buffer.readInt // packet size
     val xid = buffer.readInt()
 
-    if(xid == -1){
+    /*if (xid == -1) {
       buffer.readerIndex(rindex)
       WatchManager.decode(buffer)
       buffer.readerIndex(buffer.writerIndex())
-    }else{
+    } else {
       buffer.readerIndex(rindex)
     }
+*/
+    buffer.readerIndex(rindex)
 
     val bw = BufferedResponse.factory(buffer)
     buffer.readerIndex(buffer.writerIndex)
@@ -48,17 +47,17 @@ class PacketFrameDecoder extends FrameDecoder {
  */
 
 class PacketEncoder extends SimpleChannelDownstreamHandler {
-
+  // TODO: log in logger with debug level
   override def writeRequested(ctx: ChannelHandlerContext, evt: MessageEvent) =
     evt.getMessage match {
       case p: Request =>
         try {
 
-          println("=== Message Sent ===")
+          //println("=== Message Sent ===")
 
           val bb = p.toChannelBuffer.toByteBuffer
 
-          bb.putInt(bb.capacity()-4)
+          bb.putInt(bb.capacity() - 4)
           bb.rewind()
 
           Channels.write(ctx, evt.getFuture, wrappedBuffer(bb), evt.getRemoteAddress)
