@@ -48,13 +48,13 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request {
   }
 }
 
-case class CreateRequestBody(path: String, data: Array[Byte], aclListe: Array[ACL], createMode: Int) extends Body {
+case class CreateRequestBody(path: String, data: Array[Byte], aclList: Array[ACL], createMode: Int) extends Body {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
     bw.write(path)
     bw.write(data)
-    bw.write(aclListe)
+    bw.write(aclList)
     bw.write(createMode)
 
     bw.underlying
