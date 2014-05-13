@@ -7,8 +7,6 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
 object ClientBuilder {
 
-  //TODO move parser in a convenient object
-
   def newClient(adress: String, timeOut: Long): ClientBuilder = {
     new ClientBuilder(adress, timeOut)
   }
@@ -83,7 +81,7 @@ case class ClientBuilder(adress: String, timeOut: Long) {
     client.disconnect flatMap {
       rep =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
+          ResponseWrapper.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
