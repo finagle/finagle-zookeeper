@@ -19,7 +19,7 @@ case class BufferedResponse(buffer: Buffer) extends Response
 case class ConnectResponse(
                             protocolVersion: Int,
                             timeOut: Int,
-                            sessionId: Long,
+                             sessionId: Long,
                             passwd: Array[Byte],
                             canRO: Option[Boolean]
                             ) extends Response with ResponseBody
@@ -59,6 +59,7 @@ object ConnectResponse extends Decoder[ConnectResponse] {
   override def decode(buffer: Buffer): ConnectResponse = {
     val br = BufferReader(buffer)
 
+    // read packet size
     br.readInt
     val protocolVersion = br.readInt
     val timeOut = br.readInt
@@ -213,7 +214,10 @@ object ReplyHeader extends Decoder[ReplyHeader] {
     val zxid = br.readLong
     val err = br.readInt
 
-    new ReplyHeader(xid, zxid, err)
+    if (err == 0)
+      new ReplyHeader(xid, zxid, err)
+    else
+      throw ZookeeperException.create("Error", err)
   }
 }
 
