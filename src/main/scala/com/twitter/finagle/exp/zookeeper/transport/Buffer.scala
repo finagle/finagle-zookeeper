@@ -174,6 +174,7 @@ object BufferWriter {
         underlying.writeBytes(byteBuffer);
         this
       }
+      case some:Some[A] => write(some.get)
 
       case null => write(-1)
       case _ => throw new IllegalArgumentException
