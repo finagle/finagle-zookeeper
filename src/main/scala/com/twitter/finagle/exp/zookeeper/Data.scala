@@ -11,6 +11,7 @@ sealed trait serializable {
 
 trait DecoderData[T <: Data] extends (BufferReader => Try[T]) {
   def apply(buffer: BufferReader): Try[T] = Try(decode(buffer))
+
   def decode(buffer: BufferReader): T
 }
 
@@ -116,10 +117,9 @@ object Stat extends DecoderData[Stat] {
 }
 
 object ACL extends DecoderData[ACL] {
-  val defaultACL = new Array[ACL](1)
-  defaultACL(0) = new ACL(31, new ID("world", "anyone"))
-  override def decode(buffer: BufferReader): ACL = {
+  val defaultACL = Array.fill(1)(new ACL(31, new ID("world", "anyone")))
 
+  override def decode(buffer: BufferReader): ACL = {
     val perm = buffer.readInt
     val scheme = buffer.readString
     val id = buffer.readString
