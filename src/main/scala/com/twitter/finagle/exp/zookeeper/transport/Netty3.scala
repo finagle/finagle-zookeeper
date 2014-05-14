@@ -22,19 +22,20 @@ class PacketFrameDecoder extends FrameDecoder {
 
     //println("=== Message Received ===")
     buffer.markReaderIndex()
-    val rindex = buffer.readerIndex()
+    /*val rindex = buffer.readerIndex()
 
     val xid = buffer.readInt()
 
-    /*if (xid == -1) {
+    if (xid == -1) {
       buffer.readerIndex(rindex)
       WatchManager.decode(buffer)
       buffer.readerIndex(buffer.writerIndex())
     } else {
       buffer.readerIndex(rindex)
     }
-*/
+
     buffer.readerIndex(rindex)
+    */
 
     val bw = BufferedResponse.factory(buffer)
     buffer.readerIndex(buffer.writerIndex)

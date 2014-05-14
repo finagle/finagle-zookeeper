@@ -5,14 +5,14 @@ import com.twitter.conversions.time._
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
-object ClientBuilder {
+object ClientWrapper {
 
-  def newClient(adress: String, timeOut: Long): ClientBuilder = {
-    new ClientBuilder(adress, timeOut)
+  def newClient(adress: String, timeOut: Long): ClientWrapper = {
+    new ClientWrapper(adress, timeOut)
   }
 }
 
-case class ClientBuilder(adress: String, timeOut: Long) {
+case class ClientWrapper(adress: String, timeOut: Long) {
   val connectionManager = new ConnexionManager
   val client = ZooKeeper.newRichClient(adress)
   val pingTimer = new PingTimer

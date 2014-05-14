@@ -4,7 +4,7 @@ import com.twitter.finagle.service.{TimeoutFilter, RetryPolicy, RetryingFilter}
 import com.twitter.finagle.exp.zookeeper.transport.ZooKeeperTransporter
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.finagle.client.{Bridge, DefaultClient}
-import com.twitter.finagle.dispatch.PipeliningDispatcher
+import com.twitter.finagle.dispatch.{SerialClientDispatcher, PipeliningDispatcher}
 import com.twitter.finagle.{ServiceFactory,Name}
 import com.twitter.conversions.time._
 import com.twitter.finagle
@@ -25,7 +25,7 @@ with ZKRichClient {
     endpointer = {
       val bridge = Bridge[Request, BufferedResponse, Request, BufferedResponse](
         ZooKeeperTransporter,
-        newDispatcher = new PipeliningDispatcher(_)
+        newDispatcher = new SerialClientDispatcher(_)
       )
       (sa, sr) => bridge(sa, sr)
     }
