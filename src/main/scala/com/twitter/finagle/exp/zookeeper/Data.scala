@@ -119,11 +119,22 @@ object Stat extends DecoderData[Stat] {
 object ACL extends DecoderData[ACL] {
   val defaultACL = Array.fill(1)(new ACL(31, new ID("world", "anyone")))
 
-  override def decode(buffer: BufferReader): ACL = {
-    val perm = buffer.readInt
-    val scheme = buffer.readString
-    val id = buffer.readString
-
+  def apply(perm: Int, scheme: String, id: String): ACL = {
     new ACL(perm, new ID(scheme, id))
+  }
+
+  override def decode(buffer: BufferReader): ACL = {
+    ACL(buffer.readInt, buffer.readString, buffer.readString)
+  }
+
+  def decodeArray(buffer: BufferReader): Array[ACL] = {
+    val size = buffer.readInt
+    val aclList = new Array[ACL](size)
+
+    for (i <- 0 until size) {
+      aclList(i) = decode(buffer)
+    }
+
+    aclList
   }
 }

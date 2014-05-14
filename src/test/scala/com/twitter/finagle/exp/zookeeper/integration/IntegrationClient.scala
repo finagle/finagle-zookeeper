@@ -2,7 +2,7 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import org.scalatest.FunSuite
 import com.twitter.finagle.exp.zookeeper.client.{Client, ClientBuilder}
-import com.twitter.util.Await
+import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
 import com.twitter.finagle.exp.zookeeper.ACL
 
@@ -30,14 +30,14 @@ class ExampleSuite extends FunSuite {
       _ <- client.getChildren("/zookeeper/test", false)
       _ <- client.getChildren2("/", false)
       _ <- client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
-      _ <- client.getData("/zookeeper/test", false)
+      ret <- client.getData("/zookeeper/test", false)
       _ <- client.setACL("/zookeeper/test", ACL.defaultACL, -1)
       _ <- client.sync("/zookeeper")
-      _ <- client.delete("/zookeeper/test", -1)
-    } yield (None)
+     // _ <- client.delete("/zookeeper/test", -1)
+    } yield ret
 
     Await.result(connect)
-    Thread.sleep(30000)
+    Thread.sleep(5000)
     client.disconnect
   }
 }
