@@ -3,6 +3,7 @@
 ## Others
 Complete chroot checkin of paths (see java lib sources)
 Check ACL, authentication, SASL, etc
+Check if packet delimitation is not too heavy or incorrect
 
 ## Request-Response implementation
 getMaxChildrenRequest
