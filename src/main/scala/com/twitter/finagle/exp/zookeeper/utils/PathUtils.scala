@@ -3,11 +3,16 @@ package com.twitter.finagle.exp.zookeeper.utils
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
 
 object PathUtils {
+
   /**
    * Validate the provided znode path string
    * @param path znode path string
    * @throws IllegalArgumentException if the path is invalid
    *
+   */
+
+  /**
+   * TO CHECK AND TEST
    */
 
   def validatePath(path: String, createMod: Int) = {

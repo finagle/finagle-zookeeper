@@ -6,6 +6,11 @@ import org.jboss.netty.buffer.ChannelBuffers._
 import java.nio.{ByteBuffer, ByteOrder}
 import com.twitter.finagle.exp.zookeeper.{ID, ACL}
 
+/**
+ * BufferReader reads Buffer to type T
+ * BufferWriter writes [T] to Buffer
+ */
+
 object Buffer {
   def apply(bytes: Array[Byte]): Buffer = new Buffer {
     // a wrappedBuffer should avoid copying the arrays.

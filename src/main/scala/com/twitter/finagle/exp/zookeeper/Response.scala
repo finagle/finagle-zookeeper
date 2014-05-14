@@ -6,6 +6,20 @@ import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.buffer.ChannelBuffers._
 import java.nio.ByteBuffer
 
+/**
+ * This File describes every responses
+ * A response is usually composed by a header + a body
+ * but there are some exceptions where there is only a header (ReplyHeader).
+ * For example a CreateResponse is composed by a ReplyHeader and a CreateResponseBody
+ * this way : new CreateResponse(h: ReplyHeader, b: CreateResponseBody).
+ *
+ * That's the reason why header extends Response.
+ *
+ * A BufferedResponse is a raw container (buffer) of response, as we have many
+ * different responses, we use a common wrapper, that we can then decode with
+ * the request opCode. With a BufferedResponse and an opCode we can give a Response
+ *
+ * */
 
 sealed trait Response
 sealed trait Header extends Response
@@ -49,6 +63,7 @@ case class SyncResponse(header: ReplyHeader, body: Option[SyncResponseBody]) ext
 case class WatcherEventBody(typ: Int, state: Int, path: String) extends ResponseBody
 case class WatcherEvent(header: ReplyHeader, body: Option[WatcherEventBody]) extends Response
 
+/* To create a BufferedResponse from different objects*/
 object BufferedResponse {
   def factory(buffer: Buffer) = new BufferedResponse(buffer)
   def factory(buffer: ChannelBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(buffer))
@@ -90,7 +105,6 @@ object CreateResponse extends Decoder[CreateResponse] {
       new CreateResponse(header, Some(new CreateResponseBody(br.readString)))
     else {
       throw ZookeeperException.create("Error while create", header.err)
-      new CreateResponse(header, None)
     }
   }
 }
@@ -115,7 +129,6 @@ object ExistsResponse extends Decoder[ExistsResponse] {
       new ExistsResponse(header, Some(new ExistsResponseBody(Stat.decode(br))))
     else {
       throw ZookeeperException.create("Error while exists", header.err)
-      new ExistsResponse(header, None)
     }
   }
 }
@@ -132,7 +145,6 @@ object GetACLResponse extends Decoder[GetACLResponse] {
     }
     else {
       throw ZookeeperException.create("Error while getACL", header.err)
-      new GetACLResponse(header, None)
     }
   }
 }
@@ -154,7 +166,6 @@ object GetChildrenResponse extends Decoder[GetChildrenResponse] {
     }
     else {
       throw ZookeeperException.create("Error while getChildren", header.err)
-      new GetChildrenResponse(header, None)
     }
   }
 }
@@ -176,7 +187,6 @@ object GetChildren2Response extends Decoder[GetChildren2Response] {
     }
     else {
       throw ZookeeperException.create("Error while getChildren2", header.err)
-      new GetChildren2Response(header, None)
     }
   }
 }
@@ -194,7 +204,6 @@ object GetDataResponse extends Decoder[GetDataResponse] {
     }
     else {
       throw ZookeeperException.create("Error while getData", h.err)
-      new GetDataResponse(h, None)
     }
   }
 }
@@ -224,7 +233,6 @@ object SetACLResponse extends Decoder[SetACLResponse] {
       new SetACLResponse(header, Some(new SetACLResponseBody(Stat.decode(br))))
     else {
       throw ZookeeperException.create("Error while setACL", header.err)
-      new SetACLResponse(header, None)
     }
   }
 }
@@ -238,7 +246,6 @@ object SetDataResponse extends Decoder[SetDataResponse] {
       new SetDataResponse(header, Some(new SetDataResponseBody(Stat.decode(br))))
     else {
       throw ZookeeperException.create("Error while setData", header.err)
-      new SetDataResponse(header, None)
     }
   }
 }
@@ -252,7 +259,6 @@ object SyncResponse extends Decoder[SyncResponse] {
       new SyncResponse(header, Some(new SyncResponseBody(br.readString)))
     else {
       throw ZookeeperException.create("Error while sync", header.err)
-      new SyncResponse(header, None)
     }
   }
 }
@@ -271,7 +277,6 @@ object WatcherEvent extends Decoder[WatcherEvent] {
     }
     else {
       throw ZookeeperException.create("Error while watch event", header.err)
-      new WatcherEvent(header, None)
     }
   }
 }

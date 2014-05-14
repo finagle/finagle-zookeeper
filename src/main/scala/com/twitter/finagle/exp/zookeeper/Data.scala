@@ -15,15 +15,6 @@ trait DecoderData[T <: Data] extends (BufferReader => Try[T]) {
   def decode(buffer: BufferReader): T
 }
 
-object Perms {
-  final val READ: Int = 1 << 0
-  final val WRITE: Int = 1 << 1
-  final val CREATE: Int = 1 << 2
-  final val DELETE: Int = 1 << 3
-  final val ADMIN: Int = 1 << 4
-  final val ALL: Int = READ | WRITE | CREATE | DELETE | ADMIN
-}
-
 object Data {
   val statMinimumSize = 68
 
@@ -97,23 +88,13 @@ case class ACL(perms: Int, id: ID) extends Data
 
 case class ID(scheme: String, id: String) extends Data
 
-object Stat extends DecoderData[Stat] {
-  override def decode(buffer: BufferReader): Stat = {
-
-    val czxid = buffer.readLong
-    val mzxid = buffer.readLong
-    val ctime = buffer.readLong
-    val mtime = buffer.readLong
-    val version = buffer.readInt
-    val cversion = buffer.readInt
-    val aversion = buffer.readInt
-    val ephemeralOwner = buffer.readLong
-    val dataLength = buffer.readInt
-    val numChildren = buffer.readInt
-    val pzxid = buffer.readLong
-
-    new Stat(czxid, mzxid, ctime, mtime, version, cversion, aversion, ephemeralOwner, dataLength, numChildren, pzxid)
-  }
+object Perms {
+  final val READ: Int = 1 << 0
+  final val WRITE: Int = 1 << 1
+  final val CREATE: Int = 1 << 2
+  final val DELETE: Int = 1 << 3
+  final val ADMIN: Int = 1 << 4
+  final val ALL: Int = READ | WRITE | CREATE | DELETE | ADMIN
 }
 
 object ACL extends DecoderData[ACL] {
@@ -136,5 +117,24 @@ object ACL extends DecoderData[ACL] {
     }
 
     aclList
+  }
+}
+
+object Stat extends DecoderData[Stat] {
+  override def decode(buffer: BufferReader): Stat = {
+
+    val czxid = buffer.readLong
+    val mzxid = buffer.readLong
+    val ctime = buffer.readLong
+    val mtime = buffer.readLong
+    val version = buffer.readInt
+    val cversion = buffer.readInt
+    val aversion = buffer.readInt
+    val ephemeralOwner = buffer.readLong
+    val dataLength = buffer.readInt
+    val numChildren = buffer.readInt
+    val pzxid = buffer.readLong
+
+    new Stat(czxid, mzxid, ctime, mtime, version, cversion, aversion, ephemeralOwner, dataLength, numChildren, pzxid)
   }
 }

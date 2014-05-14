@@ -4,7 +4,7 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode._
 import com.twitter.util.Try
 
 object ResponseWrapper {
-
+  /* Decode a BufferedResponse to type Try[T] by pattern matching opCode (XID) */
   def decode[T >: Response](repBuffer: BufferedResponse, opCode: Int): Try[T] = opCode match {
     case `createSession` => ConnectResponse(repBuffer.buffer)
     case `ping` => ReplyHeader(repBuffer.buffer)

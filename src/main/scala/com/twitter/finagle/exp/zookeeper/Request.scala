@@ -5,6 +5,12 @@ import org.jboss.netty.buffer.ChannelBuffers._
 import scala.Some
 import org.jboss.netty.buffer.ChannelBuffer
 
+/**
+ * Same as the Response type, a Request can be composed by a header or
+ * by body + header, this is why we consider a RequestHeader is a Request.
+ *
+ * However ConnectRequest is an exception, it is only composed of a body.
+ */
 trait Request {
   val toChannelBuffer: ChannelBuffer
 }

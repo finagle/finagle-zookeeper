@@ -10,8 +10,6 @@ import org.jboss.netty.buffer.ChannelBuffers._
 import com.twitter.finagle.exp.zookeeper.watcher.WatchManager
 
 class PacketFrameDecoder extends FrameDecoder {
-
-
   /**
    * When receiving a packet, this method is called
    */
@@ -58,6 +56,7 @@ class PacketEncoder extends SimpleChannelDownstreamHandler {
 
           val bb = p.toChannelBuffer.toByteBuffer
 
+          // Write the packet size at the beginning and rewind
           bb.putInt(bb.capacity() - 4)
           bb.rewind()
 
@@ -80,6 +79,7 @@ class PacketEncoder extends SimpleChannelDownstreamHandler {
 
 object ZooKeeperClientPipelineFactory extends ChannelPipelineFactory {
   override def getPipeline: ChannelPipeline = {
+    // Maybe packet formatting is too heavy or incorrect
     val pipeline = Channels.pipeline()
     pipeline.addLast("packetDecoder", new PacketFrameDecoder)
     pipeline.addLast("packetEncoder", new PacketEncoder)

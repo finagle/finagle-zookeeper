@@ -1,6 +1,7 @@
 package com.twitter.finagle.exp.zookeeper
 
-sealed case class ZookeeperException(msg: String) extends RuntimeException(msg)
+/* Custom Zookeeper exception */
+case class ZookeeperException(msg: String) extends RuntimeException(msg)
 
 object ZookeeperException {
   def create(msg: String): ZookeeperException = new ZookeeperException(msg)

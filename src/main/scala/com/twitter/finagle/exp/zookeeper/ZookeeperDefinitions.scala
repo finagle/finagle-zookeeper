@@ -2,6 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 object ZookeeperDefinitions {
 
+  /* Defines the creation mode of a znode*/
   object createMode{
     val PERSISTENT = 0
     val EPHEMERAL = 1
@@ -9,6 +10,7 @@ object ZookeeperDefinitions {
     val EPHEMERAL_SEQUENTIAL = 3
   }
 
+  /* XID to identify request type */
   object opCode {
     val notification = 0
     val create = 1
@@ -32,6 +34,7 @@ object ZookeeperDefinitions {
     val error = -1
   }
 
+  /* Error code returned by the server */
   object errorCode {
     val OK = 0
     val SYSTEM_ERROR = -1
@@ -56,6 +59,7 @@ object ZookeeperDefinitions {
     val SESSION_MOVED = -118
     val NOT_READ_ONLY = -119
 
+    /* Return error message from error code */
     def getError(errorCode: Int): String = errorCode match {
       case OK => "OK"
       case SYSTEM_ERROR => "System error"

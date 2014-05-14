@@ -4,6 +4,9 @@ import org.jboss.netty.buffer.ChannelBuffer
 import com.twitter.finagle.exp.zookeeper.transport.BufferReader
 import com.twitter.finagle.exp.zookeeper.{WatcherEventBody, WatcherEvent, ReplyHeader}
 
+/**
+ * WatchManager may be used to manage watcher events, keep a Set of current watches.
+ */
 class WatchManager {
   var watchers: Set[Watcher] = Set[Watcher]()
 }

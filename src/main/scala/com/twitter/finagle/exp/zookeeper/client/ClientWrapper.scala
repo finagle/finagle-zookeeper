@@ -5,6 +5,22 @@ import com.twitter.conversions.time._
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
+/**
+ * ClientWrapper is used as a Wrapper around Client, it allows to check ReplyHeader,
+ * this way we can check the connection state, zxid, error types
+ *
+ * For example with the Connect command, client.connect is called,
+ * the result is then flatMapped, so that we can apply transformation
+ * to a Future value. The ConnectResponse is parsed by the connection manager,
+ * this way we know different session variables, and we can launch the ping timer
+ *
+ * The ping timer is a scheduler based on DefaultTimer which sends a ping request
+ * to the server every X milliseconds to keep the connection alive
+ *
+ * The connectionManager is suppose to check the connection state and try to reconnect
+ * if the connection is lost.
+ */
+
 object ClientWrapper {
 
   def newClient(adress: String, timeOut: Long): ClientWrapper = {
