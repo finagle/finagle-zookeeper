@@ -8,6 +8,7 @@ import com.twitter.finagle.exp.zookeeper.{CreateResponseBody, Perms, ACL}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
 
 class ClientTest extends FunSuite with IntegrationConfig{
+  /* Configure your server here */
   val ipAddress: String = "127.0.0.1"
   val port: Int = 2181
   val timeOut: Long = 1000
@@ -172,7 +173,7 @@ class ClientTest extends FunSuite with IntegrationConfig{
     disconnect
   }
 
-  test("Add 100 sequential nodes") {
+  test("Add 8 sequential nodes") {
     pending
 
     connect
