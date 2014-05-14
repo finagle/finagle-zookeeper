@@ -126,13 +126,7 @@ object GetACLResponse extends Decoder[GetACLResponse] {
     val header = ReplyHeader.decode(br)
 
     if (header.err == 0) {
-      val size = br.readInt
-      val aclList = new Array[ACL](size)
-
-      for (i <- 0 to size - 1) {
-        aclList(i) = ACL.decode(br)
-      }
-
+      val aclList = ACL.decodeArray(br)
       val stat = Stat.decode(br)
       new GetACLResponse(header, Some(new GetACLResponseBody(aclList, stat)))
     }
