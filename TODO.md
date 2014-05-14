@@ -1,5 +1,9 @@
 # TODO
 
+## Others
+Complete chroot checkin of paths (see java lib sources)
+Check ACL, authentication, SASL, etc
+
 ## Request-Response implementation
 getMaxChildrenRequest
 checkVersionRequest
