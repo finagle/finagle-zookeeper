@@ -81,12 +81,10 @@ object BufferReader {
       length match {
         case _ if (length == 0 || length == -1) => new Array[Byte](0)
         case _ if length < 0 => throw new IllegalArgumentException
-        case _ if length > 0 => {
+        case _ if length > 0 =>
           val buffer = new Array[Byte](length)
-
           underlying.readBytes(buffer, 0, length)
           buffer
-        }
       }
     }
 
@@ -94,12 +92,10 @@ object BufferReader {
       val len = underlying.readInt()
       len match {
         case -1 => throw new IllegalThreadStateException
-        case _ => {
+        case _ =>
           val buffer = new Array[Byte](len)
-
           underlying.readBytes(buffer, 0, len)
           new String(buffer, StandardCharsets.UTF_8)
-        }
       }
     }
 
@@ -144,24 +140,21 @@ object BufferWriter {
       case s: Short => underlying.writeShort(s); this
       case l: Long => underlying.writeLong(l); this
       case b: Boolean => underlying.writeByte(if (b) 1 else 0); this
-      case str: String => {
+      case str: String =>
         if (str == null)
-          write(-1);
+          write(-1)
         else {
           write(str.getBytes(StandardCharsets.UTF_8))
         }
         this
-      }
       case channelBuf: ChannelBuffer => underlying.writeBytes(channelBuf); this
-      case acl: ACL => {
+      case acl: ACL =>
         write(acl.perms)
         write(acl.id)
-      }
-      case id: ID => {
+      case id: ID =>
         write(id.scheme)
         write(id.id)
-      }
-      case tab: Array[A] => {
+      case tab: Array[A] =>
         if (tab == null || tab.size == 0)
           write(0)
         else {
@@ -169,11 +162,9 @@ object BufferWriter {
           tab.foreach(e => write(e))
         }
         this
-      }
-      case byteBuffer: ByteBuffer => {
-        underlying.writeBytes(byteBuffer);
+      case byteBuffer: ByteBuffer =>
+        underlying.writeBytes(byteBuffer)
         this
-      }
       case some:Some[A] => write(some.get)
 
       case null => write(-1)
