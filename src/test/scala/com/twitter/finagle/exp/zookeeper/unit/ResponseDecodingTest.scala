@@ -8,7 +8,7 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 import org.jboss.netty.buffer.ChannelBuffers._
 import scala.Some
 
-class ResultTest extends FunSuite {
+class ResponseDecodingTest extends FunSuite {
 
   class Helper {
     val buffer = Buffer.getDynamicBuffer(16)
