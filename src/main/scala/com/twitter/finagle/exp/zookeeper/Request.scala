@@ -17,7 +17,7 @@ case class ConnectRequest(protocolVersion: Int = 0,
                           lastZxidSeen: Long = 0L,
                           timeOut: Int = 2000,
                           sessionId: Long = 0L,
-                          passwd: Array[Byte] = new Array[Byte](16),
+                          passwd: Array[Byte] = Array[Byte](16),
                           canBeRO: Option[Boolean] = Some(true)) extends Request {
 
   override val toChannelBuffer: ChannelBuffer = {
@@ -28,7 +28,6 @@ case class ConnectRequest(protocolVersion: Int = 0,
     bw.write(lastZxidSeen)
     bw.write(timeOut)
     bw.write(sessionId)
-    bw.write(passwd.length)
     bw.write(passwd)
     bw.write(canBeRO.getOrElse(false))
 
@@ -48,7 +47,10 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request {
   }
 }
 
-case class CreateRequestBody(path: String, data: Array[Byte], aclList: Array[ACL], createMode: Int) extends Body {
+case class CreateRequestBody(path: String,
+                             data: Array[Byte],
+                             aclList: Array[ACL],
+                             createMode: Int) extends Body {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
