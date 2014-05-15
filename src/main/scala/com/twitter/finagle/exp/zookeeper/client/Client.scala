@@ -2,13 +2,13 @@ package com.twitter.finagle.exp.zookeeper.client
 
 import java.util.logging.Logger
 import com.twitter.finagle.ServiceFactory
-import com.twitter.util.{Future, Time, Closable}
+import com.twitter.util.{Await, Future, Time, Closable}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions._
 
 class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Closable {
 
-  private[this] val service = factory.toService
+  private[this] val service = Await.result(factory())
 
   def close(deadline: Time): Future[Unit] = factory.close(deadline)
   def closeService: Future[Unit] = factory.close()
