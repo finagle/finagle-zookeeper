@@ -39,7 +39,7 @@ class ResponseDecodingTest extends FunSuite {
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
     //Decode the raw response of connect response
-    val pureRep: Try[ConnectResponse] = ResponseWrapper.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
+    val pureRep: Try[ConnectResponse] = ResponseDecoder.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -77,7 +77,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep: Try[CreateResponse] = ResponseWrapper.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
+    val pureRep: Try[CreateResponse] = ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -109,7 +109,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -141,7 +141,7 @@ class ResponseDecodingTest extends FunSuite {
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
 
-    val pureRep = ResponseWrapper.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
 
     assert(pureRep match {
       case Throw(ex) =>
@@ -209,7 +209,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -240,7 +240,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -296,7 +296,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -368,7 +368,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -418,7 +418,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -482,7 +482,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -554,7 +554,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.getData).asInstanceOf[Try[GetDataResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.getData).asInstanceOf[Try[GetDataResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -622,7 +622,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -689,7 +689,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -732,7 +732,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
 
     assert(pureRep match {
       case Return(res) =>
@@ -767,7 +767,7 @@ class ResponseDecodingTest extends FunSuite {
 
     //This is the type of response received at decoding
     val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseWrapper.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
+    val pureRep = ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
 
     assert(pureRep match {
       case Return(res) =>
