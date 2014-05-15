@@ -6,8 +6,9 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
 /**
- * ClientWrapper is used as a Wrapper around Client, it allows to check ReplyHeader,
- * this way we can check the connection state, zxid, error types
+ * ClientWrapper (can also be named SessionManager) is used as a Wrapper around Client,
+ * it allows to check ReplyHeader, this way we can check the connection state, zxid,
+ * error types.
  *
  * For example with the Connect command, client.connect is called,
  * the result is then flatMapped, so that we can apply transformation
@@ -17,8 +18,8 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
  * The ping timer is a scheduler based on DefaultTimer which sends a ping request
  * to the server every X milliseconds to keep the connection alive
  *
- * The connectionManager is suppose to check the connection state and try to reconnect
- * if the connection is lost.
+ * The connectionManager is suppose to check the connection state and try to
+ * reconnect if the connection is lost.
  */
 
 object ClientWrapper {
@@ -35,16 +36,22 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   val logger = Client.getLogger
 
   def connect: Future[Option[ConnectResponse]] = {
+    // flatMap client.connect to get Future[BufferedResponse]
     client.connect flatMap {
-      rep =>
-        val pureRep: Try[ConnectResponse] = ResponseWrapper.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
+      rep:BufferedResponse =>
+        // Now we can decode the BufferedResponse by giving it to the ResponseWrapper with
+        // the createSession opCode
+        val pureRep: Try[ConnectResponse] =
+          ResponseDecoder.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
 
         pureRep match {
+            // if the decoding had no errors
           case Return(res) =>
             connectionManager.parseConnectResponse(pureRep.get())
+            // We can start to send ping to keep session alive
             pingTimer(connectionManager.realTimeout.milliseconds)(sendPing)
             Future.value(Some(pureRep.get()))
-
+            // There might be a ZooKeeper exception
           case Throw(ex) =>
             logger.warning(ex.getMessage + ": " + ex.getCause)
             Future.value(None)
@@ -52,14 +59,17 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     }
   }
 
-  def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int): Future[Option[CreateResponseBody]] = {
+  def create(path: String, data: Array[Byte], acl: Array[ACL],
+             createMode: Int): Future[Option[CreateResponseBody]] = {
+
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
-    require(createMode == 0 || createMode == 1 || createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
+    require(createMode == 0 || createMode == 1 ||
+            createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
 
     client.create(path, data, acl, createMode, connectionManager.getXid) flatMap {
-      rep =>
-        val pureRep: Try[CreateResponse] = ResponseWrapper.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
+      rep:BufferedResponse =>
+        val pureRep: Try[CreateResponse] = ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -77,8 +87,8 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.delete(path, version, connectionManager.getXid) flatMap {
-      rep =>
-        val pureRep = ResponseWrapper.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
+      rep:BufferedResponse =>
+        val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -95,9 +105,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   def disconnect: Future[Option[ReplyHeader]] = {
     pingTimer.stopTimer
     client.disconnect flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
+          ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -116,9 +126,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watcher || !watcher, "Watch must be true or false")
 
     client.exists(path, watcher, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
+          ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -136,9 +146,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.getACL(path, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
+          ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -157,8 +167,8 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watch || !watch, "Watch must be true or false")
 
     client.getChildren(path, watch, connectionManager.getXid) flatMap {
-      rep =>
-        val pureRep = ResponseWrapper.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
+      rep:BufferedResponse =>
+        val pureRep = ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -177,8 +187,8 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watch || !watch, "Watch must be true or false")
 
     client.getChildren2(path, watch, connectionManager.getXid) flatMap {
-      rep =>
-        val pureRep = ResponseWrapper.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
+      rep:BufferedResponse =>
+        val pureRep = ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
 
         pureRep match {
           case Return(res) =>
@@ -198,8 +208,8 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watcher || !watcher, "Watch must be true or false")
 
     client.getData(path, watcher, connectionManager.getXid) flatMap {
-      rep =>
-        val pureRep = ResponseWrapper.decode(rep, opCode.getData)
+      rep:BufferedResponse =>
+        val pureRep = ResponseDecoder.decode(rep, opCode.getData)
 
         pureRep match {
           case Return(r) =>
@@ -215,8 +225,8 @@ case class ClientWrapper(adress: String, timeOut: Long) {
 
   def sendPing: Future[Option[ReplyHeader]] = {
     client.sendPing flatMap {
-      rep =>
-        val pureRep = ResponseWrapper.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
+      rep:BufferedResponse =>
+        val pureRep = ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -235,9 +245,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(acl.size != 0, "ACL list must not be empty")
 
     client.setACL(path, acl, version, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
+          ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -255,9 +265,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.setData(path, data, version, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
+          ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -274,9 +284,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   def setWatches(relativeZxid: Int, dataWatches: Array[String], existsWatches: Array[String], childWatches: Array[String]): Future[Option[ReplyHeader]] = {
 
     client.setWatches(relativeZxid, dataWatches, existsWatches, childWatches, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
+          ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -294,9 +304,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.sync(path, connectionManager.getXid) flatMap {
-      rep =>
+      rep:BufferedResponse =>
         val pureRep =
-          ResponseWrapper.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
+          ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -416,7 +426,6 @@ class ConnexionManager {
 
     }
   }
-
 
   def realTimeout: Long = timeOut * 2 / 3
 
