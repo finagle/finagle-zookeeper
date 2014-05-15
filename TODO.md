@@ -7,6 +7,8 @@ Check ACL, authentication, SASL, etc
 
 Check if packet delimitation is not too heavy or incorrect
 
+Make a debug log level and change println to Logger
+
 ## Request-Response implementation
 getMaxChildrenRequest
 
