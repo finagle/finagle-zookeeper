@@ -5,6 +5,8 @@ import com.twitter.finagle.exp.zookeeper.transport.{Buffer, BufferReader}
 import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.buffer.ChannelBuffers._
 import java.nio.ByteBuffer
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode._
+import scala.Some
 
 /**
  * This File describes every responses
@@ -21,7 +23,7 @@ import java.nio.ByteBuffer
  *
  * */
 
-sealed trait Response
+sealed abstract class Response
 sealed trait Header extends Response
 sealed trait ResponseBody
 sealed trait Decoder[T <: Response] extends (Buffer => Try[T]) {
@@ -68,6 +70,26 @@ object BufferedResponse {
   def factory(buffer: Buffer) = new BufferedResponse(buffer)
   def factory(buffer: ChannelBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(buffer))
   def factory(buffer: ByteBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(buffer)))
+}
+
+object ResponseDecoder {
+  /* Decode a BufferedResponse to type Try[T] by pattern matching opCode (XID) */
+  def decode[T >: Response](repBuffer: BufferedResponse, opCode: Int): Try[T] = opCode match {
+    case `createSession` => ConnectResponse(repBuffer.buffer)
+    case `ping` => ReplyHeader(repBuffer.buffer)
+    case `closeSession` => ReplyHeader(repBuffer.buffer)
+    case `create` => CreateResponse(repBuffer.buffer)
+    case `delete` => ReplyHeader(repBuffer.buffer)
+    case `exists` => ExistsResponse(repBuffer.buffer)
+    case `getACL` => GetACLResponse(repBuffer.buffer)
+    case `getChildren` => GetChildrenResponse(repBuffer.buffer)
+    case `getChildren2` => GetChildren2Response(repBuffer.buffer)
+    case `getData` => GetDataResponse(repBuffer.buffer)
+    case `setData` => SetDataResponse(repBuffer.buffer)
+    case `setACL` => SetACLResponse(repBuffer.buffer)
+    case `sync` => SyncResponse(repBuffer.buffer)
+    case `setWatches` => ReplyHeader(repBuffer.buffer)
+  }
 }
 
 object ConnectResponse extends Decoder[ConnectResponse] {
