@@ -9,6 +9,32 @@ import com.twitter.finagle.exp.zookeeper._
 import org.jboss.netty.buffer.ChannelBuffers._
 import com.twitter.finagle.exp.zookeeper.watcher.WatchManager
 
+/**
+ * A Netty3 pipeline that is responsible for framing network
+ * traffic in terms of mysql logical packets.
+ */
+
+object PipelineFactory extends ChannelPipelineFactory {
+  override def getPipeline: ChannelPipeline = {
+    // Maybe packet formatting is too heavy or incorrect
+    val pipeline = Channels.pipeline()
+    pipeline.addLast("packetDecoder", new PacketFrameDecoder)
+    pipeline.addLast("packetEncoder", new PacketEncoder)
+    pipeline
+  }
+}
+
+/**
+ * Responsible for the transport layer plumbing required to produce
+ * a Transport[Packet, Packet]. The current implementation uses
+ * Netty3.
+ */
+
+object ZooKeeperTransporter extends Netty3Transporter[Request, BufferedResponse](
+  "zookeeper",
+  PipelineFactory
+)
+
 class PacketFrameDecoder extends FrameDecoder {
   /**
    * When receiving a packet, this method is called
@@ -71,29 +97,3 @@ class PacketEncoder extends SimpleChannelDownstreamHandler {
           "Unsupported request type %s".format(unknown.getClass.getName)))
     }
 }
-
-/**
- * A Netty3 pipeline that is responsible for framing network
- * traffic in terms of mysql logical packets.
- */
-
-object ZooKeeperClientPipelineFactory extends ChannelPipelineFactory {
-  override def getPipeline: ChannelPipeline = {
-    // Maybe packet formatting is too heavy or incorrect
-    val pipeline = Channels.pipeline()
-    pipeline.addLast("packetDecoder", new PacketFrameDecoder)
-    pipeline.addLast("packetEncoder", new PacketEncoder)
-    pipeline
-  }
-}
-
-/**
- * Responsible for the transport layer plumbing required to produce
- * a Transport[Packet, Packet]. The current implementation uses
- * Netty3.
- */
-
-object ZooKeeperTransporter extends Netty3Transporter[Request, BufferedResponse](
-  name = "zookeeper",
-  pipelineFactory = ZooKeeperClientPipelineFactory
-)
