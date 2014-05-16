@@ -22,6 +22,14 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     service(new RequestHeader(-2, 11))
   }
 
+  def checkVersion(path:String, version:Int, xid: Int): Future[BufferedResponse] = {
+    println("<--checkVersion: " + xid)
+    val header = RequestHeader(xid, opCode.check)
+    val body = CheckVersionRequestBody(path, version)
+
+    service(new CheckVersionRequest(header, body))
+  }
+
   def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {
     //TODO patch check (chroot)
     /*PathUtils.validatePath(path, createMode)

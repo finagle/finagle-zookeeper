@@ -7,7 +7,7 @@ import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper.{CreateResponseBody, Perms, ACL}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
 
-class ClientTest extends FunSuite with IntegrationConfig{
+class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
   val ipAddress: String = "127.0.0.1"
   val port: Int = 2181
@@ -232,6 +232,21 @@ class ClientTest extends FunSuite with IntegrationConfig{
 
   test("Persistent node and children should not exist") {
     pending
+  }
+
+  test("CheckVersion is working") {
+    connect
+
+    val ret = for {
+      _ <- client.get.create("/zookeeper/check-verSion-0662-once", "COO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      get <- client.get.getData("/zookeeper/check-verSion-0662-once", false)
+      check <- client.get.checkVersionRequest("/zookeeper/check-verSion-0662-once", 0)
+    } yield (check, get)
+
+    val resp = Await.result(ret)
+
+    assert(resp._1.get.err === resp._2.get.stat.version)
+    disconnect
   }
 
 }

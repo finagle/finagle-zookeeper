@@ -78,6 +78,7 @@ object ResponseDecoder {
     case `createSession` => ConnectResponse(repBuffer.buffer)
     case `ping` => ReplyHeader(repBuffer.buffer)
     case `closeSession` => ReplyHeader(repBuffer.buffer)
+    case `check`=> ReplyHeader(repBuffer.buffer)
     case `create` => CreateResponse(repBuffer.buffer)
     case `delete` => ReplyHeader(repBuffer.buffer)
     case `exists` => ExistsResponse(repBuffer.buffer)

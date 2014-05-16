@@ -53,6 +53,21 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request {
   }
 }
 
+case class CheckVersionRequest(header: RequestHeader, body: CheckVersionRequestBody) extends Request {
+  override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
+}
+
+case class CheckVersionRequestBody(path: String, version: Int) extends Body {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
+
+    bw.write(path)
+    bw.write(version)
+
+    bw.underlying
+  }
+}
+
 case class CreateRequestBody(path: String,
                              data: Array[Byte],
                              aclList: Array[ACL],

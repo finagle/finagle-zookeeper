@@ -35,27 +35,45 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   val pingTimer = new PingTimer
   val logger = Client.getLogger
 
-  def connect: Future[Option[ConnectResponse]] = {
-    // flatMap client.connect to get Future[BufferedResponse]
-    client.connect flatMap {
-      rep:BufferedResponse =>
-        // Now we can decode the BufferedResponse by giving it to the ResponseWrapper with
-        // the createSession opCode
-        val pureRep: Try[ConnectResponse] =
-          ResponseDecoder.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
+  /* This can only be used in a Transaction. Pending while transaction are not implemented */
+  def checkVersionRequest(path: String, version: Int): Future[Option[ReplyHeader]] = {
+    client.checkVersion(path, version, connectionManager.getXid) flatMap {
+      rep: BufferedResponse =>
+        val pureRep: Try[ReplyHeader] =
+          ResponseDecoder.decode(rep, opCode.check).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
-            // if the decoding had no errors
+          // if the decoding had no errors
           case Return(res) =>
-            connectionManager.parseConnectResponse(pureRep.get())
-            // We can start to send ping to keep session alive
-            pingTimer(connectionManager.realTimeout.milliseconds)(sendPing)
             Future.value(Some(pureRep.get()))
-            // There might be a ZooKeeper exception
+          // There might be a ZooKeeper exception
           case Throw(ex) =>
             logger.warning(ex.getMessage + ": " + ex.getCause)
             Future.value(None)
         }
+    }
+  }
+
+  def connect: Future[Option[ConnectResponse]] = {
+    // flatMap client.connect to get Future[BufferedResponse]
+    client.connect flatMap { rep: BufferedResponse =>
+      // Now we can decode the BufferedResponse by giving it to the ResponseWrapper with
+      // the createSession opCode
+      val pureRep: Try[ConnectResponse] =
+        ResponseDecoder.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
+
+      pureRep match {
+        // if the decoding had no errors
+        case Return(res) =>
+          connectionManager.parseConnectResponse(pureRep.get())
+          // We can start to send ping to keep session alive
+          pingTimer(connectionManager.realTimeout.milliseconds)(sendPing)
+          Future.value(Some(pureRep.get()))
+        // There might be a ZooKeeper exception
+        case Throw(ex) =>
+          logger.warning(ex.getMessage + ": " + ex.getCause)
+          Future.value(None)
+      }
     }
   }
 
@@ -65,11 +83,12 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
     require(createMode == 0 || createMode == 1 ||
-            createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
+      createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
 
     client.create(path, data, acl, createMode, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
-        val pureRep: Try[CreateResponse] = ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
+      rep: BufferedResponse =>
+        val pureRep: Try[CreateResponse] =
+          ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -87,8 +106,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.delete(path, version, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
-        val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
+      rep: BufferedResponse =>
+        val pureRep =
+          ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -104,20 +124,20 @@ case class ClientWrapper(adress: String, timeOut: Long) {
 
   def disconnect: Future[Option[ReplyHeader]] = {
     pingTimer.stopTimer
-    client.disconnect flatMap {
-      rep:BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
+    client.disconnect flatMap { rep: BufferedResponse =>
 
-        pureRep match {
-          case Return(res) =>
-            connectionManager.parseReplyHeader(pureRep.get())
-            Future.value(Some(pureRep.get()))
+      val pureRep =
+        ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+      pureRep match {
+        case Return(res) =>
+          connectionManager.parseReplyHeader(pureRep.get())
+          Future.value(Some(pureRep.get()))
+
+        case Throw(ex) =>
+          logger.warning(ex.getMessage + ": " + ex.getCause)
+          Future.value(None)
+      }
     }
   }
 
@@ -126,7 +146,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watcher || !watcher, "Watch must be true or false")
 
     client.exists(path, watcher, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
 
@@ -146,7 +166,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.getACL(path, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
 
@@ -167,8 +187,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watch || !watch, "Watch must be true or false")
 
     client.getChildren(path, watch, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
-        val pureRep = ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
+      rep: BufferedResponse =>
+        val pureRep =
+          ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
 
         pureRep match {
           case Return(res) =>
@@ -187,8 +208,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watch || !watch, "Watch must be true or false")
 
     client.getChildren2(path, watch, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
-        val pureRep = ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
+      rep: BufferedResponse =>
+        val pureRep =
+          ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
 
         pureRep match {
           case Return(res) =>
@@ -208,7 +230,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(watcher || !watcher, "Watch must be true or false")
 
     client.getData(path, watcher, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep = ResponseDecoder.decode(rep, opCode.getData)
 
         pureRep match {
@@ -225,8 +247,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
 
   def sendPing: Future[Option[ReplyHeader]] = {
     client.sendPing flatMap {
-      rep:BufferedResponse =>
-        val pureRep = ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
+      rep: BufferedResponse =>
+        val pureRep =
+          ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
 
         pureRep match {
           case Return(res) =>
@@ -245,7 +268,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(acl.size != 0, "ACL list must not be empty")
 
     client.setACL(path, acl, version, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
 
@@ -265,7 +288,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.setData(path, data, version, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
 
@@ -281,10 +304,13 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     }
   }
 
-  def setWatches(relativeZxid: Int, dataWatches: Array[String], existsWatches: Array[String], childWatches: Array[String]): Future[Option[ReplyHeader]] = {
+  def setWatches(relativeZxid: Int,
+                 dataWatches: Array[String],
+                 existsWatches: Array[String],
+                 childWatches: Array[String]): Future[Option[ReplyHeader]] = {
 
     client.setWatches(relativeZxid, dataWatches, existsWatches, childWatches, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
 
@@ -304,7 +330,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     require(path.length != 0, "Path must be longer than 0")
 
     client.sync(path, connectionManager.getXid) flatMap {
-      rep:BufferedResponse =>
+      rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
 
@@ -340,7 +366,10 @@ case class ClientWrapper(adress: String, timeOut: Long) {
 
   def parseGetACL(rep: GetACLResponse) = {
     connectionManager.parseReplyHeader(rep.header)
-    println("--->getAcl response " + rep.body.get.acl(0).id.scheme + " " + rep.body.get.acl(0).id.id + " " + rep.body.get.acl(0).perms)
+    println("--->getAcl response " +
+      rep.body.get.acl(0).id.scheme +
+      " " + rep.body.get.acl(0).id.id +
+      " " + rep.body.get.acl(0).perms)
   }
 
   def parseGetData(rep: GetDataResponse) = {
@@ -410,7 +439,11 @@ class ConnexionManager {
   }
 
   def parseConnectResponse(rep: ConnectResponse) = {
-    println("-->Connection response | timeout: " + rep.timeOut + " | sessionID: " + rep.sessionId + " | canRO: " + rep.canRO.getOrElse(false))
+    println("-->Connection response | timeout: " +
+      rep.timeOut + " | sessionID: " +
+      rep.sessionId + " | canRO: " +
+      rep.canRO.getOrElse(false))
+
     sessionId = rep.sessionId
     timeOut = rep.timeOut
     passwd = rep.passwd
