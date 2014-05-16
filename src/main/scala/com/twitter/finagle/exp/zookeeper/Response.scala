@@ -24,7 +24,7 @@ import scala.Some
  * */
 
 sealed abstract class Response
-sealed trait Header extends Response
+sealed trait Header
 sealed trait ResponseBody
 sealed trait Decoder[T <: Response] extends (Buffer => Try[T]) {
   def apply(buffer: Buffer): Try[T] = Try(decode(buffer))
@@ -38,7 +38,7 @@ case class ConnectResponse(
                              sessionId: Long,
                             passwd: Array[Byte],
                             canRO: Option[Boolean]
-                            ) extends Response with ResponseBody
+                            ) extends Response
 
 case class CreateResponseBody(path: String) extends ResponseBody
 case class CreateResponse(header: ReplyHeader, body: Option[CreateResponseBody]) extends Response
@@ -55,7 +55,7 @@ case class GetChildren2Response(header: ReplyHeader, body: Option[GetChildren2Re
 case class GetDataResponseBody(data: Array[Byte], stat: Stat) extends ResponseBody
 case class GetDataResponse(header: ReplyHeader, body: Option[GetDataResponseBody]) extends Response
 case class ReplyHeader(xid: Int, zxid: Long,
-                       err: Int) extends Header with ResponseBody
+                       err: Int) extends Response
 case class SetACLResponseBody(stat: Stat) extends ResponseBody
 case class SetACLResponse(header: ReplyHeader, body: Option[SetACLResponseBody]) extends Response
 case class SetDataResponseBody(stat: Stat) extends ResponseBody

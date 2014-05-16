@@ -2,7 +2,6 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.exp.zookeeper.transport.{BufferWriter, Buffer}
 import org.jboss.netty.buffer.ChannelBuffers._
-import scala.Some
 import org.jboss.netty.buffer.ChannelBuffer
 
 /**
@@ -11,11 +10,15 @@ import org.jboss.netty.buffer.ChannelBuffer
  *
  * However ConnectRequest is an exception, it is only composed of a body.
  */
-trait Request {
+sealed abstract class Request {
   val toChannelBuffer: ChannelBuffer
 }
 
 trait Body {
+  val toChannelBuffer: ChannelBuffer
+}
+
+sealed trait HeaderR {
   val toChannelBuffer: ChannelBuffer
 }
 
@@ -41,8 +44,8 @@ case class ConnectRequest(protocolVersion: Int = 0,
   }
 }
 
-case class RequestHeader(xid: Int, opCode: Int) extends Request {
-  override val toChannelBuffer: ChannelBuffer = {
+case class RequestHeader(xid: Int, opCode: Int) extends Request with HeaderR{
+  val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
     bw.write(-1)
@@ -50,6 +53,19 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request {
     bw.write(opCode)
 
     bw.underlying.copy
+  }
+}
+
+case class MultiHeader(typ: Int, state: Boolean, err: Int) extends HeaderR {
+  val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
+
+    bw.write(-1)
+    bw.write(typ)
+    bw.write(state)
+    bw.write(err)
+
+    bw.underlying
   }
 }
 
@@ -239,3 +255,5 @@ case class SetWatchesRequestBody(relativeZxid: Int, dataWatches: Array[String], 
 case class SetWatchesRequest(header: RequestHeader, body: SetWatchesRequestBody) extends Request {
   override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
 }
+
+//case class TransactionRequest(operationList: Array[Request]) extends Req
