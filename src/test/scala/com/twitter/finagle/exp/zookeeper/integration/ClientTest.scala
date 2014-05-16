@@ -83,13 +83,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
     disconnect
   }
 
-  test("Create, GetChildren, GetChildren2") {
-    pending
-  }
-
   test("Create Ephemeral and Persistent Nodes") {
-    pending
-
     connect
 
     val res = for {
@@ -104,8 +98,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("Ephemeral node should not exists") {
-    pending
-
     connect
 
     val res = for {
@@ -122,8 +114,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("Persistent node should still exists") {
-    pending
-
     connect
 
     val res = for {
@@ -143,8 +133,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("Update persistent node") {
-    pending
-
     connect
 
     val res = for {
@@ -158,8 +146,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("Add Children to persistent node") {
-    pending
-
     connect
 
     val res = for {
@@ -168,14 +154,14 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield (c1, c2)
 
     val ret = Await.result(res)
+
     assert(ret._1.get.path === "/zookeeper/persistentNode/firstChild")
     assert(ret._2.get.path === "/zookeeper/persistentNode/secondChild")
+
     disconnect
   }
 
   test("Add 8 sequential nodes") {
-    pending
-
     connect
 
     val res = for {
@@ -196,8 +182,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("GetChildren and GetChildren2 on persistent node") {
-    pending
-
     connect
 
     val res = for {
@@ -206,14 +190,14 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield (c1, c2)
 
     val ret = Await.result(res)
+
     assert(ret._1.get.children.size === 10)
     assert(ret._2.get.stat.numChildren === 10)
+
     disconnect
   }
 
   test("Delete persistent node and children") {
-    pending
-
     connect
 
     val ret = for {
@@ -222,19 +206,36 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
 
     val f = ret.flatMap { response =>
-      response.get.children foreach (child => client.get.delete(child, -1))
+      response.get.children foreach (child => client.get.delete("/zookeeper/persistentNode/"+child, -1))
       Future(response)
     }
 
-    Await.result(f)
+    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
+
+
+    Await.ready(f)
+    Await.ready(deleteNode)
     disconnect
   }
 
   test("Persistent node and children should not exist") {
-    pending
+    connect
+
+    val res = for {
+      exi <- client.get.exists("/zookeeper/persistentNode", false)
+    } yield exi
+
+    val ret = Await.result(res)
+    assert(ret match {
+      case None => true
+      case Some(res) => false
+    })
+
+    disconnect
   }
 
   test("CheckVersion is working") {
+    pending //CheckVersion is only with Transaction(one or more operations in one request, called a Transaction)
     connect
 
     val ret = for {
