@@ -22,12 +22,13 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     service(new RequestHeader(-2, 11))
   }
 
-  def checkVersion(path:String, version:Int, xid: Int): Future[BufferedResponse] = {
-    println("<--checkVersion: " + xid)
-    val header = RequestHeader(xid, opCode.check)
-    val body = CheckVersionRequestBody(path, version)
+  def transaction(opList: Array[OpRequest], xid: Int): Future[BufferedResponse] = {
+    println("<--Transaction: " + xid)
 
-    service(new CheckVersionRequest(header, body))
+    val header = RequestHeader(xid, opCode.multi)
+    val transaction = new Transaction(opList)
+
+    service(new TransactionRequest(header, transaction))
   }
 
   def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {

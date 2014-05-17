@@ -35,17 +35,16 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   val pingTimer = new PingTimer
   val logger = Client.getLogger
 
-  /* This can only be used in a Transaction. Pending while transaction are not implemented */
-  def checkVersionRequest(path: String, version: Int): Future[Option[ReplyHeader]] = {
-    client.checkVersion(path, version, connectionManager.getXid) flatMap {
+  def transaction(opList: Array[OpRequest]): Future[Option[Array[OpResult]]] = {
+    client.transaction(opList, connectionManager.getXid) flatMap {
       rep: BufferedResponse =>
-        val pureRep: Try[ReplyHeader] =
-          ResponseDecoder.decode(rep, opCode.check).asInstanceOf[Try[ReplyHeader]]
+        val pureRep: Try[TransactionResponse] =
+          ResponseDecoder.decode(rep, opCode.multi).asInstanceOf[Try[TransactionResponse]]
 
         pureRep match {
           // if the decoding had no errors
           case Return(res) =>
-            Future.value(Some(pureRep.get()))
+            Future.value(Some(pureRep.get.responseList))
           // There might be a ZooKeeper exception
           case Throw(ex) =>
             logger.warning(ex.getMessage + ": " + ex.getCause)
@@ -78,7 +77,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   }
 
   def create(path: String, data: Array[Byte], acl: Array[ACL],
-             createMode: Int): Future[Option[CreateResponseBody]] = {
+    createMode: Int): Future[Option[CreateResponseBody]] = {
 
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
@@ -305,9 +304,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   }
 
   def setWatches(relativeZxid: Int,
-                 dataWatches: Array[String],
-                 existsWatches: Array[String],
-                 childWatches: Array[String]): Future[Option[ReplyHeader]] = {
+    dataWatches: Array[String],
+    existsWatches: Array[String],
+    childWatches: Array[String]): Future[Option[ReplyHeader]] = {
 
     client.setWatches(relativeZxid, dataWatches, existsWatches, childWatches, connectionManager.getXid) flatMap {
       rep: BufferedResponse =>

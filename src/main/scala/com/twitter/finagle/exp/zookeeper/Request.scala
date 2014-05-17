@@ -3,6 +3,7 @@ package com.twitter.finagle.exp.zookeeper
 import com.twitter.finagle.exp.zookeeper.transport.{BufferWriter, Buffer}
 import org.jboss.netty.buffer.ChannelBuffers._
 import org.jboss.netty.buffer.ChannelBuffer
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
 /**
  * Same as the Response type, a Request can be composed by a header or
@@ -44,7 +45,7 @@ case class ConnectRequest(protocolVersion: Int = 0,
   }
 }
 
-case class RequestHeader(xid: Int, opCode: Int) extends Request with HeaderR{
+case class RequestHeader(xid: Int, opCode: Int) extends Request with HeaderR {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
@@ -53,34 +54,6 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request with HeaderR{
     bw.write(opCode)
 
     bw.underlying.copy
-  }
-}
-
-case class MultiHeader(typ: Int, state: Boolean, err: Int) extends HeaderR {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(-1)
-    bw.write(typ)
-    bw.write(state)
-    bw.write(err)
-
-    bw.underlying
-  }
-}
-
-case class CheckVersionRequest(header: RequestHeader, body: CheckVersionRequestBody) extends Request {
-  override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
-}
-
-case class CheckVersionRequestBody(path: String, version: Int) extends Body {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(path)
-    bw.write(version)
-
-    bw.underlying
   }
 }
 
@@ -256,4 +229,13 @@ case class SetWatchesRequest(header: RequestHeader, body: SetWatchesRequestBody)
   override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
 }
 
-//case class TransactionRequest(operationList: Array[Request]) extends Req
+case class TransactionRequest(header: RequestHeader, transaction: Transaction) extends Request {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+
+    bw.write(header.toChannelBuffer)
+    bw.write(transaction.toChannelBuffer)
+
+    bw.underlying.copy()
+  }
+}

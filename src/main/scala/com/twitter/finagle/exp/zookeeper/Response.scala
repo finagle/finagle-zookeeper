@@ -7,6 +7,8 @@ import org.jboss.netty.buffer.ChannelBuffers._
 import java.nio.ByteBuffer
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode._
 import scala.Some
+import scala.collection.mutable.ArrayBuffer
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
 /**
  * This File describes every responses
@@ -21,54 +23,86 @@ import scala.Some
  * different responses, we use a common wrapper, that we can then decode with
  * the request opCode. With a BufferedResponse and an opCode we can give a Response
  *
- * */
+ **/
 
 sealed abstract class Response
 sealed trait Header
 sealed trait ResponseBody
 sealed trait Decoder[T <: Response] extends (Buffer => Try[T]) {
   def apply(buffer: Buffer): Try[T] = Try(decode(buffer))
+
   def decode(buffer: Buffer): T
 }
 
 case class BufferedResponse(buffer: Buffer) extends Response
 case class ConnectResponse(
-                            protocolVersion: Int,
-                            timeOut: Int,
-                             sessionId: Long,
-                            passwd: Array[Byte],
-                            canRO: Option[Boolean]
-                            ) extends Response
+  protocolVersion: Int,
+  timeOut: Int,
+  sessionId: Long,
+  passwd: Array[Byte],
+  canRO: Option[Boolean]
+  ) extends Response
 
 case class CreateResponseBody(path: String) extends ResponseBody
-case class CreateResponse(header: ReplyHeader, body: Option[CreateResponseBody]) extends Response
+case class CreateResponse(header: ReplyHeader,
+  body: Option[CreateResponseBody]
+  ) extends Response
+
 case class ExistsResponseBody(stat: Stat) extends ResponseBody
-case class ExistsResponse(header: ReplyHeader, body: Option[ExistsResponseBody]) extends Response
+case class ExistsResponse(header: ReplyHeader,
+  body: Option[ExistsResponseBody]
+  ) extends Response
+
 case class ErrorResponseBody(err: Int) extends ResponseBody
-case class ErrorResponse(header: ReplyHeader, body: Option[ErrorResponseBody]) extends Response
+case class ErrorResponse(header: ReplyHeader,
+  body: Option[ErrorResponseBody]
+  ) extends Response
+
 case class GetACLResponseBody(acl: Array[ACL], stat: Stat) extends ResponseBody
-case class GetACLResponse(header: ReplyHeader, body: Option[GetACLResponseBody]) extends Response
+case class GetACLResponse(header: ReplyHeader,
+  body: Option[GetACLResponseBody]
+  ) extends Response
+
 case class GetChildrenResponseBody(children: Array[String]) extends ResponseBody
-case class GetChildrenResponse(header: ReplyHeader, body: Option[GetChildrenResponseBody]) extends Response
-case class GetChildren2ResponseBody(children: Array[String], stat:Stat) extends ResponseBody
-case class GetChildren2Response(header: ReplyHeader, body: Option[GetChildren2ResponseBody]) extends Response
+case class GetChildrenResponse(header: ReplyHeader,
+  body: Option[GetChildrenResponseBody]) extends Response
+
+case class GetChildren2ResponseBody(children: Array[String],
+  stat: Stat) extends ResponseBody
+case class GetChildren2Response(header: ReplyHeader,
+  body: Option[GetChildren2ResponseBody]) extends Response
+
+case class GetDataResponse(header: ReplyHeader,
+  body: Option[GetDataResponseBody]) extends Response
 case class GetDataResponseBody(data: Array[Byte], stat: Stat) extends ResponseBody
-case class GetDataResponse(header: ReplyHeader, body: Option[GetDataResponseBody]) extends Response
-case class ReplyHeader(xid: Int, zxid: Long,
-                       err: Int) extends Response
+
 case class SetACLResponseBody(stat: Stat) extends ResponseBody
-case class SetACLResponse(header: ReplyHeader, body: Option[SetACLResponseBody]) extends Response
+case class SetACLResponse(header: ReplyHeader,
+  body: Option[SetACLResponseBody]) extends Response
+
 case class SetDataResponseBody(stat: Stat) extends ResponseBody
-case class SetDataResponse(header: ReplyHeader, body: Option[SetDataResponseBody]) extends Response
+case class SetDataResponse(header: ReplyHeader,
+  body: Option[SetDataResponseBody]) extends Response
+
 case class SyncResponseBody(path: String) extends ResponseBody
-case class SyncResponse(header: ReplyHeader, body: Option[SyncResponseBody]) extends Response
+case class SyncResponse(header: ReplyHeader,
+  body: Option[SyncResponseBody]) extends Response
+
+case class ReplyHeader(xid: Int, zxid: Long,
+  err: Int) extends Response
+case class TransactionResponse(header: ReplyHeader,
+  responseList: Array[OpResult]) extends Response
+
 case class WatcherEventBody(typ: Int, state: Int, path: String) extends ResponseBody
-case class WatcherEvent(header: ReplyHeader, body: Option[WatcherEventBody]) extends Response
+case class WatcherEvent(header: ReplyHeader,
+  body: Option[WatcherEventBody]) extends Response
 
 /* To create a BufferedResponse from different objects*/
 object BufferedResponse {
   def factory(buffer: Buffer) = new BufferedResponse(buffer)
+
   def factory(buffer: ChannelBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(buffer))
+
   def factory(buffer: ByteBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(buffer)))
 }
 
@@ -78,7 +112,7 @@ object ResponseDecoder {
     case `createSession` => ConnectResponse(repBuffer.buffer)
     case `ping` => ReplyHeader(repBuffer.buffer)
     case `closeSession` => ReplyHeader(repBuffer.buffer)
-    case `check`=> ReplyHeader(repBuffer.buffer)
+    case `check` => ReplyHeader(repBuffer.buffer)
     case `create` => CreateResponse(repBuffer.buffer)
     case `delete` => ReplyHeader(repBuffer.buffer)
     case `exists` => ExistsResponse(repBuffer.buffer)
@@ -86,6 +120,7 @@ object ResponseDecoder {
     case `getChildren` => GetChildrenResponse(repBuffer.buffer)
     case `getChildren2` => GetChildren2Response(repBuffer.buffer)
     case `getData` => GetDataResponse(repBuffer.buffer)
+    case `multi`=> TransactionResponse(repBuffer.buffer)
     case `setData` => SetDataResponse(repBuffer.buffer)
     case `setACL` => SetACLResponse(repBuffer.buffer)
     case `sync` => SyncResponse(repBuffer.buffer)
@@ -107,7 +142,7 @@ object ConnectResponse extends Decoder[ConnectResponse] {
       try {
         Some(br.readBool)
       } catch {
-        case ex:Exception => throw ex
+        case ex: Exception => throw ex
       }
     }
 
@@ -282,6 +317,19 @@ object SyncResponse extends Decoder[SyncResponse] {
       new SyncResponse(header, Some(new SyncResponseBody(br.readString)))
     else {
       throw ZookeeperException.create("Error while sync", header.err)
+    }
+  }
+}
+
+object TransactionResponse extends Decoder[TransactionResponse] {
+  override def decode(buffer: Buffer): TransactionResponse = {
+    val br = BufferReader(buffer)
+    val header = ReplyHeader.decode(br)
+
+    if (header.err == 0) {
+      new TransactionResponse(header, Transaction.decode(br) )
+    } else {
+      throw ZookeeperException.create("Error while Transaction", header.err)
     }
   }
 }

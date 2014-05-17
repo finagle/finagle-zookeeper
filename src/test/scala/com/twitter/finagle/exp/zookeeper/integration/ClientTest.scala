@@ -4,8 +4,9 @@ import org.scalatest.FunSuite
 import java.net.{BindException, ServerSocket}
 import com.twitter.finagle.exp.zookeeper.client.ClientWrapper
 import com.twitter.util.{Future, Await}
-import com.twitter.finagle.exp.zookeeper.{CreateResponseBody, Perms, ACL}
+import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
+import scala.Some
 
 class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
@@ -206,7 +207,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
 
     val f = ret.flatMap { response =>
-      response.get.children foreach (child => client.get.delete("/zookeeper/persistentNode/"+child, -1))
+      response.get.children foreach (child => client.get.delete("/zookeeper/persistentNode/" + child, -1))
       Future(response)
     }
 
@@ -234,20 +235,24 @@ class ClientTest extends FunSuite with IntegrationConfig {
     disconnect
   }
 
-  test("CheckVersion is working") {
-    pending //CheckVersion is only with Transaction(one or more operations in one request, called a Transaction)
+  test("Small create Transaction works") {
     connect
 
-    val ret = for {
-      _ <- client.get.create("/zookeeper/check-verSion-0662-once", "COO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      get <- client.get.getData("/zookeeper/check-verSion-0662-once", false)
-      check <- client.get.checkVersionRequest("/zookeeper/check-verSion-0662-once", 0)
-    } yield (check, get)
+    val opList = Array[OpRequest](new CreateOp("/zookeeper/hello", "TRANS".getBytes(), ACL.defaultACL, createMode.EPHEMERAL),
+      new CreateOp("/zookeeper/world", "TRANS".getBytes(), ACL.defaultACL, createMode.EPHEMERAL))
 
-    val resp = Await.result(ret)
+    val res = client.get.transaction(opList)
+    val fut = Await.result(res)
 
-    assert(resp._1.get.err === resp._2.get.stat.version)
+    assert(fut match {
+      case None => false
+      case Some(res) => {
+        assert(res(0).asInstanceOf[CreateResult].path === "/zookeeper/hello")
+        assert(res(1).asInstanceOf[CreateResult].path === "/zookeeper/world")
+        true
+      }
+    })
+
     disconnect
   }
-
 }
