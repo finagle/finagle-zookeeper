@@ -9,6 +9,7 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode._
 import scala.Some
 import scala.collection.mutable.ArrayBuffer
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
+import java.net.ResponseCache
 
 /**
  * This File describes every responses
@@ -75,6 +76,9 @@ case class GetChildren2Response(header: ReplyHeader,
 case class GetDataResponse(header: ReplyHeader,
   body: Option[GetDataResponseBody]) extends Response
 case class GetDataResponseBody(data: Array[Byte], stat: Stat) extends ResponseBody
+
+case class GetMaxChildrenResponse(header: ReplyHeader, body: Option[GetMaxChildrenResponseBody]) extends Response
+case class GetMaxChildrenResponseBody(max: Int) extends ResponseBody
 
 case class SetACLResponseBody(stat: Stat) extends ResponseBody
 case class SetACLResponse(header: ReplyHeader,
@@ -262,6 +266,20 @@ object GetDataResponse extends Decoder[GetDataResponse] {
     }
     else {
       throw ZookeeperException.create("Error while getData", h.err)
+    }
+  }
+}
+
+object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
+  override def decode(buffer: Buffer): GetMaxChildrenResponse = {
+    val br = BufferReader(buffer)
+    val h = ReplyHeader.decode(buffer)
+
+    if (h.err == 0) {
+      new GetMaxChildrenResponse(h, Some(new GetMaxChildrenResponseBody(br.readInt)))
+    }
+    else {
+      throw ZookeeperException.create("Error while getMaxChildren", h.err)
     }
   }
 }

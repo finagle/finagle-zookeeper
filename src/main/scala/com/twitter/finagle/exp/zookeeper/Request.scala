@@ -24,11 +24,11 @@ sealed trait HeaderR {
 }
 
 case class ConnectRequest(protocolVersion: Int = 0,
-                          lastZxidSeen: Long = 0L,
-                          timeOut: Int = 2000,
-                          sessionId: Long = 0L,
-                          passwd: Array[Byte] = Array[Byte](16),
-                          canBeRO: Option[Boolean] = Some(true)) extends Request {
+  lastZxidSeen: Long = 0L,
+  timeOut: Int = 2000,
+  sessionId: Long = 0L,
+  passwd: Array[Byte] = Array[Byte](16),
+  canBeRO: Option[Boolean] = Some(true)) extends Request {
 
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
@@ -58,9 +58,9 @@ case class RequestHeader(xid: Int, opCode: Int) extends Request with HeaderR {
 }
 
 case class CreateRequestBody(path: String,
-                             data: Array[Byte],
-                             aclList: Array[ACL],
-                             createMode: Int) extends Body {
+  data: Array[Byte],
+  aclList: Array[ACL],
+  createMode: Int) extends Body {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
@@ -103,6 +103,27 @@ case class GetDataRequestBody(path: String, watcher: Boolean) extends Body {
 
 case class GetDataRequest(header: RequestHeader, body: GetDataRequestBody) extends Request {
   override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
+}
+
+case class GetMaxChildrenRequest(header: RequestHeader, body: GetMaxChildrenRequestBody) extends Request {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+
+    bw.write(header.toChannelBuffer)
+    bw.write(body.toChannelBuffer)
+
+    bw.underlying
+  }
+}
+
+case class GetMaxChildrenRequestBody(path: String) extends Body {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
+
+    bw.write(path)
+
+    bw.underlying
+  }
 }
 
 
@@ -196,6 +217,28 @@ case class SetACLRequestBody(path: String, acl: Array[ACL], version: Int) extend
 
 case class SetACLRequest(header: RequestHeader, body: SetACLRequestBody) extends Request {
   override val toChannelBuffer: ChannelBuffer = wrappedBuffer(header.toChannelBuffer, body.toChannelBuffer)
+}
+
+case class SetMaxChildrenRequest(header: RequestHeader, body: SetMaxChildrenRequestBody) extends Request {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+
+    bw.write(header.toChannelBuffer)
+    bw.write(body.toChannelBuffer)
+
+    bw.underlying
+  }
+}
+
+case class SetMaxChildrenRequestBody(path: String, max: Int) extends Body {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+
+    bw.write(path)
+    bw.write(max)
+
+    bw.underlying
+  }
 }
 
 case class SyncRequestBody(path: String) extends Body {

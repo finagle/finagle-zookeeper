@@ -22,15 +22,6 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     service(new RequestHeader(-2, 11))
   }
 
-  def transaction(opList: Array[OpRequest], xid: Int): Future[BufferedResponse] = {
-    println("<--Transaction: " + xid)
-
-    val header = RequestHeader(xid, opCode.multi)
-    val transaction = new Transaction(opList)
-
-    service(new TransactionRequest(header, transaction))
-  }
-
   def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {
     //TODO patch check (chroot)
     /*PathUtils.validatePath(path, createMode)
@@ -108,6 +99,18 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     service(new GetDataRequest(header, body))
   }
 
+  // GetMaxChildren is implemented but not available in the java lib
+  /*def getMaxChildren(path: String, xid: Int) = {
+    /*PathUtils.validatePath(path, createMode)
+    val finalPath = PathUtils.prependChroot(path, null)*/
+    println("<--getMaxChildren: " + xid)
+
+    val header = RequestHeader(xid, ?)
+    val body = GetDataRequestBody(path, false) // false because watch's not supported
+
+    service(new GetDataRequest(header, body))
+  }*/
+
   def setACL(path: String, acl: Array[ACL], version: Int, xid: Int) = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
@@ -148,6 +151,15 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     val body = SyncRequestBody(path)
 
     service(new SyncRequest(header, body))
+  }
+
+  def transaction(opList: Array[OpRequest], xid: Int): Future[BufferedResponse] = {
+    println("<--Transaction: " + xid)
+
+    val header = RequestHeader(xid, opCode.multi)
+    val transaction = new Transaction(opList)
+
+    service(new TransactionRequest(header, transaction))
   }
 }
 
