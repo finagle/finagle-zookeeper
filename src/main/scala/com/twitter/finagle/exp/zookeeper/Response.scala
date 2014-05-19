@@ -141,11 +141,7 @@ object CreateResponse extends Decoder[CreateResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0)
-      new CreateResponse(header, Some(new CreateResponseBody(br.readString)))
-    else {
-      throw ZookeeperException.create("Error while create", header.err)
-    }
+    new CreateResponse(header, Some(new CreateResponseBody(br.readString)))
   }
 }
 
@@ -165,12 +161,7 @@ object ExistsResponse extends Decoder[ExistsResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0)
-      new ExistsResponse(header, Some(new ExistsResponseBody(Stat.decode(br))))
-    else {
-      println("ERR " + header.err)
-      throw ZookeeperException.getError("Error while exists", header.err)
-    }
+    new ExistsResponse(header, Some(new ExistsResponseBody(Stat.decode(br))))
   }
 }
 
@@ -179,14 +170,9 @@ object GetACLResponse extends Decoder[GetACLResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0) {
-      val aclList = ACL.decodeArray(br)
-      val stat = Stat.decode(br)
-      new GetACLResponse(header, Some(new GetACLResponseBody(aclList, stat)))
-    }
-    else {
-      throw ZookeeperException.create("Error while getACL", header.err)
-    }
+    val aclList = ACL.decodeArray(br)
+    val stat = Stat.decode(br)
+    new GetACLResponse(header, Some(new GetACLResponseBody(aclList, stat)))
   }
 }
 
@@ -195,19 +181,14 @@ object GetChildrenResponse extends Decoder[GetChildrenResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0) {
-      val size = br.readInt
-      val children = new Array[String](size)
+    val size = br.readInt
+    val children = new Array[String](size)
 
-      for (i <- 0 to size - 1) {
-        children(i) = br.readString
-      }
+    for (i <- 0 to size - 1) {
+      children(i) = br.readString
+    }
 
-      new GetChildrenResponse(header, Some(new GetChildrenResponseBody(children)))
-    }
-    else {
-      throw ZookeeperException.create("Error while getChildren", header.err)
-    }
+    new GetChildrenResponse(header, Some(new GetChildrenResponseBody(children)))
   }
 }
 
@@ -216,19 +197,13 @@ object GetChildren2Response extends Decoder[GetChildren2Response] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0) {
-      val size = br.readInt
-      val children = new Array[String](size)
+    val size = br.readInt
+    val children = new Array[String](size)
 
-      for (i <- 0 to size - 1) {
-        children(i) = br.readString
-      }
-
-      new GetChildren2Response(header, Some(new GetChildren2ResponseBody(children, Stat.decode(br))))
+    for (i <- 0 to size - 1) {
+      children(i) = br.readString
     }
-    else {
-      throw ZookeeperException.create("Error while getChildren2", header.err)
-    }
+    new GetChildren2Response(header, Some(new GetChildren2ResponseBody(children, Stat.decode(br))))
   }
 }
 
@@ -237,15 +212,10 @@ object GetDataResponse extends Decoder[GetDataResponse] {
     val br = BufferReader(buffer)
     val h = ReplyHeader.decode(buffer)
 
-    if (h.err == 0) {
-      val data = br.readBuffer
-      val stat = Stat.decode(br)
+    val data = br.readBuffer
+    val stat = Stat.decode(br)
 
-      new GetDataResponse(h, Some(new GetDataResponseBody(data, stat)))
-    }
-    else {
-      throw ZookeeperException.create("Error while getData", h.err)
-    }
+    new GetDataResponse(h, Some(new GetDataResponseBody(data, stat)))
   }
 }
 
@@ -254,12 +224,7 @@ object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
     val br = BufferReader(buffer)
     val h = ReplyHeader.decode(buffer)
 
-    if (h.err == 0) {
-      new GetMaxChildrenResponse(h, Some(new GetMaxChildrenResponseBody(br.readInt)))
-    }
-    else {
-      throw ZookeeperException.create("Error while getMaxChildren", h.err)
-    }
+    new GetMaxChildrenResponse(h, Some(new GetMaxChildrenResponseBody(br.readInt)))
   }
 }
 
@@ -274,8 +239,9 @@ object ReplyHeader extends Decoder[ReplyHeader] {
 
     if (err == 0)
       new ReplyHeader(xid, zxid, err)
-    else
-      throw ZookeeperException.getError(errorCode.getError(err), err)
+    else {
+      throw ZookeeperException.create("Error :", err)
+    }
   }
 }
 
@@ -284,11 +250,8 @@ object SetACLResponse extends Decoder[SetACLResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0)
-      new SetACLResponse(header, Some(new SetACLResponseBody(Stat.decode(br))))
-    else {
-      throw ZookeeperException.create("Error while setACL", header.err)
-    }
+    new SetACLResponse(header, Some(new SetACLResponseBody(Stat.decode(br))))
+
   }
 }
 
@@ -297,11 +260,8 @@ object SetDataResponse extends Decoder[SetDataResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0)
-      new SetDataResponse(header, Some(new SetDataResponseBody(Stat.decode(br))))
-    else {
-      throw ZookeeperException.create("Error while setData", header.err)
-    }
+    new SetDataResponse(header, Some(new SetDataResponseBody(Stat.decode(br))))
+
   }
 }
 
@@ -310,11 +270,8 @@ object SyncResponse extends Decoder[SyncResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0)
-      new SyncResponse(header, Some(new SyncResponseBody(br.readString)))
-    else {
-      throw ZookeeperException.create("Error while sync", header.err)
-    }
+    new SyncResponse(header, Some(new SyncResponseBody(br.readString)))
+
   }
 }
 
@@ -323,11 +280,8 @@ object TransactionResponse extends Decoder[TransactionResponse] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0) {
-      new TransactionResponse(header, Transaction.decode(br))
-    } else {
-      throw ZookeeperException.create("Error while Transaction", header.err)
-    }
+    new TransactionResponse(header, Transaction.decode(br))
+
   }
 }
 
@@ -336,15 +290,11 @@ object WatcherEvent extends Decoder[WatcherEvent] {
     val br = BufferReader(buffer)
     val header = ReplyHeader.decode(br)
 
-    if (header.err == 0) {
-      val typ = br.readInt
-      val state = br.readInt
-      val path = br.readString
+    val typ = br.readInt
+    val state = br.readInt
+    val path = br.readString
 
-      new WatcherEvent(header, Some(new WatcherEventBody(typ, state, path)))
-    }
-    else {
-      throw ZookeeperException.create("Error while watch event", header.err)
-    }
+    new WatcherEvent(header, Some(new WatcherEventBody(typ, state, path)))
+
   }
 }

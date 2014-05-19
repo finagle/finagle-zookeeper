@@ -102,15 +102,17 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Ephemeral node should not exists") {
     connect
 
-      val res = for {
-        exi <- client.get.exists("/zookeeper/ephemeralNode", false)
-      } yield exi
+      intercept[NoNodeException]{
+        val res = for {
+          exi <- client.get.exists("/zookeeper/ephemeralNode", false)
+        } yield exi
 
-      val ret = Await.result(res)
-      assert(ret match {
-        case None => true
-        case Some(res) => false
-      })
+        val ret = Await.result(res)
+        assert(ret match {
+          case None => true
+          case Some(res) => false
+        })
+      }
 
 
     disconnect
@@ -224,15 +226,13 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Persistent node and children should not exist") {
     connect
 
-    val res = for {
-      exi <- client.get.exists("/zookeeper/persistentNode", false)
-    } yield exi
+    intercept[NoNodeException]{
+      val res = for {
+        exi <- client.get.exists("/zookeeper/persistentNode", false)
+      } yield exi
 
-    val ret = Await.result(res)
-    assert(ret match {
-      case None => true
-      case Some(res) => false
-    })
+      val ret = Await.result(res)
+    }
 
     disconnect
   }
