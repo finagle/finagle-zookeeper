@@ -8,7 +8,7 @@ import java.nio.ByteBuffer
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode._
 import scala.Some
 import scala.collection.mutable.ArrayBuffer
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.{errorCode, opCode}
 import java.net.ResponseCache
 
 /**
@@ -110,28 +110,6 @@ object BufferedResponse {
   def factory(buffer: ByteBuffer) = new BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(buffer)))
 }
 
-object ResponseDecoder {
-  /* Decode a BufferedResponse to type Try[T] by pattern matching opCode (XID) */
-  def decode[T >: Response](repBuffer: BufferedResponse, opCode: Int): Try[T] = opCode match {
-    case `createSession` => ConnectResponse(repBuffer.buffer)
-    case `ping` => ReplyHeader(repBuffer.buffer)
-    case `closeSession` => ReplyHeader(repBuffer.buffer)
-    case `check` => ReplyHeader(repBuffer.buffer)
-    case `create` => CreateResponse(repBuffer.buffer)
-    case `delete` => ReplyHeader(repBuffer.buffer)
-    case `exists` => ExistsResponse(repBuffer.buffer)
-    case `getACL` => GetACLResponse(repBuffer.buffer)
-    case `getChildren` => GetChildrenResponse(repBuffer.buffer)
-    case `getChildren2` => GetChildren2Response(repBuffer.buffer)
-    case `getData` => GetDataResponse(repBuffer.buffer)
-    case `multi`=> TransactionResponse(repBuffer.buffer)
-    case `setData` => SetDataResponse(repBuffer.buffer)
-    case `setACL` => SetACLResponse(repBuffer.buffer)
-    case `sync` => SyncResponse(repBuffer.buffer)
-    case `setWatches` => ReplyHeader(repBuffer.buffer)
-  }
-}
-
 object ConnectResponse extends Decoder[ConnectResponse] {
   override def decode(buffer: Buffer): ConnectResponse = {
     val br = BufferReader(buffer)
@@ -190,7 +168,8 @@ object ExistsResponse extends Decoder[ExistsResponse] {
     if (header.err == 0)
       new ExistsResponse(header, Some(new ExistsResponseBody(Stat.decode(br))))
     else {
-      throw ZookeeperException.create("Error while exists", header.err)
+      println("ERR " + header.err)
+      throw ZookeeperException.getError("Error while exists", header.err)
     }
   }
 }
@@ -296,7 +275,7 @@ object ReplyHeader extends Decoder[ReplyHeader] {
     if (err == 0)
       new ReplyHeader(xid, zxid, err)
     else
-      throw ZookeeperException.create("Error", err)
+      throw ZookeeperException.getError(errorCode.getError(err), err)
   }
 }
 
@@ -345,7 +324,7 @@ object TransactionResponse extends Decoder[TransactionResponse] {
     val header = ReplyHeader.decode(br)
 
     if (header.err == 0) {
-      new TransactionResponse(header, Transaction.decode(br) )
+      new TransactionResponse(header, Transaction.decode(br))
     } else {
       throw ZookeeperException.create("Error while Transaction", header.err)
     }

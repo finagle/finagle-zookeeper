@@ -30,11 +30,12 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     connect onSuccess {
       a =>
+        Thread.sleep(10000)
         Await.result(client.get.disconnect)
         assert(true)
     }
   }
-/*
+
   test("Node creation and exists") {
     connect
 
@@ -101,15 +102,16 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Ephemeral node should not exists") {
     connect
 
-    val res = for {
-      exi <- client.get.exists("/zookeeper/ephemeralNode", false)
-    } yield exi
+      val res = for {
+        exi <- client.get.exists("/zookeeper/ephemeralNode", false)
+      } yield exi
 
-    val ret = Await.result(res)
-    assert(ret match {
-      case None => true
-      case Some(res) => false
-    })
+      val ret = Await.result(res)
+      assert(ret match {
+        case None => true
+        case Some(res) => false
+      })
+
 
     disconnect
   }
@@ -253,7 +255,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
       }
     })
 
-    Thread.sleep(10000)
     disconnect
-  }*/
+  }
 }

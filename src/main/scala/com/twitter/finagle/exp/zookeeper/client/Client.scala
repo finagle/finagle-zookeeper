@@ -22,18 +22,23 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new RequestHeader(-2, 11))
   }
 
-  /*def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {
+  def create(path: String,
+    data: Array[Byte],
+    acl: Array[ACL],
+    createMode: Int,
+    xid: Int
+    ): Future[Response] = {
     //TODO patch check (chroot)
-    /*PathUtils.validatePath(path, createMode)
-    val finalPath = PathUtils.prependChroot(path, null)*/
+    /* PathUtils.validatePath(path, createMode)
+     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--create: " + xid)
     val header = RequestHeader(xid, opCode.create)
     val body = CreateRequestBody(path, data, acl, createMode)
 
     service(new CreateRequest(header, body))
-  }*/
+  }
 
-  /*def delete(path: String, version: Int, xid: Int) = {
+  def delete(path: String, version: Int, xid: Int): Future[Response] = {
     // TODO CHECK STRING
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -44,7 +49,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new DeleteRequest(header, body))
   }
 
-  def exists(path: String, watch: Boolean, xid: Int) = {
+  def exists(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -55,7 +60,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new ExistsRequest(header, body))
   }
 
-  def getACL(path: String, xid: Int): Future[BufferedResponse] = {
+  def getACL(path: String, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -66,7 +71,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new GetACLRequest(header, body))
   }
 
-  def getChildren(path: String, watch: Boolean, xid: Int) = {
+  def getChildren(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -77,7 +82,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new GetChildrenRequest(header, body))
   }
 
-  def getChildren2(path: String, watch: Boolean, xid: Int) = {
+  def getChildren2(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -88,7 +93,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new GetChildren2Request(header, body))
   }
 
-  def getData(path: String, watch: Boolean, xid: Int) = {
+  def getData(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -100,7 +105,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
   }
 
   // GetMaxChildren is implemented but not available in the java lib
-  /*def getMaxChildren(path: String, xid: Int) = {
+  /*def getMaxChildren(path: String, xid: Int): Future[Response] = {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getMaxChildren: " + xid)
@@ -111,7 +116,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new GetDataRequest(header, body))
   }*/
 
-  def setACL(path: String, acl: Array[ACL], version: Int, xid: Int) = {
+  def setACL(path: String, acl: Array[ACL], version: Int, xid: Int): Future[Response] = {
     // TODO Check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -122,7 +127,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new SetACLRequest(header, body))
   }
 
-  def setData(path: String, data: Array[Byte], version: Int, xid: Int) = {
+  def setData(path: String, data: Array[Byte], version: Int, xid: Int): Future[Response] = {
     // TODO check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -133,7 +138,12 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new SetDataRequest(header, body))
   }
 
-  def setWatches(relativeZxid: Int, dataWatches: Array[String], existsWatches: Array[String], childWatches: Array[String], xid: Int) = {
+  def setWatches(relativeZxid: Int,
+    dataWatches: Array[String],
+    existsWatches: Array[String],
+    childWatches: Array[String],
+    xid: Int
+    ): Future[Response] = {
     println("<--setWatches: " + xid)
 
     val header = RequestHeader(xid, opCode.setWatches)
@@ -142,7 +152,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new SetWatchesRequest(header, body))
   }
 
-  def sync(path: String, xid: Int) = {
+  def sync(path: String, xid: Int): Future[Response] = {
     // TODO check path
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -153,14 +163,14 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new SyncRequest(header, body))
   }
 
-  def transaction(opList: Array[OpRequest], xid: Int): Future[BufferedResponse] = {
+  def transaction(opList: Array[OpRequest], xid: Int): Future[Response] = {
     println("<--Transaction: " + xid)
 
     val header = RequestHeader(xid, opCode.multi)
     val transaction = new Transaction(opList)
 
     service(new TransactionRequest(header, transaction))
-  }*/
+  }
 }
 
 object Client {
