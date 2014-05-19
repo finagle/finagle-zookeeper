@@ -11,7 +11,7 @@ import scala.collection.mutable
 case class ZkTransport(
   trans: Transport[ChannelBuffer, ChannelBuffer]
   ) extends Transport[Request, Response] {
-  val stack = new mutable.SynchronizedQueue[Request]
+  val processedReq = new mutable.SynchronizedQueue[Request]
 
   /**
    * When receiving a Request
@@ -24,7 +24,7 @@ case class ZkTransport(
   }
 
   override def read(): Future[Response] = {
-    stack.front match {
+    processedReq.front match {
       case rep: ConnectRequest => trans.read flatMap { buffer =>
         val connectRep = ConnectResponse.decode(Buffer.fromChannelBuffer(buffer))
         Future.value(connectRep)
@@ -39,7 +39,7 @@ case class ZkTransport(
   }
 
   def doWrite(req: Request): Future[Unit] = {
-    stack.enqueue(req)
+    processedReq.enqueue(req)
     trans.write(req.toChannelBuffer)
   }
 
