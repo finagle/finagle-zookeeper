@@ -30,7 +30,7 @@ object PipelineFactory extends ChannelPipelineFactory {
  * Netty3.
  */
 
-object ZooKeeperTransporter extends Netty3Transporter[Request, BufferedResponse](
+object ZooKeeperTransporter extends Netty3Transporter[ChannelBuffer, ChannelBuffer](
   "zookeeper",
   PipelineFactory
 )
@@ -40,12 +40,11 @@ class PacketFrameDecoder extends FrameDecoder {
    * When receiving a packet, this method is called
    */
 
-  override def decode(ctx: ChannelHandlerContext, channel: Channel, buffer: ChannelBuffer): BufferedResponse = {
+  override def decode(ctx: ChannelHandlerContext, channel: Channel, buffer: ChannelBuffer): ChannelBuffer = {
     // TODO: currently special treatment for notification, step back to normal mode
     // TODO: log in logger with debug level
 
-    //println("=== Message Received ===")
-    buffer.markReaderIndex()
+    println("=== Message Received ===")
     /*val rindex = buffer.readerIndex()
 
     val xid = buffer.readInt()
@@ -61,9 +60,9 @@ class PacketFrameDecoder extends FrameDecoder {
     buffer.readerIndex(rindex)
     */
 
-    val bw = BufferedResponse.factory(buffer)
-    buffer.readerIndex(buffer.writerIndex)
-    bw
+    //val bw = BufferedResponse.factory(buffer)
+    //buffer.readerIndex(buffer.writerIndex)
+    buffer.copy(buffer.readerIndex(), buffer.readableBytes())
   }
 }
 
@@ -81,6 +80,20 @@ class PacketEncoder extends SimpleChannelDownstreamHandler {
           //println("=== Message Sent ===")
 
           val bb = p.toChannelBuffer.toByteBuffer
+
+          // Write the packet size at the beginning and rewind
+          bb.putInt(bb.capacity() - 4)
+          bb.rewind()
+
+          Channels.write(ctx, evt.getFuture, wrappedBuffer(bb), evt.getRemoteAddress)
+        } catch {
+          case NonFatal(e) =>
+            evt.getFuture.setFailure(new ChannelException(e.getMessage))
+        }
+
+      case ch: ChannelBuffer =>
+        try {
+          val bb = ch.toByteBuffer
 
           // Write the packet size at the beginning and rewind
           bb.putInt(bb.capacity() - 4)

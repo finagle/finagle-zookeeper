@@ -35,27 +35,9 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   val pingTimer = new PingTimer
   val logger = Client.getLogger
 
-  def transaction(opList: Array[OpRequest]): Future[Option[Array[OpResult]]] = {
-    client.transaction(opList, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep: Try[TransactionResponse] =
-          ResponseDecoder.decode(rep, opCode.multi).asInstanceOf[Try[TransactionResponse]]
-
-        pureRep match {
-          // if the decoding had no errors
-          case Return(res) =>
-            Future.value(Some(pureRep.get.responseList))
-          // There might be a ZooKeeper exception
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
-    }
-  }
-
   def connect: Future[Option[ConnectResponse]] = {
     // flatMap client.connect to get Future[BufferedResponse]
-    client.connect flatMap { rep: BufferedResponse =>
+    client.connect flatMap { rep => Future.value(Some(rep.asInstanceOf[ConnectResponse]))} /*flatMap { rep: BufferedResponse =>
       // Now we can decode the BufferedResponse by giving it to the ResponseWrapper with
       // the createSession opCode
       val pureRep: Try[ConnectResponse] =
@@ -73,57 +55,57 @@ case class ClientWrapper(adress: String, timeOut: Long) {
           logger.warning(ex.getMessage + ": " + ex.getCause)
           Future.value(None)
       }
-    }
+    }*/
   }
 
-  def create(path: String, data: Array[Byte], acl: Array[ACL],
-    createMode: Int): Future[Option[CreateResponseBody]] = {
+  /*  def create(path: String, data: Array[Byte], acl: Array[ACL],
+      createMode: Int): Future[Option[CreateResponseBody]] = {
 
-    require(path.length != 0, "Path must be longer than 0")
-    require(acl.size != 0, "ACL list must not be empty")
-    require(createMode == 0 || createMode == 1 ||
-      createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
+      require(path.length != 0, "Path must be longer than 0")
+      require(acl.size != 0, "ACL list must not be empty")
+      require(createMode == 0 || createMode == 1 ||
+        createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
 
-    client.create(path, data, acl, createMode, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep: Try[CreateResponse] =
-          ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
+      client.create(path, data, acl, createMode, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep: Try[CreateResponse] =
+            ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
 
-        pureRep match {
-          case Return(res) =>
-            parseCreate(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseCreate(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def delete(path: String, version: Int): Future[Option[ReplyHeader]] = {
-    require(path.length != 0, "Path must be longer than 0")
+    def delete(path: String, version: Int): Future[Option[ReplyHeader]] = {
+      require(path.length != 0, "Path must be longer than 0")
 
-    client.delete(path, version, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
+      client.delete(path, version, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
 
-        pureRep match {
-          case Return(res) =>
-            parseDelete(pureRep.get())
-            Future.value(Some(pureRep.get()))
+          pureRep match {
+            case Return(res) =>
+              parseDelete(pureRep.get())
+              Future.value(Some(pureRep.get()))
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
-    }
-  }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
+    }*/
 
   def disconnect: Future[Option[ReplyHeader]] = {
-    pingTimer.stopTimer
-    client.disconnect flatMap { rep: BufferedResponse =>
+    //pingTimer.stopTimer
+    client.disconnect flatMap{ rep => Future.value(Some(rep.asInstanceOf[ReplyHeader]))} /*flatMap { rep: BufferedResponse =>
 
       val pureRep =
         ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
@@ -137,115 +119,115 @@ case class ClientWrapper(adress: String, timeOut: Long) {
           logger.warning(ex.getMessage + ": " + ex.getCause)
           Future.value(None)
       }
-    }
+    }*/
   }
+  /*
+    def exists(path: String, watcher: Boolean): Future[Option[ExistsResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
+      require(watcher || !watcher, "Watch must be true or false")
 
-  def exists(path: String, watcher: Boolean): Future[Option[ExistsResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
-    require(watcher || !watcher, "Watch must be true or false")
+      client.exists(path, watcher, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
 
-    client.exists(path, watcher, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
+          pureRep match {
+            case Return(res) =>
+              parseExists(pureRep.get())
+              Future.value(pureRep.get().body)
 
-        pureRep match {
-          case Return(res) =>
-            parseExists(pureRep.get())
-            Future.value(pureRep.get().body)
-
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def getACL(path: String): Future[Option[GetACLResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
+    def getACL(path: String): Future[Option[GetACLResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
 
-    client.getACL(path, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
+      client.getACL(path, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
 
-        pureRep match {
-          case Return(res) =>
-            parseGetACL(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseGetACL(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def getChildren(path: String, watch: Boolean): Future[Option[GetChildrenResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
-    require(watch || !watch, "Watch must be true or false")
+    def getChildren(path: String, watch: Boolean): Future[Option[GetChildrenResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
+      require(watch || !watch, "Watch must be true or false")
 
-    client.getChildren(path, watch, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
+      client.getChildren(path, watch, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
 
-        pureRep match {
-          case Return(res) =>
-            parseGetChildren(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseGetChildren(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def getChildren2(path: String, watch: Boolean): Future[Option[GetChildren2ResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
-    require(watch || !watch, "Watch must be true or false")
+    def getChildren2(path: String, watch: Boolean): Future[Option[GetChildren2ResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
+      require(watch || !watch, "Watch must be true or false")
 
-    client.getChildren2(path, watch, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
+      client.getChildren2(path, watch, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
 
-        pureRep match {
-          case Return(res) =>
-            parseGetChildren2(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseGetChildren2(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
 
-  def getData(path: String, watcher: Boolean): Future[Option[GetDataResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
-    require(watcher || !watcher, "Watch must be true or false")
+    def getData(path: String, watcher: Boolean): Future[Option[GetDataResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
+      require(watcher || !watcher, "Watch must be true or false")
 
-    client.getData(path, watcher, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep = ResponseDecoder.decode(rep, opCode.getData)
+      client.getData(path, watcher, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep = ResponseDecoder.decode(rep, opCode.getData)
 
-        pureRep match {
-          case Return(r) =>
-            parseGetData(pureRep.get().asInstanceOf[GetDataResponse])
-            Future.value(pureRep.get().asInstanceOf[GetDataResponse].body)
+          pureRep match {
+            case Return(r) =>
+              parseGetData(pureRep.get().asInstanceOf[GetDataResponse])
+              Future.value(pureRep.get().asInstanceOf[GetDataResponse].body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
-    }
-  }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
+    }*/
 
   def sendPing: Future[Option[ReplyHeader]] = {
-    client.sendPing flatMap {
+    client.sendPing flatMap{ rep => Future.value(Some(rep.asInstanceOf[ReplyHeader]))} /*flatMap {
       rep: BufferedResponse =>
         val pureRep =
           ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
@@ -259,91 +241,109 @@ case class ClientWrapper(adress: String, timeOut: Long) {
             logger.warning(ex.getMessage + ": " + ex.getCause)
             Future.value(None)
         }
-    }
+    }*/
   }
+  /*
+    def setACL(path: String, acl: Array[ACL], version: Int): Future[Option[SetACLResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
+      require(acl.size != 0, "ACL list must not be empty")
 
-  def setACL(path: String, acl: Array[ACL], version: Int): Future[Option[SetACLResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
-    require(acl.size != 0, "ACL list must not be empty")
+      client.setACL(path, acl, version, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
 
-    client.setACL(path, acl, version, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
+          pureRep match {
+            case Return(res) =>
+              parseSetAcl(pureRep.get())
+              Future.value(pureRep.get().body)
 
-        pureRep match {
-          case Return(res) =>
-            parseSetAcl(pureRep.get())
-            Future.value(pureRep.get().body)
-
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def setData(path: String, data: Array[Byte], version: Int): Future[Option[SetDataResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
+    def setData(path: String, data: Array[Byte], version: Int): Future[Option[SetDataResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
 
-    client.setData(path, data, version, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
+      client.setData(path, data, version, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
 
-        pureRep match {
-          case Return(res) =>
-            parseSetData(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseSetData(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def setWatches(relativeZxid: Int,
-    dataWatches: Array[String],
-    existsWatches: Array[String],
-    childWatches: Array[String]): Future[Option[ReplyHeader]] = {
+    def setWatches(relativeZxid: Int,
+      dataWatches: Array[String],
+      existsWatches: Array[String],
+      childWatches: Array[String]): Future[Option[ReplyHeader]] = {
 
-    client.setWatches(relativeZxid, dataWatches, existsWatches, childWatches, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
+      client.setWatches(relativeZxid, dataWatches, existsWatches, childWatches, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
 
-        pureRep match {
-          case Return(res) =>
-            parseSetWatches(pureRep.get())
-            Future.value(Some(pureRep.get()))
+          pureRep match {
+            case Return(res) =>
+              parseSetWatches(pureRep.get())
+              Future.value(Some(pureRep.get()))
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
 
-  def sync(path: String): Future[Option[SyncResponseBody]] = {
-    require(path.length != 0, "Path must be longer than 0")
+    def sync(path: String): Future[Option[SyncResponseBody]] = {
+      require(path.length != 0, "Path must be longer than 0")
 
-    client.sync(path, connectionManager.getXid) flatMap {
-      rep: BufferedResponse =>
-        val pureRep =
-          ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
+      client.sync(path, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep =
+            ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
 
-        pureRep match {
-          case Return(res) =>
-            parseSync(pureRep.get())
-            Future.value(pureRep.get().body)
+          pureRep match {
+            case Return(res) =>
+              parseSync(pureRep.get())
+              Future.value(pureRep.get().body)
 
-          case Throw(ex) =>
-            logger.warning(ex.getMessage + ": " + ex.getCause)
-            Future.value(None)
-        }
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
     }
-  }
+
+    def transaction(opList: Array[OpRequest]): Future[Option[Array[OpResult]]] = {
+      client.transaction(opList, connectionManager.getXid) flatMap {
+        rep: BufferedResponse =>
+          val pureRep: Try[TransactionResponse] =
+            ResponseDecoder.decode(rep, opCode.multi).asInstanceOf[Try[TransactionResponse]]
+
+          pureRep match {
+            // if the decoding had no errors
+            case Return(res) =>
+              Future.value(Some(pureRep.get.responseList))
+            // There might be a ZooKeeper exception
+            case Throw(ex) =>
+              logger.warning(ex.getMessage + ": " + ex.getCause)
+              Future.value(None)
+          }
+      }
+    }*/
 
   def parseCreate(rep: CreateResponse) = {
     connectionManager.parseReplyHeader(rep.header)

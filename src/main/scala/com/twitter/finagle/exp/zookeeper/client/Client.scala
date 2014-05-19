@@ -6,7 +6,7 @@ import com.twitter.util.{Await, Future, Time, Closable}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions._
 
-class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Closable {
+class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   private[this] val service = Await.result(factory())
 
@@ -14,15 +14,15 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
   def closeService: Future[Unit] = factory.close()
 
   // Connection purpose definitions
-  def connect: Future[BufferedResponse] = service(new ConnectRequest)
-  def connect(timeOut: Int): Future[BufferedResponse] = service(new ConnectRequest(0, 0L, timeOut))
-  def disconnect: Future[BufferedResponse] = service(new RequestHeader(1, -11))
-  def sendPing: Future[BufferedResponse] = {
+  def connect: Future[Response] = service(new ConnectRequest)
+  def connect(timeOut: Int): Future[Response] = service(new ConnectRequest(0, 0L, timeOut))
+  def disconnect: Future[Response] = service(new RequestHeader(1, -11))
+  def sendPing: Future[Response] = {
     println("<--ping: ")
     service(new RequestHeader(-2, 11))
   }
 
-  def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {
+  /*def create(path: String, data: Array[Byte], acl: Array[ACL], createMode: Int, xid: Int): Future[BufferedResponse] = {
     //TODO patch check (chroot)
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -31,9 +31,9 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     val body = CreateRequestBody(path, data, acl, createMode)
 
     service(new CreateRequest(header, body))
-  }
+  }*/
 
-  def delete(path: String, version: Int, xid: Int) = {
+  /*def delete(path: String, version: Int, xid: Int) = {
     // TODO CHECK STRING
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
@@ -160,13 +160,13 @@ class Client(val factory: ServiceFactory[Request, BufferedResponse]) extends Clo
     val transaction = new Transaction(opList)
 
     service(new TransactionRequest(header, transaction))
-  }
+  }*/
 }
 
 object Client {
   private[this] val logger = Logger.getLogger("finagle-zookeeper")
 
-  def apply(factory: ServiceFactory[Request, BufferedResponse]): Client = {
+  def apply(factory: ServiceFactory[Request, Response]): Client = {
     new Client(factory)
   }
 

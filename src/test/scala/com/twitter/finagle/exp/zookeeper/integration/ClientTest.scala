@@ -34,7 +34,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
         assert(true)
     }
   }
-
+/*
   test("Node creation and exists") {
     connect
 
@@ -253,6 +253,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
       }
     })
 
+    Thread.sleep(10000)
     disconnect
-  }
+  }*/
 }
