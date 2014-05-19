@@ -253,7 +253,6 @@ class ClientTest extends FunSuite with IntegrationConfig {
       }
     })
 
-    Thread.sleep(10000)
     disconnect
   }
 }
