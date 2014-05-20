@@ -215,11 +215,9 @@ class ClientTest extends FunSuite with IntegrationConfig {
       Future(response)
     }
 
-    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
-
-
     Await.ready(f)
-    Await.ready(deleteNode)
+    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
+    Await.result(deleteNode)
     disconnect
   }
 

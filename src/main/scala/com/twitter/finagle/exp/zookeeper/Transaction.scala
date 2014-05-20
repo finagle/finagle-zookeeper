@@ -5,26 +5,19 @@ import com.twitter.finagle.exp.zookeeper.transport.{BufferReader, BufferWriter, 
 import com.twitter.util.Try
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
-sealed trait Encodable
-sealed trait Decodable
-sealed trait OpResult extends Decodable
-sealed trait OpRequest extends Encodable {
+
+sealed trait OpResult
+sealed trait OpRequest {
   val toChannelBuffer: ChannelBuffer
 }
 
-trait SpecialEncoder[T <: Encodable] {
-  self: Encodable =>
-  val toChannelBuffer: ChannelBuffer
-}
-
-trait SpecialDecoder[+U <: OpResult] extends (BufferReader => Try[U]) {
-  self: Decodable =>
+trait ResultDecoder[U <: OpResult] extends (BufferReader => Try[U]) {
   def apply(buffer: BufferReader): Try[U] = Try(decode(buffer))
   def decode(buffer: BufferReader): U
 }
 
-class Transaction(opList: Array[OpRequest]) extends Encodable with SpecialEncoder[OpRequest] {
-  override val toChannelBuffer: ChannelBuffer = {
+class Transaction(opList: Array[OpRequest]) {
+  val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
     opList foreach {
@@ -83,9 +76,7 @@ object Transaction {
 }
 
 case class MultiHeader(typ: Int, state: Boolean, err: Int)
-  extends Encodable
-  with OpResult
-  with SpecialEncoder[MultiHeader] {
+  extends OpRequest {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
@@ -97,8 +88,8 @@ case class MultiHeader(typ: Int, state: Boolean, err: Int)
   }
 }
 
-object MultiHeader extends Decodable with SpecialDecoder[MultiHeader] {
-  override def decode(buffer: BufferReader): MultiHeader = {
+object MultiHeader {
+  def decode(buffer: BufferReader): MultiHeader = {
     new MultiHeader(buffer.readInt, buffer.readBool, buffer.readInt)
   }
 }
@@ -113,7 +104,7 @@ case class CreateOp(
   data: Array[Byte],
   aclList: Array[ACL],
   createMode: Int)
-  extends OpRequest with SpecialEncoder[CreateOp] {
+  extends OpRequest {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
@@ -126,7 +117,7 @@ case class CreateOp(
   }
 }
 
-object CreateOp extends Decodable with SpecialDecoder[CreateResult] {
+object CreateOp extends ResultDecoder[CreateResult] {
   override def decode(buffer: BufferReader): CreateResult = {
     new CreateResult(opCode.create, buffer.readString)
   }
@@ -144,7 +135,7 @@ case class DeleteOp(path: String, version: Int)
   }
 }
 
-object DeleteOp extends Decodable with SpecialDecoder[DeleteResult] {
+object DeleteOp extends ResultDecoder[DeleteResult] {
   override def decode(buffer: BufferReader): DeleteResult = {
     new DeleteResult(buffer.readInt)
   }
@@ -163,7 +154,7 @@ case class SetDataOp(path: String, data: Array[Byte], version: Int)
   }
 }
 
-object SetDataOp extends Decodable with SpecialDecoder[SetDataResult] {
+object SetDataOp extends ResultDecoder[SetDataResult] {
   override def decode(buffer: BufferReader): SetDataResult = {
     new SetDataResult(buffer.readInt, Stat.decode(buffer))
   }
@@ -181,7 +172,7 @@ case class CheckOp(path: String, version: Int)
   }
 }
 
-object CheckOp extends Decodable with SpecialDecoder[CheckResult] {
+object CheckOp extends ResultDecoder[CheckResult] {
   override def decode(buffer: BufferReader): CheckResult = {
     new CheckResult(buffer.readInt)
   }

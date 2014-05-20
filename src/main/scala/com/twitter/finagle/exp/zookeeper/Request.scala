@@ -40,7 +40,7 @@ case class ConnectRequest(protocolVersion: Int = 0,
     bw.write(passwd)
     bw.write(canBeRO.getOrElse(false))
 
-    bw.underlying.copy
+    bw.underlying.copy()
   }
 }
 
@@ -65,11 +65,11 @@ case class CreateRequest(
     bw.write(aclList)
     bw.write(createMode)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
-case class CloseSessionRequest(opCode:Int ,xid: Int)
+case class CloseSessionRequest(xid: Int, opCode: Int)
   extends RequestHeader with Request {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(12))
@@ -78,7 +78,7 @@ case class CloseSessionRequest(opCode:Int ,xid: Int)
     bw.write(xid)
     bw.write(opCode)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -95,7 +95,7 @@ case class GetACLRequest(
     bw.write(opCode)
 
     bw.write(path)
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -115,7 +115,7 @@ case class GetDataRequest(
     bw.write(path)
     bw.write(watcher)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -133,7 +133,7 @@ case class GetMaxChildrenRequestBody(
 
     bw.write(path)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -153,7 +153,7 @@ case class DeleteRequest(
     bw.write(path)
     bw.write(version)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -173,7 +173,7 @@ case class ExistsRequest(
     bw.write(path)
     bw.write(watch)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -186,7 +186,7 @@ case class PingRequest(xid: Int, opCode: Int)
     bw.write(xid)
     bw.write(opCode)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -208,7 +208,7 @@ case class SetDataRequest(
     bw.write(data)
     bw.write(version)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -228,7 +228,7 @@ case class GetChildrenRequest(
     bw.write(path)
     bw.write(watch)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -248,7 +248,7 @@ case class GetChildren2Request(
     bw.write(path)
     bw.write(watch)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -270,7 +270,7 @@ case class SetACLRequest(
     bw.write(acl)
     bw.write(version)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -290,7 +290,7 @@ case class SetMaxChildrenRequest(
     bw.write(path)
     bw.write(max)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -308,7 +308,7 @@ case class SyncRequest(
 
     bw.write(path)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 
@@ -332,7 +332,7 @@ case class SetWatchesRequest(
     bw.write(existsWatches)
     bw.write(childWatches)
 
-    bw.underlying
+    bw.underlying.copy()
   }
 }
 

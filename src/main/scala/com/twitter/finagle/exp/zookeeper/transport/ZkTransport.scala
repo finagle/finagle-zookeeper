@@ -34,6 +34,8 @@ case class ZkTransport(
    */
   override def write(req: Request): Future[Unit] = req match {
     case re: ConnectRequest => doWrite(re)
+    case re: CloseSessionRequest => doWrite(re)
+    case re: PingRequest => doWrite(re)
     case re: CreateRequest => doWrite(re)
     case re: DeleteRequest => doWrite(re)
     case re: ExistsRequest => doWrite(re)
@@ -46,7 +48,6 @@ case class ZkTransport(
     case re: SetWatchesRequest => doWrite(re)
     case re: SyncRequest => doWrite(re)
     case re: TransactionRequest => doWrite(re)
-    case re: RequestHeader => doWrite(re)
   }
 
   override def read(): Future[Response] = {
@@ -56,10 +57,10 @@ case class ZkTransport(
         processedReq.dequeue()
         Future.value(connectRep)
       }
-      case rep: RequestHeader => trans.read flatMap { buffer =>
-        val replyRep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
+      case rep: CloseSessionRequest => trans.read flatMap { buffer =>
+        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
         processedReq.dequeue()
-        Future.value(replyRep)
+        Future.value(rep)
       }
       case rep:CreateRequest => trans.read flatMap {buffer =>
         val rep = CreateResponse.decode(Buffer.fromChannelBuffer(buffer))
@@ -85,6 +86,11 @@ case class ZkTransport(
       }
       case rep:GetDataRequest => trans.read flatMap {buffer =>
         val rep = GetDataResponse.decode(Buffer.fromChannelBuffer(buffer))
+        processedReq.dequeue()
+        Future.value(rep)
+      }
+      case rep: PingRequest => trans.read flatMap { buffer =>
+        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
         processedReq.dequeue()
         Future.value(rep)
       }
