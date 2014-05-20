@@ -45,6 +45,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield ret
 
     val rep = Await.result(res)
+
     assert(rep.get.stat.dataLength === "HELLO".getBytes.length)
 
     disconnect

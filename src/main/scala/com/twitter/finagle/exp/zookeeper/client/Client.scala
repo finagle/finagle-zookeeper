@@ -36,14 +36,14 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(req)
   }
 
-  def delete(path: String, version: Int, xid: Int): Future[Response] = {
+  def delete(path: String, version: Int, xid: Int): Future[Unit] = {
     // TODO CHECK STRING
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--delete: " + xid)
     val req = DeleteRequest(xid, opCode.delete,path, version)
 
-    service(req)
+    service(req).unit
   }
 
   def exists(path: String, watch: Boolean, xid: Int): Future[Response] = {

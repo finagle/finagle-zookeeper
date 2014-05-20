@@ -49,7 +49,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     data: Array[Byte],
     acl: Array[ACL],
     createMode: Int
-    ): Future[Option[CreateResponseBody]] = {
+    ): Future[CreateResponse] = {
 
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
@@ -60,11 +60,11 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[CreateResponse]
         parseCreate(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
-  def delete(path: String, version: Int): Future[Option[ReplyHeader]] = {
+  def delete(path: String, version: Int): Future[Unit] = {
     require(path.length != 0, "Path must be longer than 0")
 
     client.delete(path, version, connectionManager.getXid) flatMap {
@@ -84,7 +84,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     }
   }
 
-  def exists(path: String, watcher: Boolean): Future[Option[ExistsResponseBody]] = {
+  def exists(path: String, watcher: Boolean): Future[ExistsResponse] = {
     require(path.length != 0, "Path must be longer than 0")
     require(watcher || !watcher, "Watch must be true or false")
 
@@ -92,22 +92,22 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[ExistsResponse]
         parseExists(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
-  def getACL(path: String): Future[Option[GetACLResponseBody]] = {
+  def getACL(path: String): Future[GetACLResponse] = {
     require(path.length != 0, "Path must be longer than 0")
 
     client.getACL(path, connectionManager.getXid) flatMap {
       rep =>
         val pureRep = rep.asInstanceOf[GetACLResponse]
         parseGetACL(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
-  def getChildren(path: String, watch: Boolean): Future[Option[GetChildrenResponseBody]] = {
+  def getChildren(path: String, watch: Boolean): Future[GetChildrenResponse] = {
     require(path.length != 0, "Path must be longer than 0")
     require(watch || !watch, "Watch must be true or false")
 
@@ -115,11 +115,11 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[GetChildrenResponse]
         parseGetChildren(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
-  def getChildren2(path: String, watch: Boolean): Future[Option[GetChildren2ResponseBody]] = {
+  def getChildren2(path: String, watch: Boolean): Future[GetChildren2Response] = {
     require(path.length != 0, "Path must be longer than 0")
     require(watch || !watch, "Watch must be true or false")
 
@@ -127,12 +127,12 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[GetChildren2Response]
         parseGetChildren2(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
 
-  def getData(path: String, watcher: Boolean): Future[Option[GetDataResponseBody]] = {
+  def getData(path: String, watcher: Boolean): Future[GetDataResponse] = {
     require(path.length != 0, "Path must be longer than 0")
     require(watcher || !watcher, "Watch must be true or false")
 
@@ -140,7 +140,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[GetDataResponse]
         parseGetData(pureRep.asInstanceOf[GetDataResponse])
-        Future.value(pureRep.asInstanceOf[GetDataResponse].body)
+        Future.value(pureRep.asInstanceOf[GetDataResponse])
     }
   }
 
@@ -158,7 +158,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     }
   }
 
-  def setACL(path: String, acl: Array[ACL], version: Int): Future[Option[SetACLResponseBody]] = {
+  def setACL(path: String, acl: Array[ACL], version: Int): Future[SetACLResponse] = {
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
 
@@ -166,18 +166,18 @@ case class ClientWrapper(adress: String, timeOut: Long) {
       rep =>
         val pureRep = rep.asInstanceOf[SetACLResponse]
         parseSetAcl(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
-  def setData(path: String, data: Array[Byte], version: Int): Future[Option[SetDataResponseBody]] = {
+  def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
     require(path.length != 0, "Path must be longer than 0")
 
     client.setData(path, data, version, connectionManager.getXid) flatMap {
       rep =>
         val pureRep = rep.asInstanceOf[SetDataResponse]
         parseSetData(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 
@@ -194,14 +194,14 @@ case class ClientWrapper(adress: String, timeOut: Long) {
     }
   }
 
-  def sync(path: String): Future[Option[SyncResponseBody]] = {
+  def sync(path: String): Future[SyncResponse] = {
     require(path.length != 0, "Path must be longer than 0")
 
     client.sync(path, connectionManager.getXid) flatMap {
       rep =>
         val pureRep = rep.asInstanceOf[SyncResponse]
         parseSync(pureRep)
-        Future.value(pureRep.body)
+        Future.value(pureRep)
     }
   }
 

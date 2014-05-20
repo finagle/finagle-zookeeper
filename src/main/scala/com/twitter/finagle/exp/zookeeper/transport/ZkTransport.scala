@@ -2,25 +2,10 @@ package com.twitter.finagle.exp.zookeeper.transport
 
 import org.jboss.netty.buffer.ChannelBuffer
 import com.twitter.finagle.transport.Transport
-import com.twitter.finagle.exp.zookeeper._
 import com.twitter.util._
 import java.net.SocketAddress
-import com.twitter.finagle.exp.zookeeper.ConnectRequest
 import scala.collection.mutable
-import com.twitter.finagle.exp.zookeeper.GetChildrenRequest
-import com.twitter.finagle.exp.zookeeper.GetDataRequest
-import com.twitter.finagle.exp.zookeeper.SetWatchesRequest
-import com.twitter.finagle.exp.zookeeper.SyncRequest
-import com.twitter.finagle.exp.zookeeper.GetACLRequest
-import com.twitter.finagle.exp.zookeeper.TransactionRequest
-import com.twitter.finagle.exp.zookeeper.SetACLRequest
-import com.twitter.finagle.exp.zookeeper.CreateRequest
-import com.twitter.finagle.exp.zookeeper.RequestHeader
-import com.twitter.finagle.exp.zookeeper.DeleteRequest
-import com.twitter.finagle.exp.zookeeper.ExistsRequest
-import com.twitter.finagle.exp.zookeeper.ConnectRequest
-import com.twitter.finagle.exp.zookeeper.GetChildren2Request
-import com.twitter.finagle.exp.zookeeper.SetDataRequest
+import com.twitter.finagle.exp.zookeeper._
 
 case class ZkTransport(
   trans: Transport[ChannelBuffer, ChannelBuffer]
@@ -29,10 +14,10 @@ case class ZkTransport(
 
   /**
    * When receiving a Request
-   * @param req the Request to encode
+   * @param request the Request to encode
    * @return Future[Unit] when the message is correctly written
    */
-  override def write(req: Request): Future[Unit] = req match {
+  override def write(request: Request): Future[Response] = request match {
     case re: ConnectRequest => doWrite(re)
     case re: CloseSessionRequest => doWrite(re)
     case re: PingRequest => doWrite(re)
@@ -53,89 +38,120 @@ case class ZkTransport(
   override def read(): Future[Response] = {
     processedReq.front match {
       case rep: ConnectRequest => trans.read flatMap { buffer =>
-        val connectRep = ConnectResponse.decode(Buffer.fromChannelBuffer(buffer))
+        val connectRep = ConnectResponse.decode(BufferReader(buffer))
         processedReq.dequeue()
         Future.value(connectRep)
       }
-      case rep: CloseSessionRequest => trans.read flatMap { buffer =>
-        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:CreateRequest => trans.read flatMap {buffer =>
-        val rep = CreateResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:ExistsRequest => trans.read flatMap {buffer =>
-        processedReq.dequeue()
-        Try {ExistsResponse.decode(Buffer.fromChannelBuffer(buffer))} match {
-          case Return(res) => Future.value(res)
-          case Throw(ex) => throw ex
+      case re: Request => {
+        trans.read flatMap { buffer =>
+          decode(re, buffer)
         }
-      }
-      case rep:DeleteRequest => trans.read flatMap {buffer =>
-        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:SetDataRequest => trans.read flatMap {buffer =>
-        val rep = SetDataResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:GetDataRequest => trans.read flatMap {buffer =>
-        val rep = GetDataResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep: PingRequest => trans.read flatMap { buffer =>
-        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:SyncRequest => trans.read flatMap {buffer =>
-        val rep = SyncResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:SetACLRequest => trans.read flatMap {buffer =>
-        val rep = SetACLResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:GetACLRequest => trans.read flatMap {buffer =>
-        val rep = GetACLResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:GetChildrenRequest => trans.read flatMap {buffer =>
-        val rep = GetChildrenResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:GetChildren2Request => trans.read flatMap {buffer =>
-        val rep = GetChildren2Response.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:SetWatchesRequest => trans.read flatMap {buffer =>
-        val rep = ReplyHeader.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
-      }
-      case rep:TransactionRequest => trans.read flatMap {buffer =>
-        val rep = TransactionResponse.decode(Buffer.fromChannelBuffer(buffer))
-        processedReq.dequeue()
-        Future.value(rep)
+        //Copy the buffer
+        //Send the buffer to a decoder
+        // If xid == -2/1/-1/-4 Special cases
+        // If xid > 1 then common response
+        // If decoding was correct (request.xid == rep.xid & no error while decoding)
+        //    then dequeue
+        // If not put the buffer in a "waiting to decode stack"
       }
       case _ => throw new RuntimeException("READ REQUEST NOT SUPPORTED")
     }
   }
 
-  def doWrite(req: Request): Future[Unit] = {
-    processedReq.enqueue(req)
-    trans.write(req.toChannelBuffer)
+  def decode(request: Request, buffer: ChannelBuffer): Future[Response] = {
+    val br = BufferReader(buffer)
+    val header = ReplyHeader.decode(br)
+
+    request match {
+      case request: CloseSessionRequest if header.xid == 1 =>
+        processedReq.dequeue()
+        Future.value(header)
+
+      case request: CreateRequest if header.xid > 1=>
+        //read zxid
+        val rep = CreateResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: ExistsRequest if header.xid > 1=>
+        assert(request.xid == header.xid)
+        Try {ExistsResponse.decode(br)} match {
+          case Return(res) =>
+            processedReq.dequeue()
+            Future.value(res)
+          case Throw(ex) => throw ex
+        }
+
+      case request: DeleteRequest if header.xid > 1=>
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+
+
+      case request: SetDataRequest if header.xid > 1=>
+        val rep = SetDataResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: GetDataRequest if header.xid > 1=>
+        val rep = GetDataResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: PingRequest if header.xid == -2=>
+        processedReq.dequeue()
+        Future.value(header)
+
+      case request: SyncRequest if header.xid > 1=>
+        val rep = SyncResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: SetACLRequest if header.xid > 1=>
+        val rep = SetACLResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: GetACLRequest if header.xid > 1=>
+        val rep = GetACLResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: GetChildrenRequest if header.xid > 1=>
+        val rep = GetChildrenResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: GetChildren2Request if header.xid > 1=>
+        val rep = GetChildren2Response.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case request: SetWatchesRequest if header.xid > 1=>
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(header)
+
+      case request: TransactionRequest if header.xid > 1=>
+        val rep = TransactionResponse.decode(br)
+        assert(request.xid == header.xid)
+        processedReq.dequeue()
+        Future.value(rep)
+
+      case _ if header.xid == -1=> println("THIS IS A NOTIFICATION"); throw new RuntimeException("FUCK")
+    }
+  }
+
+  def doWrite(request: Request): Future[Response] = {
+    processedReq.enqueue(request)
+    trans.write(request.toChannelBuffer)
   }
 
   override def remoteAddress: SocketAddress = trans.remoteAddress
