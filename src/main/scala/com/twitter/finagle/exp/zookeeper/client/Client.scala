@@ -16,26 +16,24 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
   // Connection purpose definitions
   def connect: Future[Response] = service(new ConnectRequest)
   def connect(timeOut: Int): Future[Response] = service(new ConnectRequest(0, 0L, timeOut))
-  def disconnect: Future[Response] = service(new RequestHeader(1, -11))
-  def sendPing: Future[Response] = {
+  def closeSession: Future[Response] = service(new CloseSessionRequest(1, -11))
+  def ping: Future[Response] = {
     println("<--ping: ")
-    service(new RequestHeader(-2, 11))
+    service(new PingRequest(-2, 11))
   }
 
   def create(path: String,
     data: Array[Byte],
     acl: Array[ACL],
     createMode: Int,
-    xid: Int
-    ): Future[Response] = {
+    xid: Int): Future[Response] = {
     //TODO patch check (chroot)
     /* PathUtils.validatePath(path, createMode)
      val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--create: " + xid)
-    val header = RequestHeader(xid, opCode.create)
-    val body = CreateRequestBody(path, data, acl, createMode)
+    val req = CreateRequest(xid, opCode.create,path, data, acl, createMode)
 
-    service(new CreateRequest(header, body))
+    service(req)
   }
 
   def delete(path: String, version: Int, xid: Int): Future[Response] = {
@@ -43,10 +41,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--delete: " + xid)
-    val header = RequestHeader(xid, opCode.delete)
-    val body = DeleteRequestBody(path, version)
+    val req = DeleteRequest(xid, opCode.delete,path, version)
 
-    service(new DeleteRequest(header, body))
+    service(req)
   }
 
   def exists(path: String, watch: Boolean, xid: Int): Future[Response] = {
@@ -54,10 +51,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--exists: " + xid)
-    val header = RequestHeader(xid, opCode.exists)
-    val body = ExistsRequestBody(path, false) // false because watch's not supported
+    val req = ExistsRequest(xid, opCode.exists, path, false) // false because watch's not supported
 
-    service(new ExistsRequest(header, body))
+    service(req)
   }
 
   def getACL(path: String, xid: Int): Future[Response] = {
@@ -65,10 +61,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getACL: " + xid)
-    val header = RequestHeader(xid, opCode.getACL)
-    val body = GetACLRequestBody(path)
+    val req = GetACLRequest(xid, opCode.getACL, path)
 
-    service(new GetACLRequest(header, body))
+    service(req)
   }
 
   def getChildren(path: String, watch: Boolean, xid: Int): Future[Response] = {
@@ -76,10 +71,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getChildren: " + xid)
-    val header = RequestHeader(xid, opCode.getChildren)
-    val body = GetChildrenRequestBody(path, false) // false because watch's not supported
+    val req = GetChildrenRequest(xid, opCode.getChildren,path, false) // false because watch's not supported
 
-    service(new GetChildrenRequest(header, body))
+    service(req)
   }
 
   def getChildren2(path: String, watch: Boolean, xid: Int): Future[Response] = {
@@ -87,10 +81,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getChildren2: " + xid)
-    val header = RequestHeader(xid, opCode.getChildren2)
-    val body = GetChildren2RequestBody(path, false) // false because watch's not supported
+    val req = GetChildren2Request(xid, opCode.getChildren2, path, false) // false because watch's not supported
 
-    service(new GetChildren2Request(header, body))
+    service(req)
   }
 
   def getData(path: String, watch: Boolean, xid: Int): Future[Response] = {
@@ -98,10 +91,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getData: " + xid)
-    val header = RequestHeader(xid, opCode.getData)
-    val body = GetDataRequestBody(path, false) // false because watch's not supported
+    val req = GetDataRequest(xid, opCode.getData, path, false) // false because watch's not supported
 
-    service(new GetDataRequest(header, body))
+    service(req)
   }
 
   // GetMaxChildren is implemented but not available in the java lib
@@ -121,10 +113,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--setACL: " + xid)
-    val header = RequestHeader(xid, opCode.setACL)
-    val body = SetACLRequestBody(path, acl, version)
+    val req = SetACLRequest(xid, opCode.setACL, path, acl, version)
 
-    service(new SetACLRequest(header, body))
+    service(req)
   }
 
   def setData(path: String, data: Array[Byte], version: Int, xid: Int): Future[Response] = {
@@ -132,10 +123,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--setData: " + xid)
-    val header = RequestHeader(xid, opCode.setData)
-    val body = SetDataRequestBody(path, data, version)
+    val req = SetDataRequest(xid, opCode.setData, path, data, version)
 
-    service(new SetDataRequest(header, body))
+    service(req)
   }
 
   def setWatches(relativeZxid: Int,
@@ -146,10 +136,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     ): Future[Response] = {
     println("<--setWatches: " + xid)
 
-    val header = RequestHeader(xid, opCode.setWatches)
-    val body = SetWatchesRequestBody(relativeZxid, dataWatches, existsWatches, childWatches)
+    val req = SetWatchesRequest(xid, opCode.setWatches, relativeZxid, dataWatches, existsWatches, childWatches)
 
-    service(new SetWatchesRequest(header, body))
+    service(req)
   }
 
   def sync(path: String, xid: Int): Future[Response] = {
@@ -157,19 +146,18 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--sync: " + xid)
-    val header = RequestHeader(xid, opCode.sync)
-    val body = SyncRequestBody(path)
+    val req = SyncRequest(xid, opCode.sync, path)
 
-    service(new SyncRequest(header, body))
+    service(req)
   }
 
   def transaction(opList: Array[OpRequest], xid: Int): Future[Response] = {
     println("<--Transaction: " + xid)
 
-    val header = RequestHeader(xid, opCode.multi)
     val transaction = new Transaction(opList)
+    val req = new TransactionRequest(xid, opCode.multi, transaction)
 
-    service(new TransactionRequest(header, transaction))
+    service(req)
   }
 }
 

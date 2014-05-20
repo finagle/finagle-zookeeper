@@ -3,7 +3,6 @@ package com.twitter.finagle.exp.zookeeper.client
 import com.twitter.util.{Throw, Return, Try, Future}
 import com.twitter.conversions.time._
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 
 /**
  * ClientWrapper (can also be named SessionManager) is used as a Wrapper around Client,
@@ -78,7 +77,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
 
   def disconnect: Future[Option[ReplyHeader]] = {
     pingTimer.stopTimer
-    client.disconnect flatMap { rep =>
+    client.closeSession flatMap { rep =>
       val pureRep = rep.asInstanceOf[ReplyHeader]
       connectionManager.parseReplyHeader(pureRep)
       Future.value(Some(pureRep))
@@ -146,7 +145,7 @@ case class ClientWrapper(adress: String, timeOut: Long) {
   }
 
   def sendPing: Future[Option[ReplyHeader]] = {
-    client.sendPing flatMap { rep =>
+    client.ping flatMap { rep =>
       Try {rep.asInstanceOf[ReplyHeader]} match {
         case Return(res) =>
           connectionManager.parseReplyHeader(res)
