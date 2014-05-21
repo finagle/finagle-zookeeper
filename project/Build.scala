@@ -4,6 +4,8 @@ import Keys._
 object finaglezk extends Build {
   val FinVersion = "6.15.0"
 
+  logLevel := Level.Info
+
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "1.9.2",
@@ -23,7 +25,8 @@ object finaglezk extends Build {
     organization := "com.twitter.finagle",
     version := FinVersion,
     crossScalaVersions := Seq("2.9.2", "2.10.0"),
-    scalaVersion := "2.9.2"
+    scalaVersion := "2.9.2",
+    logLevel := Level.Debug
   )
 
   lazy val root = Project(id = "finagle-zk",

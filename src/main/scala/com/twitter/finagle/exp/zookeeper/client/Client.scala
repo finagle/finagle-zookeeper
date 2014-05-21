@@ -1,25 +1,42 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import java.util.logging.Logger
+import com.twitter.logging.Logger
 import com.twitter.finagle.ServiceFactory
-import com.twitter.util.{Await, Future, Time, Closable}
+import com.twitter.util._
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions._
+import com.twitter.finagle.exp.zookeeper.SyncRequest
+import com.twitter.finagle.exp.zookeeper.TransactionRequest
+import com.twitter.finagle.exp.zookeeper.SetACLRequest
+import com.twitter.finagle.exp.zookeeper.DeleteRequest
+import com.twitter.finagle.exp.zookeeper.GetChildren2Request
+import com.twitter.finagle.exp.zookeeper.SetDataRequest
+import com.twitter.finagle.exp.zookeeper.GetChildrenRequest
+import com.twitter.finagle.exp.zookeeper.CloseSessionRequest
+import com.twitter.finagle.exp.zookeeper.GetDataRequest
+import com.twitter.finagle.exp.zookeeper.SetWatchesRequest
+import com.twitter.finagle.exp.zookeeper.GetACLRequest
+import com.twitter.finagle.exp.zookeeper.CreateRequest
+import com.twitter.finagle.exp.zookeeper.ExistsRequest
+import com.twitter.finagle.exp.zookeeper.ConnectRequest
+import com.twitter.finagle.exp.zookeeper.PingRequest
 
 class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   private[this] val service = Await.result(factory())
+  val logger = Client.getLogger
 
   def close(deadline: Time): Future[Unit] = factory.close(deadline)
   def closeService: Future[Unit] = factory.close()
 
   // Connection purpose definitions
-  def connect: Future[Response] = service(new ConnectRequest)
-  def connect(timeOut: Int): Future[Response] = service(new ConnectRequest(0, 0L, timeOut))
-  def closeSession: Future[Response] = service(new CloseSessionRequest(1, -11))
+  def connect(timeOut: Int = 2000): Future[Response] = {
+    service(new ConnectRequest(0, 0L, timeOut))
+  }
+  def closeSession: Future[Unit] = service(new CloseSessionRequest(1, -11)).unit
   def ping: Future[Response] = {
     println("<--ping: ")
-    service(new PingRequest(-2, 11))
+    service(new PingRequest)
   }
 
   def create(path: String,
@@ -27,6 +44,12 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     acl: Array[ACL],
     createMode: Int,
     xid: Int): Future[Response] = {
+
+    require(path.length != 0, "Path must be longer than 0")
+    require(acl.size != 0, "ACL list must not be empty")
+    require(createMode == 0 || createMode == 1 ||
+      createMode == 2 || createMode == 3, "Create mode must be a value [0-3]")
+
     //TODO patch check (chroot)
     /* PathUtils.validatePath(path, createMode)
      val finalPath = PathUtils.prependChroot(path, null)*/
@@ -38,6 +61,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def delete(path: String, version: Int, xid: Int): Future[Unit] = {
     // TODO CHECK STRING
+    require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--delete: " + xid)
@@ -48,6 +72,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def exists(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
+    //require(watcher || !watcher, "Watch must be true or false")
+
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--exists: " + xid)
@@ -58,6 +85,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def getACL(path: String, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getACL: " + xid)
@@ -68,6 +96,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def getChildren(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
+    require(watch || !watch, "Watch must be true or false")
+
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getChildren: " + xid)
@@ -78,6 +109,8 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def getChildren2(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
+    require(watch || !watch, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getChildren2: " + xid)
@@ -88,6 +121,8 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def getData(path: String, watch: Boolean, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
+    //require(watcher || !watcher, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getData: " + xid)
@@ -110,6 +145,8 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def setACL(path: String, acl: Array[ACL], version: Int, xid: Int): Future[Response] = {
     // TODO Check path
+    require(path.length != 0, "Path must be longer than 0")
+    require(acl.size != 0, "ACL list must not be empty")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--setACL: " + xid)
@@ -120,6 +157,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def setData(path: String, data: Array[Byte], version: Int, xid: Int): Future[Response] = {
     // TODO check path
+    require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--setData: " + xid)
@@ -143,6 +181,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
   def sync(path: String, xid: Int): Future[Response] = {
     // TODO check path
+    require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--sync: " + xid)
@@ -162,7 +201,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 }
 
 object Client {
-  private[this] val logger = Logger.getLogger("finagle-zookeeper")
+  private[this] val logger = Logger("finagle-zookeeper")
 
   def apply(factory: ServiceFactory[Request, Response]): Client = {
     new Client(factory)

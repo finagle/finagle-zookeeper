@@ -35,6 +35,7 @@ case class ConnectResponse(
 case class CreateResponse(path: String) extends Response
 case class ExistsResponse(stat: Stat) extends Response
 case class ErrorResponse(err: Int) extends Response
+class EmptyResponse extends Response
 case class GetACLResponse(acl: Array[ACL], stat: Stat) extends Response
 case class GetChildrenResponse(children: Array[String]) extends Response
 

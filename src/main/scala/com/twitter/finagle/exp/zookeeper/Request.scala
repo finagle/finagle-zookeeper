@@ -177,14 +177,17 @@ case class ExistsRequest(
   }
 }
 
-case class PingRequest(xid: Int, opCode: Int)
+class PingRequest
   extends RequestHeader with Request {
+  override val xid: Int = -2
+  override val opCode: Int = ZookeeperDefinitions.opCode.ping
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
 
+
     bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
+    bw.write(xid) //xid
+    bw.write(opCode) //OpCode
 
     bw.underlying.copy()
   }
