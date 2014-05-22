@@ -1,16 +1,14 @@
 package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.service.{TimeoutFilter, RetryPolicy, RetryingFilter}
-import com.twitter.finagle.exp.zookeeper.transport.{ZkTransport, ZooKeeperTransporter}
+import com.twitter.finagle.exp.zookeeper.transport.ZooKeeperTransporter
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.finagle.client.{Bridge, DefaultClient}
-import com.twitter.finagle.dispatch.{SerialClientDispatcher, PipeliningDispatcher}
 import com.twitter.finagle.{ServiceFactory, Name}
 import com.twitter.conversions.time._
 import com.twitter.finagle
 import com.twitter.finagle.exp.zookeeper.client.{ClientDispatcher, Client}
 import org.jboss.netty.buffer.ChannelBuffer
-import com.twitter.finagle.transport.Transport
 
 trait ZKRichClient {
   self: finagle.Client[Request, Response] =>
