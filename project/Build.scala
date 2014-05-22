@@ -12,7 +12,8 @@ object finaglezk extends Build {
       "com.twitter" %% "finagle-core" % FinVersion,
       "com.twitter" %% "util-core" % FinVersion,
       "junit" % "junit" % "4.11" % "test",
-      "org.mockito" % "mockito-all" % "1.9.5" % "test"
+      "org.mockito" % "mockito-all" % "1.9.5" % "test",
+      "org.slf4j" % "slf4j-api" % "1.7.7"
     ),
     resolvers ++= Seq("snapshots" at "http://oss.sonatype.org/content/repositories/snapshots",
       "releases" at "http://oss.sonatype.org/content/repositories/releases",

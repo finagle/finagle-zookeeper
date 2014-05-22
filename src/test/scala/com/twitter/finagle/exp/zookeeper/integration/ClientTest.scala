@@ -29,13 +29,12 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     connect onSuccess {
       a =>
-        Thread.sleep(10000)
+        Thread.sleep(3000)
         Await.result(client.get.closeSession)
-        assert(true)
     }
   }
 
-  test("Node creation and exists") {
+  /*test("Node creation and exists") {
     connect
 
     val res = for {
@@ -48,7 +47,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
     assert(rep.stat.dataLength === "HELLO".getBytes.length)
 
     disconnect
-  }
+  }*/
 
  /* test("Create, SetData, GetData, Exists, Sync") {
     connect

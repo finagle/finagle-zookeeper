@@ -1,25 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.logging.Logger
 import com.twitter.finagle.ServiceFactory
 import com.twitter.util._
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions._
-import com.twitter.finagle.exp.zookeeper.SyncRequest
-import com.twitter.finagle.exp.zookeeper.TransactionRequest
-import com.twitter.finagle.exp.zookeeper.SetACLRequest
-import com.twitter.finagle.exp.zookeeper.DeleteRequest
-import com.twitter.finagle.exp.zookeeper.GetChildren2Request
-import com.twitter.finagle.exp.zookeeper.SetDataRequest
-import com.twitter.finagle.exp.zookeeper.GetChildrenRequest
-import com.twitter.finagle.exp.zookeeper.CloseSessionRequest
-import com.twitter.finagle.exp.zookeeper.GetDataRequest
-import com.twitter.finagle.exp.zookeeper.SetWatchesRequest
-import com.twitter.finagle.exp.zookeeper.GetACLRequest
-import com.twitter.finagle.exp.zookeeper.CreateRequest
-import com.twitter.finagle.exp.zookeeper.ExistsRequest
-import com.twitter.finagle.exp.zookeeper.ConnectRequest
-import com.twitter.finagle.exp.zookeeper.PingRequest
+import com.twitter.logging.Logger
 
 class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
@@ -34,9 +19,9 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new ConnectRequest(0, 0L, timeOut))
   }
   def closeSession: Future[Unit] = service(new CloseSessionRequest(1, -11)).unit
-  def ping: Future[Response] = {
+  def ping: Future[Unit] = {
     println("<--ping: ")
-    service(new PingRequest)
+    service(new PingRequest).unit
   }
 
   def create(path: String,
@@ -54,7 +39,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /* PathUtils.validatePath(path, createMode)
      val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--create: " + xid)
-    val req = CreateRequest(xid, opCode.create,path, data, acl, createMode)
+    val req = CreateRequest(xid, opCode.create, path, data, acl, createMode)
 
     service(req)
   }
@@ -65,7 +50,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--delete: " + xid)
-    val req = DeleteRequest(xid, opCode.delete,path, version)
+    val req = DeleteRequest(xid, opCode.delete, path, version)
 
     service(req).unit
   }
@@ -102,7 +87,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
     println("<--getChildren: " + xid)
-    val req = GetChildrenRequest(xid, opCode.getChildren,path, false) // false because watch's not supported
+    val req = GetChildrenRequest(xid, opCode.getChildren, path, false) // false because watch's not supported
 
     service(req)
   }
@@ -171,12 +156,12 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     existsWatches: Array[String],
     childWatches: Array[String],
     xid: Int
-    ): Future[Response] = {
+    ): Future[Unit] = {
     println("<--setWatches: " + xid)
 
     val req = SetWatchesRequest(xid, opCode.setWatches, relativeZxid, dataWatches, existsWatches, childWatches)
 
-    service(req)
+    service(req).unit
   }
 
   def sync(path: String, xid: Int): Future[Response] = {
@@ -201,11 +186,10 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 }
 
 object Client {
-  private[this] val logger = Logger("finagle-zookeeper")
+  private[this] val logger = Logger("Finagle-zookeeper")
+  def getLogger = logger
 
   def apply(factory: ServiceFactory[Request, Response]): Client = {
     new Client(factory)
   }
-
-  def getLogger = logger
 }

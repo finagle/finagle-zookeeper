@@ -8,7 +8,7 @@ import com.twitter.finagle.dispatch.{SerialClientDispatcher, PipeliningDispatche
 import com.twitter.finagle.{ServiceFactory, Name}
 import com.twitter.conversions.time._
 import com.twitter.finagle
-import com.twitter.finagle.exp.zookeeper.client.Client
+import com.twitter.finagle.exp.zookeeper.client.{ClientDispatcher, Client}
 import org.jboss.netty.buffer.ChannelBuffer
 import com.twitter.finagle.transport.Transport
 
@@ -26,9 +26,9 @@ with ZKRichClient {
   val defaultClient = new DefaultClient[Request, Response](
     name = "zookeeper",
     endpointer = {
-      val bridge = Bridge[Request, Response, Request, Response](
-        ZooKeeperTransporter(_, _) map {ZkTransport(_)},
-        newDispatcher = new SerialClientDispatcher(_)
+      val bridge = Bridge[ChannelBuffer, ChannelBuffer, Request, Response](
+        ZooKeeperTransporter(_, _),
+        new ClientDispatcher(_)
       )
       (sa, sr) => bridge(sa, sr)
     }
