@@ -57,7 +57,6 @@ case class ReplyHeader(
   extends Response
 
 case class TransactionResponse(
-  header: ReplyHeader,
   responseList: Array[OpResult])
   extends Response
 
@@ -202,9 +201,8 @@ object SyncResponse extends Decoder[SyncResponse] {
 
 object TransactionResponse extends Decoder[TransactionResponse] {
   override def decode(br: BufferReader): TransactionResponse = {
-    val header = ReplyHeader.decode(br)
 
-    new TransactionResponse(header, Transaction.decode(br))
+    new TransactionResponse(Transaction.decode(br))
   }
 }
 

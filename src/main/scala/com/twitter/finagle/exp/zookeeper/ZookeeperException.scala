@@ -27,6 +27,7 @@ case class SessionMovedException(override val msg: String) extends ZookeeperExce
 case class NotReadOnlyException(override val msg: String) extends ZookeeperException(msg)
 
 case class ZKExc(override val msg: String) extends ZookeeperException(msg)
+case class ZkDispatchingException(msg:String) extends RuntimeException(msg)
 
 object ZookeeperException {
   def create(msg: String): ZookeeperException = new ZKExc(msg)

@@ -3,7 +3,6 @@ package com.twitter.finagle.exp.zookeeper.client
 import com.twitter.finagle.ServiceFactory
 import com.twitter.util._
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions._
 import com.twitter.logging.Logger
 
 class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
@@ -14,11 +13,10 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
   def close(deadline: Time): Future[Unit] = factory.close(deadline)
   def closeService: Future[Unit] = factory.close()
 
-  // Connection purpose definitions
-  def connect(timeOut: Int = 2000): Future[Response] = {
-    service(new ConnectRequest(0, 0L, timeOut))
+  def connect(timeOut: Int = 2000): Future[ConnectResponse] = {
+    service(new ConnectRequest(0, 0L, timeOut)).asInstanceOf[Future[ConnectResponse]]
   }
-  def closeSession: Future[Unit] = service(new CloseSessionRequest(1, -11)).unit
+  def closeSession: Future[Unit] = service(new CloseSessionRequest).unit
   def ping: Future[Unit] = {
     println("<--ping: ")
     service(new PingRequest).unit
@@ -27,8 +25,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
   def create(path: String,
     data: Array[Byte],
     acl: Array[ACL],
-    createMode: Int,
-    xid: Int): Future[Response] = {
+    createMode: Int): Future[CreateResponse] = {
 
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
@@ -38,82 +35,75 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     //TODO patch check (chroot)
     /* PathUtils.validatePath(path, createMode)
      val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--create: " + xid)
-    val req = CreateRequest(xid, opCode.create, path, data, acl, createMode)
+    val req = CreateRequest(path, data, acl, createMode)
 
-    service(req)
+    service(req).asInstanceOf[Future[CreateResponse]]
   }
 
-  def delete(path: String, version: Int, xid: Int): Future[Unit] = {
+  def delete(path: String, version: Int): Future[Unit] = {
     // TODO CHECK STRING
     require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--delete: " + xid)
-    val req = DeleteRequest(xid, opCode.delete, path, version)
+    val req = DeleteRequest(path, version)
 
     service(req).unit
   }
 
-  def exists(path: String, watch: Boolean, xid: Int): Future[Response] = {
+  def exists(path: String, watch: Boolean): Future[ExistsResponse] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     //require(watcher || !watcher, "Watch must be true or false")
 
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--exists: " + xid)
-    val req = ExistsRequest(xid, opCode.exists, path, false) // false because watch's not supported
+    val req = ExistsRequest(path, watch) // false because watch's not supported
 
-    service(req)
+    service(req).asInstanceOf[Future[ExistsResponse]]
   }
 
-  def getACL(path: String, xid: Int): Future[Response] = {
+  def getACL(path: String): Future[GetACLResponse] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--getACL: " + xid)
-    val req = GetACLRequest(xid, opCode.getACL, path)
+    val req = GetACLRequest(path)
 
-    service(req)
+    service(req).asInstanceOf[Future[GetACLResponse]]
   }
 
-  def getChildren(path: String, watch: Boolean, xid: Int): Future[Response] = {
+  def getChildren(path: String, watch: Boolean): Future[GetChildrenResponse] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     require(watch || !watch, "Watch must be true or false")
 
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--getChildren: " + xid)
-    val req = GetChildrenRequest(xid, opCode.getChildren, path, false) // false because watch's not supported
+    val req = GetChildrenRequest(path, watch) // false because watch's not supported
 
-    service(req)
+    service(req).asInstanceOf[Future[GetChildrenResponse]]
   }
 
-  def getChildren2(path: String, watch: Boolean, xid: Int): Future[Response] = {
+  def getChildren2(path: String, watch: Boolean): Future[GetChildren2Response] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     require(watch || !watch, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--getChildren2: " + xid)
-    val req = GetChildren2Request(xid, opCode.getChildren2, path, false) // false because watch's not supported
+    val req = GetChildren2Request(path, watch) // false because watch's not supported
 
-    service(req)
+    service(req).asInstanceOf[Future[GetChildren2Response]]
   }
 
-  def getData(path: String, watch: Boolean, xid: Int): Future[Response] = {
+  def getData(path: String, watch: Boolean): Future[GetDataResponse] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     //require(watcher || !watcher, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--getData: " + xid)
-    val req = GetDataRequest(xid, opCode.getData, path, false) // false because watch's not supported
+    val req = GetDataRequest(path, watch) // false because watch's not supported
 
-    service(req)
+    service(req).asInstanceOf[Future[GetDataResponse]]
   }
 
   // GetMaxChildren is implemented but not available in the java lib
@@ -128,60 +118,53 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     service(new GetDataRequest(header, body))
   }*/
 
-  def setACL(path: String, acl: Array[ACL], version: Int, xid: Int): Future[Response] = {
+  def setACL(path: String, acl: Array[ACL], version: Int): Future[SetACLResponse] = {
     // TODO Check path
     require(path.length != 0, "Path must be longer than 0")
     require(acl.size != 0, "ACL list must not be empty")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--setACL: " + xid)
-    val req = SetACLRequest(xid, opCode.setACL, path, acl, version)
+    val req = SetACLRequest(path, acl, version)
 
-    service(req)
+    service(req).asInstanceOf[Future[SetACLResponse]]
   }
 
-  def setData(path: String, data: Array[Byte], version: Int, xid: Int): Future[Response] = {
+  def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
     // TODO check path
     require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--setData: " + xid)
-    val req = SetDataRequest(xid, opCode.setData, path, data, version)
+    val req = SetDataRequest(path, data, version)
 
-    service(req)
+    service(req).asInstanceOf[Future[SetDataResponse]]
   }
 
   def setWatches(relativeZxid: Int,
     dataWatches: Array[String],
     existsWatches: Array[String],
-    childWatches: Array[String],
-    xid: Int
+    childWatches: Array[String]
     ): Future[Unit] = {
-    println("<--setWatches: " + xid)
-
-    val req = SetWatchesRequest(xid, opCode.setWatches, relativeZxid, dataWatches, existsWatches, childWatches)
+    val req = SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches)
 
     service(req).unit
   }
 
-  def sync(path: String, xid: Int): Future[Response] = {
+  def sync(path: String): Future[SyncResponse] = {
     // TODO check path
     require(path.length != 0, "Path must be longer than 0")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--sync: " + xid)
-    val req = SyncRequest(xid, opCode.sync, path)
+    val req = SyncRequest(path)
 
-    service(req)
+    service(req).asInstanceOf[Future[SyncResponse]]
   }
 
-  def transaction(opList: Array[OpRequest], xid: Int): Future[Response] = {
-    println("<--Transaction: " + xid)
+  def transaction(opList: Array[OpRequest]): Future[TransactionResponse] = {
 
     val transaction = new Transaction(opList)
-    val req = new TransactionRequest(xid, opCode.multi, transaction)
+    val req = new TransactionRequest(transaction)
 
-    service(req)
+    service(req).asInstanceOf[Future[TransactionResponse]]
   }
 }
 

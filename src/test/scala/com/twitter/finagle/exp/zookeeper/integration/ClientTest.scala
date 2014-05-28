@@ -1,11 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
 import org.scalatest.FunSuite
-import java.net.ServerSocket
 import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
-import scala.Some
 
 class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
@@ -25,21 +23,31 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
   test("Client connection") {
     val connect = client.get.connect()
-    Await.result(connect)
-
     connect onSuccess {
       a =>
-        Thread.sleep(3000)
+        Thread.sleep(15000)
         Await.result(client.get.closeSession)
+        assert(true)
+    } onFailure { exc =>
+      println(exc.getCause)
     }
   }
 
-  /*test("Node creation and exists") {
+  test("Connection test") {
     connect
 
+    Thread.sleep(10000)
+
+    disconnect
+  }
+
+  test("Node creation and exists") {
+    val connect = client.get.connect()
+    Await.ready(connect)
+
     val res = for {
-      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      ret <- client.get.exists("/zookeeper/test", false)
+      _ <- client.get.create("/zookeeper/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      ret <- client.get.exists("/zookeeper/hello", false)
     } yield ret
 
     val rep = Await.result(res)
@@ -47,9 +55,9 @@ class ClientTest extends FunSuite with IntegrationConfig {
     assert(rep.stat.dataLength === "HELLO".getBytes.length)
 
     disconnect
-  }*/
+  }
 
- /* test("Create, SetData, GetData, Exists, Sync") {
+  test("Create, SetData, GetData, Exists, Sync") {
     connect
 
     val res = for {
@@ -68,6 +76,20 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     disconnect
   }
+  test("Create, exists with watches , SetData") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      exi <- client.get.exists("/zookeeper/test", true)
+      set <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield (exi, set)
+
+    val ret = Await.result(res)
+    //assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))
+
+    disconnect
+  }
 
   test("Create,SetACL, GetACL, SetData") {
     connect
@@ -76,6 +98,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
       setacl <- client.get.setACL("/zookeeper/test", Array(ACL(Perms.ALL, "world", "anyone")), -1)
       getacl <- client.get.getACL("/zookeeper/test")
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
     } yield (setacl, getacl)
 
     val ret = Await.result(res)
@@ -101,13 +124,14 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Ephemeral node should not exists") {
     connect
 
-      intercept[NoNodeException]{
-        val res = for {
-          exi <- client.get.exists("/zookeeper/ephemeralNode", false)
-        } yield exi
+    intercept[NoNodeException] {
+      val res = for {
+        exi <- client.get.exists("/zookeeper/ephemeralNode", false)
+      } yield exi
 
-        val ret = Await.result(res)
-      }
+
+      val ret = Await.result(res)
+    }
 
     disconnect
   }
@@ -212,7 +236,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Persistent node and children should not exist") {
     connect
 
-    intercept[NoNodeException]{
+    intercept[NoNodeException] {
       val res = for {
         exi <- client.get.exists("/zookeeper/persistentNode", false)
       } yield exi
@@ -232,15 +256,10 @@ class ClientTest extends FunSuite with IntegrationConfig {
     val res = client.get.transaction(opList)
     val fut = Await.result(res)
 
-    assert(fut match {
-      case None => false
-      case Some(res) => {
-        assert(res(0).asInstanceOf[CreateResult].path === "/zookeeper/hello")
-        assert(res(1).asInstanceOf[CreateResult].path === "/zookeeper/world")
-        true
-      }
-    })
+    assert(fut.responseList(0).asInstanceOf[CreateResult].path === "/zookeeper/hello")
+    assert(fut.responseList(1).asInstanceOf[CreateResult].path === "/zookeeper/world")
+
 
     disconnect
-  }*/
+  }
 }

@@ -16,9 +16,16 @@ sealed trait Request {
   val toChannelBuffer: ChannelBuffer
 }
 
-trait RequestHeader {
-  val xid: Int
-  val opCode: Int
+case class RequestHeader(xid: Int, opCode: Int){
+  val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
+
+    bw.write(-1)
+    bw.write(xid)
+    bw.write(opCode)
+
+    bw.underlying.copy
+  }
 }
 
 case class ConnectRequest(protocolVersion: Int = 0,
@@ -45,20 +52,14 @@ case class ConnectRequest(protocolVersion: Int = 0,
 }
 
 case class CreateRequest(
-  xid: Int,
-  opCode: Int,
   path: String,
   data: Array[Byte],
   aclList: Array[ACL],
   createMode: Int)
-  extends RequestHeader with Request {
+  extends Request {
 
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(data)
@@ -69,48 +70,21 @@ case class CreateRequest(
   }
 }
 
-case class CloseSessionRequest(xid: Int, opCode: Int)
-  extends RequestHeader with Request {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(12))
 
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
-
-    bw.underlying.copy()
-  }
-}
-
-case class GetACLRequest(
-  xid: Int,
-  opCode: Int,
-  path: String)
-  extends RequestHeader with Request {
+case class GetACLRequest(path: String)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(path.length))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.underlying.copy()
   }
 }
 
-case class GetDataRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  watcher: Boolean)
-  extends RequestHeader with Request {
+case class GetDataRequest(path: String, watcher: Boolean)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(2 * path.length))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(watcher)
@@ -119,17 +93,10 @@ case class GetDataRequest(
   }
 }
 
-case class GetMaxChildrenRequestBody(
-  xid: Int,
-  opCode: Int,
-  path: String)
-  extends RequestHeader with Request {
+case class GetMaxChildrenRequestBody(path: String)
+  extends Request {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
 
@@ -137,18 +104,10 @@ case class GetMaxChildrenRequestBody(
   }
 }
 
-case class DeleteRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  version: Int)
-  extends RequestHeader with Request {
+case class DeleteRequest(path: String, version: Int)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(version)
@@ -157,18 +116,10 @@ case class DeleteRequest(
   }
 }
 
-case class ExistsRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  watch: Boolean)
-  extends RequestHeader with Request {
+case class ExistsRequest(path: String, watch: Boolean)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(watch)
@@ -177,35 +128,36 @@ case class ExistsRequest(
   }
 }
 
-class PingRequest
-  extends RequestHeader with Request {
-  override val xid: Int = -2
-  override val opCode: Int = ZookeeperDefinitions.opCode.ping
+class PingRequest extends RequestHeader(2, opCode.ping) with Request {
   override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
 
     bw.write(-1)
-    bw.write(xid) //xid
-    bw.write(opCode) //OpCode
+    bw.write(xid)
+    bw.write(opCode)
+
+    bw.underlying.copy()
+  }
+}
+class CloseSessionRequest extends RequestHeader(1, opCode.ping) with Request {
+  override val toChannelBuffer: ChannelBuffer = {
+    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+
+    bw.write(-1)
+    bw.write(xid)
+    bw.write(opCode)
 
     bw.underlying.copy()
   }
 }
 
 case class SetDataRequest(
-  xid: Int,
-  opCode: Int,
   path: String,
   data: Array[Byte],
   version: Int)
-  extends RequestHeader with Request {
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(data)
@@ -215,18 +167,10 @@ case class SetDataRequest(
   }
 }
 
-case class GetChildrenRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  watch: Boolean)
-  extends RequestHeader with Request {
+case class GetChildrenRequest(path: String, watch: Boolean)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(watch)
@@ -235,18 +179,10 @@ case class GetChildrenRequest(
   }
 }
 
-case class GetChildren2Request(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  watch: Boolean)
-  extends RequestHeader with Request {
+case class GetChildren2Request(path: String, watch: Boolean)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(watch)
@@ -255,19 +191,10 @@ case class GetChildren2Request(
   }
 }
 
-case class SetACLRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  acl: Array[ACL],
-  version: Int)
-  extends RequestHeader with Request {
+case class SetACLRequest(path: String, acl: Array[ACL], version: Int)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(acl)
@@ -277,18 +204,10 @@ case class SetACLRequest(
   }
 }
 
-case class SetMaxChildrenRequest(
-  xid: Int,
-  opCode: Int,
-  path: String,
-  max: Int)
-  extends RequestHeader with Request {
+case class SetMaxChildrenRequest(path: String, max: Int)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
     bw.write(max)
@@ -297,17 +216,10 @@ case class SetMaxChildrenRequest(
   }
 }
 
-case class SyncRequest(
-  xid: Int,
-  opCode: Int,
-  path: String)
-  extends RequestHeader with Request {
+case class SyncRequest(path: String)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(path)
 
@@ -316,19 +228,13 @@ case class SyncRequest(
 }
 
 case class SetWatchesRequest(
-  xid: Int,
-  opCode: Int,
   relativeZxid: Int,
   dataWatches: Array[String],
   existsWatches: Array[String],
   childWatches: Array[String])
-  extends RequestHeader with Request {
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(relativeZxid)
     bw.write(dataWatches)
@@ -339,17 +245,10 @@ case class SetWatchesRequest(
   }
 }
 
-case class TransactionRequest(
-  xid: Int,
-  opCode: Int,
-  transaction: Transaction)
-  extends RequestHeader with Request {
+case class TransactionRequest(transaction: Transaction)
+  extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
 
     bw.write(transaction.toChannelBuffer)
 

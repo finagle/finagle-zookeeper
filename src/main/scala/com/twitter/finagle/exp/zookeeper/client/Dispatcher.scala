@@ -1,173 +1,68 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.util._
 import com.twitter.finagle.transport.Transport
-import com.twitter.finagle.Service
-import scala.collection.mutable
+import com.twitter.finagle.{Failure, Service}
 import org.jboss.netty.buffer.ChannelBuffer
-import com.twitter.finagle.exp.zookeeper.transport._
-import org.jboss.netty.buffer.ChannelBuffers._
+import com.twitter.util._
+import com.twitter.concurrent.AsyncSemaphore
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.util.Throw
+import java.net.InetSocketAddress
 
-trait Dispatcher extends Closable {
-  val trans: Transport[ChannelBuffer, ChannelBuffer]
-  private[this] val onClose = new Promise[Unit]
-  protected var response: Response
-  val processedReq = new mutable.SynchronizedQueue[Request]
-  val sessionManager = new SessionManager
-  val encoder = new Encoder(trans)
-  val decoder = new Decoder(trans)
 
-  protected def loop(request: Request) = {
-    loopWrite(request) onFailure (_ => close(Time.now))
-    loopRead() onFailure (_ => close(Time.now)) onSuccess (response = _)
+abstract class BasicDispatcher(trans: Transport[ChannelBuffer, ChannelBuffer])
+  extends Service[Request, Response] {
+
+  private[this] val semaphore = new AsyncSemaphore(1)
+  private[this] val localAddress: InetSocketAddress = trans.localAddress match {
+    case ia: InetSocketAddress => ia
+    case _ => new InetSocketAddress(0)
   }
+  override def isAvailable = trans.isOpen
+  override def close(deadline: Time) = trans.close()
 
-  private[this] def loopRead(): Future[Response] = {
-    doRead(processedReq.front)
-  }
+  protected def dispatch(req: Request, p: Promise[Response]): Future[Unit]
 
-  private[this] def loopWrite(request: Request): Future[Unit] = {
-    doWrite(request)
-  }
-
-  def doWrite(request: Request): Future[Unit] = {
-    processedReq.enqueue(request)
-    request match {
-      case re: ConnectRequest => println("Connect request")
-      case re: PingRequest => println("Ping Request")
-      case re: CloseSessionRequest => println("Close session request"); sessionManager.stopPing
-      case re: CreateRequest =>
-
-    }
-    encoder.write(request, sessionManager.getXid)
-  }
-
-  def doRead(request: Request): Future[Response] = {
-    request match {
-      case re: ConnectRequest => println("read connect response"); sessionManager.startPing(encoder.write(new PingRequest, 0))
-      case re: PingRequest =>  println("Read ping response")
-      case re: CloseSessionRequest => println("Read Close response")
-      case re: Request => println("Other type of response")
-    }
-
-    trans.read flatMap { buffer =>
-      decoder.read(processedReq.dequeue(), buffer)
-    }
-  }
-
-
-  override def close(deadline: Time): Future[Unit] = {
-    onClose.setDone()
-    trans.close(deadline)
-  }
-}
-
-class ClientDispatcher(val trans: Transport[ChannelBuffer, ChannelBuffer]) extends Service[Request, Response] with Dispatcher {
-  override protected var response: Response = new EmptyResponse
-  override def apply(request: Request): Future[Response] = {
-    loop(request)
-
-    Future(response)
-  }
-}
-
-class Encoder(trans: Transport[ChannelBuffer, ChannelBuffer]) {
-  def write[Req <: Request](request: Req, xid: Int): Future[Unit] = request match {
-    case re: ConnectRequest => trans.write(re.toChannelBuffer)
-    case re: PingRequest => trans.write(re.toChannelBuffer)
-    case re: CloseSessionRequest => trans.write(re.toChannelBuffer)
-    case re: Request => trans.write(wrappedBuffer(xidBuffer(xid), re.toChannelBuffer))
-  }
-
-  def xidBuffer(xid: Int): ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-    bw.write(-1)
-    bw.write(xid)
-    bw.underlying.copy()
-  }
-}
-
-class Decoder(trans: Transport[ChannelBuffer, ChannelBuffer]) {
-  def read[Rep >: Response, Req <: Request](request: Req, buffer: ChannelBuffer): Future[Rep] = {
-    val br = BufferReader(buffer)
-    request match {
-      case req: ConnectRequest =>
-        val connectRep = ConnectResponse.decode(br)
-        Future(connectRep)
-
-      case req: PingRequest =>
-        val header = ReplyHeader.decode(br)
-        Future.value(header)
-
-      case req: CloseSessionRequest =>
-        val header = ReplyHeader.decode(br)
-        Future.value(header)
-
-      case req: CreateRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = CreateResponse.decode(br)
-        Future.value(rep)
-
-      case req: ExistsRequest =>
-        val header = ReplyHeader.decode(br)
-        Try {ExistsResponse.decode(br)} match {
-          case Return(res) =>
-            Future.value(res)
-          case Throw(ex) => throw ex
+  private[this] def tryDispatch(req: Request, p: Promise[Response]): Future[Unit] =
+    p.isInterrupted match {
+      case Some(intr) =>
+        p.setException(Failure.InterruptedBy(intr))
+        Future.Done
+      case None =>
+        p.setInterruptHandler { case intr =>
+          if (p.updateIfEmpty(Throw(intr)))
+            trans.close()
         }
 
-      case req: DeleteRequest =>
-        val header = ReplyHeader.decode(br)
-        Future(new EmptyResponse)
-
-      case req: SetDataRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = SetDataResponse.decode(br)
-        Future.value(rep)
-
-      case req: GetDataRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = GetDataResponse.decode(br)
-        Future.value(rep)
-
-      case req: SyncRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = SyncResponse.decode(br)
-        Future.value(rep)
-
-      case req: SetACLRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = SetACLResponse.decode(br)
-        Future.value(rep)
-
-      case req: GetACLRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = GetACLResponse.decode(br)
-        Future.value(rep)
-
-      case req: GetChildrenRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = GetChildrenResponse.decode(br)
-        Future.value(rep)
-
-      case req: GetChildren2Request =>
-        val header = ReplyHeader.decode(br)
-        val rep = GetChildren2Response.decode(br)
-        Future.value(rep)
-
-      case req: SetWatchesRequest =>
-        val header = ReplyHeader.decode(br)
-        Future.value(header)
-
-      case req: TransactionRequest =>
-        val header = ReplyHeader.decode(br)
-        val rep = TransactionResponse.decode(br)
-        Future.value(rep)
-
-      case _ => println("THIS IS A NOTIFICATION"); throw new RuntimeException("FUCK NOTIFICATIONS")
-
+        dispatch(req, p)
     }
+
+  def apply(request: Request): Future[Response] = {
+    val p = new Promise[Response]
+
+    semaphore.acquire() onSuccess { permit =>
+      tryDispatch(request, p) onFailure { exc =>
+        p.updateIfEmpty(Throw(exc))
+      } ensure {
+        permit.release()
+      }
+    } onFailure { p.setException }
+    p
   }
 }
+
+class ZkDispatcher(trans: Transport[ChannelBuffer, ChannelBuffer]) extends BasicDispatcher(trans) {
+  //we give processor apply, so that it can send/read Req-Rep cf: Ping
+  val processor = new RequestMatcher(trans, apply)
+
+  protected def dispatch(req: Request, p: Promise[Response]): Future[Unit] = {
+    processor.write(req) flatMap { unit =>
+      processor.read()
+    } respond {
+      p.updateIfEmpty(_)
+    }
+  }.unit
+}
+
+
+

@@ -1,7 +1,8 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.exp.zookeeper.{ReplyHeader, ConnectResponse}
+import com.twitter.finagle.exp.zookeeper._
 import com.twitter.conversions.time._
+import com.twitter.util.{Await, Future}
 
 
 class SessionManager {
@@ -25,17 +26,21 @@ class SessionManager {
     }
   }
 
-  def startPing(f: => Unit) = pingTimer(realTimeout.milliseconds)(f)
-  def stopPing: Unit = pingTimer.stopTimer
+  private[this] def startPing(f: => Unit) = pingTimer(realTimeout.milliseconds)(f)
+  private[this] def stopPing: Unit = pingTimer.stopTimer
+  private[this] def realTimeout: Long = timeOut * 2 / 3
 
-  def realTimeout: Long = timeOut * 2 / 3
+  def startSession(response: ConnectResponse, writer: Request => Future[Response]): Unit = {
+    parseConnectResponse(response)
+    startPing(writer(new PingRequest))
+  }
+
+  def stopSession: Unit = {
+    stopPing
+  }
+
 
   def parseConnectResponse(rep: ConnectResponse) = {
-    println("-->Connection response | timeout: " +
-      rep.timeOut + " | sessionID: " +
-      rep.sessionId + " | canRO: " +
-      rep.canRO.getOrElse(false))
-
     sessionId = rep.sessionId
     timeOut = rep.timeOut
     passwd = rep.passwd
@@ -43,11 +48,10 @@ class SessionManager {
   }
 
   def parseReplyHeader(rep: ReplyHeader) = {
-    println("-->Header reply | XID: " + rep.xid + " | ZXID: " + rep.zxid + " | ERR: " + rep.err)
+    println("--->Header reply | XID: " + rep.xid + " | ZXID: " + rep.zxid + " | ERR: " + rep.err)
     lastZxid = rep.zxid
     if (rep.err != 0) {
       connectionState = states.NOT_CONNECTED
-
     }
   }
 
