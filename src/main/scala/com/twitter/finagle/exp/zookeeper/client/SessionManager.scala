@@ -28,7 +28,7 @@ class SessionManager {
 
   private[this] def startPing(f: => Unit) = pingTimer(realTimeout.milliseconds)(f)
   private[this] def stopPing: Unit = pingTimer.stopTimer
-  private[this] def realTimeout: Long = timeOut * 2 / 3
+  private[this] def realTimeout: Long = timeOut * 2 / 6
 
   def startSession(response: ConnectResponse, writer: Request => Future[Response]): Unit = {
     parseConnectResponse(response)
@@ -48,7 +48,7 @@ class SessionManager {
   }
 
   def parseReplyHeader(rep: ReplyHeader) = {
-    println("--->Header reply | XID: " + rep.xid + " | ZXID: " + rep.zxid + " | ERR: " + rep.err)
+    println("-->Header reply | XID: " + rep.xid + " | ZXID: " + rep.zxid + " | ERR: " + rep.err)
     lastZxid = rep.zxid
     if (rep.err != 0) {
       connectionState = states.NOT_CONNECTED

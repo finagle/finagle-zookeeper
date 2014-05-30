@@ -1,7 +1,7 @@
 package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.service.{TimeoutFilter, RetryPolicy, RetryingFilter}
-import com.twitter.finagle.exp.zookeeper.transport.ZooKeeperTransporter
+import com.twitter.finagle.exp.zookeeper.transport.{ZooKeeperTransporter, ZkTransport}
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.finagle.client.{Bridge, DefaultClient}
 import com.twitter.finagle.{ServiceFactory, Name}
@@ -10,8 +10,7 @@ import com.twitter.finagle
 import com.twitter.finagle.exp.zookeeper.client.{ZkDispatcher, Client}
 import org.jboss.netty.buffer.ChannelBuffer
 
-trait ZKRichClient {
-  self: finagle.Client[Request, Response] =>
+trait ZKRichClient {self: finagle.Client[Request, Response] =>
   def newRichClient(dest: Name, label: String): Client =
     client.Client(newClient(dest, label))
 
@@ -25,7 +24,7 @@ with ZKRichClient {
     name = "zookeeper",
     endpointer = {
       val bridge = Bridge[ChannelBuffer, ChannelBuffer, Request, Response](
-        ZooKeeperTransporter(_, _),
+        ZooKeeperTransporter(_, _) map { new ZkTransport(_) },
         new ZkDispatcher(_)
       )
       (sa, sr) => bridge(sa, sr)

@@ -1,11 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.watcher
 
-case class Watcher(path: String) {
-
-}
-
 object eventType {
-  val NODE = -1
+  val NONE = -1
   val NODE_CREATED = 1
   val NODE_DELETED = 2
   val NODE_DATA_CHANGED = 3

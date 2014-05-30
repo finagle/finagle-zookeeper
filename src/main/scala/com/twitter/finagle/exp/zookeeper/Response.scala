@@ -2,6 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.util.Try
 import com.twitter.finagle.exp.zookeeper.transport.BufferReader
+import com.twitter.finagle.exp.zookeeper.watcher.{zkState, eventType}
 
 /**
  * This File describes every responses
@@ -65,8 +66,6 @@ case class WatcherEvent(typ: Int, state: Int, path: String) extends Response
 object ConnectResponse extends Decoder[ConnectResponse] {
   override def decode(br: BufferReader): ConnectResponse = {
 
-    // read packet size
-    br.readInt
     val protocolVersion = br.readInt
     val timeOut = br.readInt
     val sessionId = br.readLong
@@ -165,7 +164,6 @@ object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
 object ReplyHeader extends Decoder[ReplyHeader] {
   override def decode(br: BufferReader): ReplyHeader = {
 
-    br.readInt // Read frame size
     val xid = br.readInt
     val zxid = br.readLong
     val err = br.readInt
@@ -212,6 +210,8 @@ object WatcherEvent extends Decoder[WatcherEvent] {
     val typ = br.readInt
     val state = br.readInt
     val path = br.readString
+
+    println("---[ Event type: %s | state: %s | path: %s  ]".format(eventType.getEvent(typ), zkState.getState(state), path))
 
     new WatcherEvent(typ, state, path)
   }

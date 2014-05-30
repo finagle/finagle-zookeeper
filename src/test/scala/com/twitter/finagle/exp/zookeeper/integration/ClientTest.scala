@@ -81,9 +81,17 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     val res = for {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      exi <- client.get.exists("/zookeeper/test", true)
+     // _ <- client.get.create("/zookeeper/test/hel", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+    //  _ <- client.get.getChildren("/zookeeper/test", true)
+    // _ <- client.get.create("/zookeeper/test/lo", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+    _ <- client.get.exists("/zookeeper/test", true) rescue { case exc => Future.Done }
+      //_ <- client.get.getData("/zookeeper/test", true) rescue { case exc => Future.Done }
+     // _ <- client.get.delete("/zookeeper/test/lo", -1)
+     // _ <- client.get.delete("/zookeeper/test", -1)
+      //_ <- client.get.create("/zookeeper/teste", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
       set <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
-    } yield (exi, set)
+    } yield (None)
+
 
     val ret = Await.result(res)
     //assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))

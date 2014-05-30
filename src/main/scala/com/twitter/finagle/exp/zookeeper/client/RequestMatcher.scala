@@ -5,7 +5,7 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.exp.zookeeper.{Response, Request}
 import com.twitter.util._
-import com.twitter.finagle.exp.zookeeper.transport.BufferReader
+import com.twitter.finagle.exp.zookeeper.transport.{ZkTransport, BufferReader}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 import scala.collection.mutable
 import com.twitter.util.Throw
@@ -152,16 +152,18 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
     encoder.write(packet)
   }
 
-  def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader): Try[Unit] = Try {
+  def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader) = {
+    println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
     if (reqRecord.xid.isDefined)
-      assert(reqRecord.xid.get == repHeader.xid)
+      if (reqRecord.xid.get != repHeader.xid) throw new RuntimeException("wrong association")
+
   }
 
-  def checkAssociationResult(reqRecord: RequestRecord, response: Response) = Try {
+  def checkAssociationResult(reqRecord: RequestRecord, response: Response) = {
     response match {
       case rep: EmptyResponse =>
         assert(reqRecord.opCode == opCode.ping || reqRecord.opCode == opCode.delete
-          || reqRecord.opCode == opCode.setWatches)
+          || reqRecord.opCode == opCode.setWatches || reqRecord.opCode == opCode.closeSession)
       case rep: ConnectResponse =>
         assert(reqRecord.opCode == opCode.createSession)
       case rep: CreateResponse =>
@@ -193,6 +195,7 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
     def read(reqRecord: Option[RequestRecord], buffer: ChannelBuffer): Future[(ReplyHeader, Response)] = {
       val br = BufferReader(buffer)
 
+      println(processedReq.toList)
       val rep = reqRecord match {
         case Some(record) => readFromRequest(record, br)
         case None => readFromHeader(br)
@@ -202,10 +205,11 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
         case Return(response) => response
         case Throw(exc1) =>
           //Two possibilities : zookeeper exception or decoding error
-          if (exc1.isInstanceOf[ZookeeperException])
+          if (exc1.isInstanceOf[ZookeeperException]) {
+            println(exc1.getMessage)
             Future.exception(exc1)
+          }
           else {
-            println("Wrong decode; this is maybe a notification")
             br.underlying.resetReaderIndex()
             readFromHeader(br) match {
               case Return(eventRep) => eventRep
@@ -216,7 +220,6 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
     }
 
     def readFromHeader(br: BufferReader): Try[Future[(ReplyHeader, Response)]] = Try {
-      br.readInt
       val xid = br.readInt
       val zxid = br.readLong
       val err = br.readInt
@@ -224,16 +227,12 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
       if (err == 0) {
         xid match {
           case -2 =>
-            println("Ping Response")
             Future(new ReplyHeader(xid, zxid, err), new EmptyResponse)
           case -1 =>
-            println("watches event")
             Future(new ReplyHeader(xid, zxid, err), WatcherEvent.decode(br))
           case 1 =>
-            println("Close response")
             Future(new ReplyHeader(xid, zxid, err), new EmptyResponse)
           case -4 =>
-            println("Auth response")
             Future(new ReplyHeader(xid, zxid, err), new EmptyResponse)
         }
       } else {

@@ -128,7 +128,7 @@ case class ExistsRequest(path: String, watch: Boolean)
   }
 }
 
-class PingRequest extends RequestHeader(2, opCode.ping) with Request {
+class PingRequest extends RequestHeader(-2, opCode.ping) with Request {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
 
@@ -139,7 +139,7 @@ class PingRequest extends RequestHeader(2, opCode.ping) with Request {
     bw.underlying.copy()
   }
 }
-class CloseSessionRequest extends RequestHeader(1, opCode.ping) with Request {
+class CloseSessionRequest extends RequestHeader(1, opCode.closeSession) with Request {
   override val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(4))
 
