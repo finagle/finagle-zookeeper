@@ -57,7 +57,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    val req = ExistsRequest(path, watch) // false because watch's not supported
+    val req = ExistsRequest(path, watch)
 
     service(req).asInstanceOf[Future[ExistsResponse]]
   }
@@ -79,7 +79,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
 
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    val req = GetChildrenRequest(path, watch) // false because watch's not supported
+    val req = GetChildrenRequest(path, watch)
 
     service(req).asInstanceOf[Future[GetChildrenResponse]]
   }
@@ -90,7 +90,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     require(watch || !watch, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    val req = GetChildren2Request(path, watch) // false because watch's not supported
+    val req = GetChildren2Request(path, watch)
 
     service(req).asInstanceOf[Future[GetChildren2Response]]
   }
@@ -101,7 +101,7 @@ class Client(val factory: ServiceFactory[Request, Response]) extends Closable {
     //require(watcher || !watcher, "Watch must be true or false")
     /*PathUtils.validatePath(path, createMode)
     val finalPath = PathUtils.prependChroot(path, null)*/
-    val req = GetDataRequest(path, watch) // false because watch's not supported
+    val req = GetDataRequest(path, watch)
 
     service(req).asInstanceOf[Future[GetDataResponse]]
   }

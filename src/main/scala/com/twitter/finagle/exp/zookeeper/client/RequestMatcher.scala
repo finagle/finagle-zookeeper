@@ -5,15 +5,16 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.exp.zookeeper.{Response, Request}
 import com.twitter.util._
-import com.twitter.finagle.exp.zookeeper.transport.{ZkTransport, BufferReader}
+import com.twitter.finagle.exp.zookeeper.transport.BufferReader
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 import scala.collection.mutable
 import com.twitter.util.Throw
-
+import com.twitter.finagle.exp.zookeeper.watcher.{WatchType, WatchManager}
 
 class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Request => Future[Response]) {
   val sessionManager = new SessionManager
   val processedReq = new mutable.SynchronizedQueue[RequestRecord]
+  val watchManager = new WatchManager()
 
   val encoder = new Writer(trans)
   val decoder = new Reader(trans)
@@ -25,6 +26,7 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
       else decoder.read(None, buffer)
     } onFailure { exc =>
       // check if we dequeue the correct request
+      println(exc.getMessage)
       processedReq.dequeue()
       Future.exception(exc)
     }
@@ -86,7 +88,7 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           Future(rep)
         case rep: WatcherEvent =>
           println("---> Watches event")
-          //WatchManager.process(rep)
+          watchManager.process(rep)
           read()
       }
     }
@@ -97,49 +99,72 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
       case req: ConnectRequest =>
         println("<--- CONNECT")
         Packet(None, Some(req))
+
       case req: PingRequest =>
         println("<--- PING")
         Packet(Some(req), None)
+
       case req: CloseSessionRequest =>
         sessionManager.stopSession
         println("<--- CLOSE SESSION")
         Packet(Some(req), None)
+
       case req: CreateRequest =>
         println("<--- CREATE")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.create)), Some(req))
+
       case req: ExistsRequest =>
         println("<--- EXISTS")
-        Packet(Some(RequestHeader(sessionManager.getXid, opCode.exists)), Some(req))
+        val xid = sessionManager.getXid
+        if (req.watch) watchManager.prepareRegister(req.path, WatchType.exists, xid)
+        Packet(Some(RequestHeader(xid, opCode.exists)), Some(req))
+
       case req: DeleteRequest =>
         println("<--- DELETE")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.delete)), Some(req))
+
       case req: SetDataRequest =>
         println("<--- SETDATA")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setData)), Some(req))
+
       case req: GetDataRequest =>
         println("<--- GETDATA")
-        Packet(Some(RequestHeader(sessionManager.getXid, opCode.getData)), Some(req))
+        val xid = sessionManager.getXid
+        if (req.watch) watchManager.prepareRegister(req.path, WatchType.data, xid)
+        Packet(Some(RequestHeader(xid, opCode.getData)), Some(req))
+
       case req: SyncRequest =>
         println("<--- SYNC")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.sync)), Some(req))
+
       case req: SetACLRequest =>
         println("<--- SETACL")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setACL)), Some(req))
+
       case req: GetACLRequest =>
         println("<--- GETACL")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.getACL)), Some(req))
+
       case req: GetChildrenRequest =>
         println("<--- GETCHILDREN")
-        Packet(Some(RequestHeader(sessionManager.getXid, opCode.getChildren)), Some(req))
+        val xid = sessionManager.getXid
+        if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
+        Packet(Some(RequestHeader(xid, opCode.getChildren)), Some(req))
+
       case req: GetChildren2Request =>
         println("<--- GETCHILDREN2")
-        Packet(Some(RequestHeader(sessionManager.getXid, opCode.getChildren2)), Some(req))
+        val xid = sessionManager.getXid
+        if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
+        Packet(Some(RequestHeader(xid, opCode.getChildren2)), Some(req))
+
       case req: SetWatchesRequest =>
         println("<--- SETWATCHES")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setWatches)), Some(req))
+
       case req: TransactionRequest =>
         println("<--- TRANSACTION")
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.multi)), Some(req))
+
       case _ => throw new RuntimeException("Request type not supported")
     }
 
@@ -206,7 +231,6 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
         case Throw(exc1) =>
           //Two possibilities : zookeeper exception or decoding error
           if (exc1.isInstanceOf[ZookeeperException]) {
-            println(exc1.getMessage)
             Future.exception(exc1)
           }
           else {
@@ -281,7 +305,8 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ReplyHeader(br) match {
             case Return(header) =>
               checkAssociation(reqRecord, header)
-              ExistsResponse(br) match {
+              val watch = watchManager.register(header.xid)
+              ExistsResponse.decodeWithWatch(br, watch) match {
                 case Return(body) => Future(header, body)
                 case Throw(exception) => throw exception
               }
@@ -311,7 +336,8 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ReplyHeader(br) match {
             case Return(header) =>
               checkAssociation(reqRecord, header)
-              GetDataResponse(br) match {
+              val watch = watchManager.register(header.xid)
+              GetDataResponse.decodeWithWatch(br, watch) match {
                 case Return(body) => Future(header, body)
                 case Throw(exception) => throw exception
               }
@@ -355,7 +381,8 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ReplyHeader(br) match {
             case Return(header) =>
               checkAssociation(reqRecord, header)
-              GetChildrenResponse(br) match {
+              val watch = watchManager.register(header.xid)
+              GetChildrenResponse.decodeWithWatch(br, watch) match {
                 case Return(body) => Future(header, body)
                 case Throw(exception) => throw exception
               }
@@ -366,7 +393,8 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ReplyHeader(br) match {
             case Return(header) =>
               checkAssociation(reqRecord, header)
-              GetChildren2Response(br) match {
+              val watch = watchManager.register(header.xid)
+              GetChildren2Response.decodeWithWatch(br, watch) match {
                 case Return(body) => Future(header, body)
                 case Throw(exception) => throw exception
               }

@@ -83,7 +83,7 @@ object BufferReader {
 
     def readFrame: ChannelBuffer = {
       val length = underlying.readInt()
-      underlying.readBytes(length).copy()
+      underlying.readBytes(length)
     }
 
     def readBuffer: Array[Byte] = {

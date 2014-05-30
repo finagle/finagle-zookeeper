@@ -81,13 +81,13 @@ case class GetACLRequest(path: String)
   }
 }
 
-case class GetDataRequest(path: String, watcher: Boolean)
+case class GetDataRequest(path: String, watch: Boolean)
   extends Request {
   val toChannelBuffer: ChannelBuffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(2 * path.length))
 
     bw.write(path)
-    bw.write(watcher)
+    bw.write(watch)
 
     bw.underlying.copy()
   }
@@ -227,6 +227,7 @@ case class SyncRequest(path: String)
   }
 }
 
+/* Only available during client reconnection to set watches */
 case class SetWatchesRequest(
   relativeZxid: Int,
   dataWatches: Array[String],

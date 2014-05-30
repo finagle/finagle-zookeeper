@@ -1,6 +1,6 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.util.Try
+import com.twitter.util.{Future, Try}
 import com.twitter.finagle.exp.zookeeper.transport.BufferReader
 import com.twitter.finagle.exp.zookeeper.watcher.{zkState, eventType}
 
@@ -34,18 +34,27 @@ case class ConnectResponse(
   ) extends Response
 
 case class CreateResponse(path: String) extends Response
-case class ExistsResponse(stat: Stat) extends Response
+case class ExistsResponse(stat: Stat, watch: Option[Future[WatcherEvent]]) extends Response
 case class ErrorResponse(err: Int) extends Response
 class EmptyResponse extends Response
 case class GetACLResponse(acl: Array[ACL], stat: Stat) extends Response
-case class GetChildrenResponse(children: Array[String]) extends Response
+case class GetChildrenResponse(
+  children: Array[String],
+  watch: Option[Future[WatcherEvent]])
+  extends Response
 
 case class GetChildren2Response(
   children: Array[String],
-  stat: Stat)
+  stat: Stat,
+  watch: Option[Future[WatcherEvent]])
   extends Response
 
-case class GetDataResponse(data: Array[Byte], stat: Stat) extends Response
+case class GetDataResponse(
+  data: Array[Byte],
+  stat: Stat,
+  watch: Option[Future[WatcherEvent]])
+  extends Response
+
 case class GetMaxChildrenResponse(max: Int) extends Response
 case class SetACLResponse(stat: Stat) extends Response
 case class SetDataResponse(stat: Stat) extends Response
@@ -101,10 +110,10 @@ object ErrorResponse extends Decoder[ErrorResponse] {
   }
 }
 
-object ExistsResponse extends Decoder[ExistsResponse] {
-  override def decode(br: BufferReader): ExistsResponse = {
+object ExistsResponse {
+  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatcherEvent]]): Try[ExistsResponse] = Try {
 
-    new ExistsResponse(Stat.decode(br))
+    new ExistsResponse(Stat.decode(br), watch)
   }
 }
 
@@ -117,8 +126,8 @@ object GetACLResponse extends Decoder[GetACLResponse] {
   }
 }
 
-object GetChildrenResponse extends Decoder[GetChildrenResponse] {
-  override def decode(br: BufferReader): GetChildrenResponse = {
+object GetChildrenResponse {
+  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatcherEvent]]): Try[GetChildrenResponse] = Try {
 
     val size = br.readInt
     val children = new Array[String](size)
@@ -127,30 +136,29 @@ object GetChildrenResponse extends Decoder[GetChildrenResponse] {
       children(i) = br.readString
     }
 
-    new GetChildrenResponse(children)
+    new GetChildrenResponse(children, watch)
   }
 }
 
-object GetChildren2Response extends Decoder[GetChildren2Response] {
-  override def decode(br: BufferReader): GetChildren2Response = {
-
+object GetChildren2Response {
+  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatcherEvent]]): Try[GetChildren2Response] = Try {
     val size = br.readInt
     val children = new Array[String](size)
 
     for (i <- 0 to size - 1) {
       children(i) = br.readString
     }
-    new GetChildren2Response(children, Stat.decode(br))
+    new GetChildren2Response(children, Stat.decode(br), watch)
   }
 }
 
-object GetDataResponse extends Decoder[GetDataResponse] {
-  override def decode(br: BufferReader): GetDataResponse = {
+object GetDataResponse {
+  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatcherEvent]]): Try[GetDataResponse] = Try {
 
     val data = br.readBuffer
     val stat = Stat.decode(br)
 
-    new GetDataResponse(data, stat)
+    new GetDataResponse(data, stat, watch)
   }
 }
 

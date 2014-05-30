@@ -4,6 +4,7 @@ import org.scalatest.FunSuite
 import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
+import com.twitter.finagle.exp.zookeeper.watcher.{zkState, eventType}
 
 class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
@@ -81,20 +82,127 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     val res = for {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-     // _ <- client.get.create("/zookeeper/test/hel", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-    //  _ <- client.get.getChildren("/zookeeper/test", true)
-    // _ <- client.get.create("/zookeeper/test/lo", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-    _ <- client.get.exists("/zookeeper/test", true) rescue { case exc => Future.Done }
+      // _ <- client.get.create("/zookeeper/test/hel", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      //  _ <- client.get.getChildren("/zookeeper/test", true)
+      // _ <- client.get.create("/zookeeper/test/lo", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      exist <- client.get.exists("/zookeeper/test", true)
       //_ <- client.get.getData("/zookeeper/test", true) rescue { case exc => Future.Done }
-     // _ <- client.get.delete("/zookeeper/test/lo", -1)
-     // _ <- client.get.delete("/zookeeper/test", -1)
+      // _ <- client.get.delete("/zookeeper/test/lo", -1)
+      // _ <- client.get.delete("/zookeeper/test", -1)
       //_ <- client.get.create("/zookeeper/teste", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      set <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
-    } yield (None)
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield exist
 
 
     val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DATA_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
     //assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))
+
+    disconnect
+  }
+
+  test("Create, getData with watches , SetData") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getdata <- client.get.getData("/zookeeper/test", true)
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield getdata
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DATA_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren with watches , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield getchild
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren2 with watches , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren2("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield getchild
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren(watch on parent) exists(watch on child) , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      _ <- client.get.create("/zookeeper/test/hella", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      exist <- client.get.exists("/zookeeper/test/hello", true)
+      getdata <- client.get.getData("/zookeeper/test/hella", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hella", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield (getchild,exist)
+
+
+    val ret = Await.result(res)
+
+    ret._2.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DELETED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test/hello")
+    }
+
+    ret._1.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
 
     disconnect
   }
