@@ -53,18 +53,30 @@ class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
        * 3/ If yes send Future.exception(exc)
        */
     }*/
-
-    trans.read() flatMap { buffer =>
-      val br = BufferReader(buffer)
-      while (br.underlying.readerIndex() != br.underlying.writerIndex())
-        bufferQueue.enqueue(br.readFrame)
-
+    if (!bufferQueue.isEmpty)
       Future(bufferQueue.dequeue())
-    } rescue { case exc =>
-      if (!bufferQueue.isEmpty)
+    else {
+
+      trans.read() flatMap { buffer =>
+        val br = BufferReader(buffer)
+
+        while (br.underlying.readerIndex() != br.underlying.writerIndex())
+          bufferQueue.enqueue(br.readFrame)
+
+        println("Frame queue size " + bufferQueue.size)
         Future(bufferQueue.dequeue())
-      else
-        throw throw exc
+
+      } rescue { case exc =>
+
+        println("Frame queue size " + bufferQueue.size)
+
+        if (!bufferQueue.isEmpty)
+          Future(bufferQueue.dequeue())
+        else {
+          println("NO MORE TO READ")
+          throw throw exc
+        }
+      }
     }
   }
 
