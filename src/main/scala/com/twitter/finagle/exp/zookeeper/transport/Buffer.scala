@@ -49,6 +49,7 @@ trait BufferReader extends Buffer {
   def readLong: Long
   def readFloat: Float
   def readDouble: Double
+  def readFrame: ChannelBuffer
   def readShort: Short
   def readString: String
   def readBuffer: Array[Byte]
@@ -79,6 +80,11 @@ object BufferReader {
 
   private[this] class Netty3BufferReader(val underlying: ChannelBuffer)
     extends BufferReader with Buffer {
+
+    def readFrame: ChannelBuffer = {
+      val length = underlying.readInt()
+      underlying.readBytes(length)
+    }
 
     def readBuffer: Array[Byte] = {
       val length = underlying.readInt
@@ -158,7 +164,7 @@ object BufferWriter {
         write(acl.id)
       case id: ID =>
         write(id.scheme)
-        write(id.id)
+        write(id.expression)
       case tab: Array[A] =>
         if (tab == null || tab.size == 0)
           write(0)

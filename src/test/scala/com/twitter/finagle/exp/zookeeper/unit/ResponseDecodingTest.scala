@@ -9,7 +9,7 @@ import org.jboss.netty.buffer.ChannelBuffers._
 import scala.Some
 
 class ResponseDecodingTest extends FunSuite {
-
+/*
   class Helper {
     val buffer = Buffer.getDynamicBuffer(16)
     val writer = BufferWriter(buffer)
@@ -777,5 +777,5 @@ class ResponseDecodingTest extends FunSuite {
         assert(res.body.get.path === "/zookeeper/test/real/world/case/here/for/real")
         true
     })
-  }
+  }*/
 }

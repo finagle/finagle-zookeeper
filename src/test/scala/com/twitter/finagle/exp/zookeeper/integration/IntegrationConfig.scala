@@ -1,8 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
 import java.net.{BindException, ServerSocket}
-import com.twitter.finagle.exp.zookeeper.client.ClientWrapper
+import com.twitter.finagle.exp.zookeeper.client.Client
 import com.twitter.util.Await
+import com.twitter.finagle.exp.zookeeper.ZooKeeper
 
 trait IntegrationConfig {
   val ipAddress: String
@@ -17,13 +18,13 @@ trait IntegrationConfig {
     case e: BindException => false
   }
 
-  lazy val client: Option[ClientWrapper] = {
+  lazy val client: Option[Client] = {
     if (!isPortAvailable)
-      Some(ClientWrapper.newClient(ipAddress + ":" + port, timeOut))
+      Some(ZooKeeper.newRichClient(ipAddress + ":" + port))
     else
       None
   }
 
-  def connect = Await.result(client.get.connect)
-  def disconnect = Await.result(client.get.disconnect)
+  def connect = Await.result(client.get.connect())
+  def disconnect = Await.result(client.get.closeSession)
 }

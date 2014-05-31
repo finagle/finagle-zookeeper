@@ -1,12 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
 import org.scalatest.FunSuite
-import java.net.{BindException, ServerSocket}
-import com.twitter.finagle.exp.zookeeper.client.ClientWrapper
 import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
-import scala.Some
+import com.twitter.finagle.exp.zookeeper.watch.{zkState, eventType}
 
 class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
@@ -25,26 +23,37 @@ class ClientTest extends FunSuite with IntegrationConfig {
   }
 
   test("Client connection") {
-    val connect = client.get.connect
-    Await.result(connect)
-
+    val connect = client.get.connect()
     connect onSuccess {
       a =>
-        Await.result(client.get.disconnect)
+        Thread.sleep(15000)
+        Await.result(client.get.closeSession)
         assert(true)
+    } onFailure { exc =>
+      println(exc.getCause)
     }
   }
 
-  test("Node creation and exists") {
+  test("Connection test") {
     connect
 
+    Thread.sleep(10000)
+
+    disconnect
+  }
+
+  test("Node creation and exists") {
+    val connect = client.get.connect()
+    Await.ready(connect)
+
     val res = for {
-      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      ret <- client.get.exists("/zookeeper/test", false)
+      _ <- client.get.create("/zookeeper/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      ret <- client.get.exists("/zookeeper/hello", false)
     } yield ret
 
     val rep = Await.result(res)
-    assert(rep.get.stat.dataLength === "HELLO".getBytes.length)
+
+    assert(rep.stat.dataLength === "HELLO".getBytes.length)
 
     disconnect
   }
@@ -61,10 +70,139 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield (exi, set, get, sync)
 
     val ret = Await.result(res)
-    assert(ret._1.get.stat.dataLength === "HELLO".getBytes.length)
-    assert(ret._2.get.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
-    assert(ret._3.get.data === "CHANGE IS GOOD1".getBytes)
-    assert(ret._4.get.path === "/zookeeper")
+    assert(ret._1.stat.dataLength === "HELLO".getBytes.length)
+    assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
+    assert(ret._3.data === "CHANGE IS GOOD1".getBytes)
+    assert(ret._4.path === "/zookeeper")
+
+    disconnect
+  }
+  test("Create, exists with watches , SetData") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      // _ <- client.get.create("/zookeeper/test/hel", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      //  _ <- client.get.getChildren("/zookeeper/test", true)
+      // _ <- client.get.create("/zookeeper/test/lo", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      exist <- client.get.exists("/zookeeper/test", true)
+      //_ <- client.get.getData("/zookeeper/test", true) rescue { case exc => Future.Done }
+      // _ <- client.get.delete("/zookeeper/test/lo", -1)
+      // _ <- client.get.delete("/zookeeper/test", -1)
+      //_ <- client.get.create("/zookeeper/teste", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield exist
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DATA_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+    //assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))
+
+    disconnect
+  }
+
+  test("Create, getData with watches , SetData") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getdata <- client.get.getData("/zookeeper/test", true)
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield getdata
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DATA_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren with watches , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield getchild
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren2 with watches , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren2("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield getchild
+
+
+    val ret = Await.result(res)
+
+    ret.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
+
+    disconnect
+  }
+
+  test("Create, getChildren(watch on parent) exists(watch on child) , delete child") {
+    connect
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.PERSISTENT)
+      _ <- client.get.create("/zookeeper/test/hello", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      _ <- client.get.create("/zookeeper/test/hella", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      exist <- client.get.exists("/zookeeper/test/hello", true)
+      getdata <- client.get.getData("/zookeeper/test/hella", true)
+      _ <- client.get.delete("/zookeeper/test/hello", -1)
+      getchild <- client.get.getChildren("/zookeeper/test", true)
+      _ <- client.get.delete("/zookeeper/test/hella", -1)
+      _ <- client.get.delete("/zookeeper/test", -1)
+    } yield (getchild,exist)
+
+
+    val ret = Await.result(res)
+
+    ret._2.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_DELETED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test/hello")
+    }
+
+    ret._1.watch.get onSuccess { rep =>
+      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.path === "/zookeeper/test")
+    }
 
     disconnect
   }
@@ -76,10 +214,11 @@ class ClientTest extends FunSuite with IntegrationConfig {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
       setacl <- client.get.setACL("/zookeeper/test", Array(ACL(Perms.ALL, "world", "anyone")), -1)
       getacl <- client.get.getACL("/zookeeper/test")
+      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
     } yield (setacl, getacl)
 
     val ret = Await.result(res)
-    assert(ret._2.get.acl.contains(ACL(Perms.ALL, "world", "anyone")))
+    assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))
 
     disconnect
   }
@@ -93,23 +232,22 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield (c1, c2)
 
     val ret = Await.result(res)
-    assert(ret._1.get.path === "/zookeeper/ephemeralNode")
-    assert(ret._2.get.path === "/zookeeper/persistentNode")
+    assert(ret._1.path === "/zookeeper/ephemeralNode")
+    assert(ret._2.path === "/zookeeper/persistentNode")
     disconnect
   }
 
   test("Ephemeral node should not exists") {
     connect
 
-    val res = for {
-      exi <- client.get.exists("/zookeeper/ephemeralNode", false)
-    } yield exi
+    intercept[NoNodeException] {
+      val res = for {
+        exi <- client.get.exists("/zookeeper/ephemeralNode", false)
+      } yield exi
 
-    val ret = Await.result(res)
-    assert(ret match {
-      case None => true
-      case Some(res) => false
-    })
+
+      val ret = Await.result(res)
+    }
 
     disconnect
   }
@@ -117,18 +255,12 @@ class ClientTest extends FunSuite with IntegrationConfig {
   test("Persistent node should still exists") {
     connect
 
-    val res = for {
+    val futu = for {
       exi <- client.get.exists("/zookeeper/persistentNode", false)
     } yield (exi)
 
-    val ret = Await.result(res)
-    assert(ret match {
-      case None => false
-      case Some(res) => {
-        assert(res.stat.dataLength === "HELLO".getBytes.length)
-        true
-      }
-    })
+    val ret = Await.result(futu)
+    assert(ret.stat.numChildren === 0)
 
     disconnect
   }
@@ -141,7 +273,7 @@ class ClientTest extends FunSuite with IntegrationConfig {
     } yield (set)
 
     val ret = Await.result(res)
-    assert(ret.get.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
+    assert(ret.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
 
     disconnect
   }
@@ -156,8 +288,8 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     val ret = Await.result(res)
 
-    assert(ret._1.get.path === "/zookeeper/persistentNode/firstChild")
-    assert(ret._2.get.path === "/zookeeper/persistentNode/secondChild")
+    assert(ret._1.path === "/zookeeper/persistentNode/firstChild")
+    assert(ret._2.path === "/zookeeper/persistentNode/secondChild")
 
     disconnect
   }
@@ -192,8 +324,8 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
     val ret = Await.result(res)
 
-    assert(ret._1.get.children.size === 10)
-    assert(ret._2.get.stat.numChildren === 10)
+    assert(ret._1.children.size === 10)
+    assert(ret._2.stat.numChildren === 10)
 
     disconnect
   }
@@ -207,30 +339,26 @@ class ClientTest extends FunSuite with IntegrationConfig {
 
 
     val f = ret.flatMap { response =>
-      response.get.children foreach (child => client.get.delete("/zookeeper/persistentNode/" + child, -1))
+      response.children foreach (child => client.get.delete("/zookeeper/persistentNode/" + child, -1))
       Future(response)
     }
 
-    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
-
-
     Await.ready(f)
-    Await.ready(deleteNode)
+    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
+    Await.result(deleteNode)
     disconnect
   }
 
   test("Persistent node and children should not exist") {
     connect
 
-    val res = for {
-      exi <- client.get.exists("/zookeeper/persistentNode", false)
-    } yield exi
+    intercept[NoNodeException] {
+      val res = for {
+        exi <- client.get.exists("/zookeeper/persistentNode", false)
+      } yield exi
 
-    val ret = Await.result(res)
-    assert(ret match {
-      case None => true
-      case Some(res) => false
-    })
+      val ret = Await.result(res)
+    }
 
     disconnect
   }
@@ -244,14 +372,9 @@ class ClientTest extends FunSuite with IntegrationConfig {
     val res = client.get.transaction(opList)
     val fut = Await.result(res)
 
-    assert(fut match {
-      case None => false
-      case Some(res) => {
-        assert(res(0).asInstanceOf[CreateResult].path === "/zookeeper/hello")
-        assert(res(1).asInstanceOf[CreateResult].path === "/zookeeper/world")
-        true
-      }
-    })
+    assert(fut.responseList(0).asInstanceOf[CreateResult].path === "/zookeeper/hello")
+    assert(fut.responseList(1).asInstanceOf[CreateResult].path === "/zookeeper/world")
+
 
     disconnect
   }
