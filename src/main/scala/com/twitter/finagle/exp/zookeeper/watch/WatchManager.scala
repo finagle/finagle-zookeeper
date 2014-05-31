@@ -1,6 +1,6 @@
-package com.twitter.finagle.exp.zookeeper.watcher
+package com.twitter.finagle.exp.zookeeper.watch
 
-import com.twitter.finagle.exp.zookeeper.WatcherEvent
+import com.twitter.finagle.exp.zookeeper.WatchEvent
 import scala.collection.mutable
 import com.twitter.util.Promise
 
@@ -8,9 +8,9 @@ import com.twitter.util.Promise
  * WatchManager may be used to manage watcher events, keep a Set of current watches.
  */
 class WatchManager {
-  private val dataWatches: mutable.HashMap[String, Promise[WatcherEvent]] = mutable.HashMap()
-  private val existsWatches: mutable.HashMap[String, Promise[WatcherEvent]] = mutable.HashMap()
-  private val childWatches: mutable.HashMap[String, Promise[WatcherEvent]] = mutable.HashMap()
+  private val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
+  private val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
+  private val childWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
 
   private val pendingWatches: mutable.HashMap[Int, (String, Int)] = mutable.HashMap()
 
@@ -27,7 +27,7 @@ class WatchManager {
     }
   }
 
-  def register(xid: Int): Option[Promise[WatcherEvent]] = {
+  def register(xid: Int): Option[Promise[WatchEvent]] = {
     println("Registering " + xid)
     if (pendingWatches.isDefinedAt(xid)) {
       val (path, watchType) = pendingWatches.get(xid) match {
@@ -42,7 +42,7 @@ class WatchManager {
           dataWatches.get(path) match {
             case Some(promise) => Some(promise)
             case None =>
-              val p = Promise[WatcherEvent]()
+              val p = Promise[WatchEvent]()
               dataWatches += path -> p
               Some(p)
           }
@@ -51,7 +51,7 @@ class WatchManager {
           existsWatches.get(path) match {
             case Some(promise) => Some(promise)
             case None =>
-              val p = Promise[WatcherEvent]()
+              val p = Promise[WatchEvent]()
               existsWatches += path -> p
               Some(p)
           }
@@ -59,7 +59,7 @@ class WatchManager {
           childWatches.get(path) match {
             case Some(promise) => Some(promise)
             case None =>
-              val p = Promise[WatcherEvent]()
+              val p = Promise[WatchEvent]()
               childWatches += path -> p
               Some(p)
           }
@@ -69,7 +69,7 @@ class WatchManager {
     }
   }
 
-  def process(event: WatcherEvent) = {
+  def process(event: WatchEvent) = {
     event.typ match {
       case eventType.NONE => // TODO
       case eventType.NODE_CREATED =>

@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.watcher
+package com.twitter.finagle.exp.zookeeper.watch
 
 object eventType {
   val NONE = -1

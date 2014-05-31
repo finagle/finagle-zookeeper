@@ -30,7 +30,7 @@ case class RequestHeader(xid: Int, opCode: Int){
 
 case class ConnectRequest(protocolVersion: Int = 0,
   lastZxidSeen: Long = 0L,
-  timeOut: Int = 2000,
+  connectionTimeout: Int = 2000,
   sessionId: Long = 0L,
   passwd: Array[Byte] = Array[Byte](16),
   canBeRO: Option[Boolean] = Some(true))
@@ -42,7 +42,7 @@ case class ConnectRequest(protocolVersion: Int = 0,
     bw.write(-1)
     bw.write(protocolVersion)
     bw.write(lastZxidSeen)
-    bw.write(timeOut)
+    bw.write(connectionTimeout)
     bw.write(sessionId)
     bw.write(passwd)
     bw.write(canBeRO.getOrElse(false))

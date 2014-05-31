@@ -9,10 +9,10 @@ import com.twitter.finagle.exp.zookeeper.transport.BufferReader
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
 import scala.collection.mutable
 import com.twitter.util.Throw
-import com.twitter.finagle.exp.zookeeper.watcher.{WatchType, WatchManager}
+import com.twitter.finagle.exp.zookeeper.watch.{WatchType, WatchManager}
 
 class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Request => Future[Response]) {
-  val sessionManager = new SessionManager
+  val sessionManager = new SessionManager(sender, true)
   val processedReq = new mutable.SynchronizedQueue[RequestRecord]
   val watchManager = new WatchManager()
 
@@ -32,10 +32,10 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
     }
 
     fullRep flatMap { pureRep =>
-      sessionManager.parseReplyHeader(pureRep._1)
+      sessionManager(pureRep._1)
       pureRep._2 match {
         case rep: ConnectResponse =>
-          sessionManager.startSession(rep, sender)
+          sessionManager.completeConnection(rep)
           println("---> CONNECT | timeout: " +
             rep.timeOut + " | sessionID: " +
             rep.sessionId + " | canRO: " +
@@ -86,9 +86,10 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           println("---> Empty Response")
           processedReq.dequeue()
           Future(rep)
-        case rep: WatcherEvent =>
+        case rep: WatchEvent =>
           println("---> Watches event")
           watchManager.process(rep)
+          sessionManager(rep)
           read()
       }
     }
@@ -98,71 +99,87 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
     val packet = req match {
       case req: ConnectRequest =>
         println("<--- CONNECT")
+        sessionManager.checkStateBeforeConnect
+        sessionManager.prepareConnection
         Packet(None, Some(req))
 
       case req: PingRequest =>
         println("<--- PING")
+        sessionManager.checkState
         Packet(Some(req), None)
 
       case req: CloseSessionRequest =>
-        sessionManager.stopSession
+        sessionManager.checkState
+        sessionManager.prepareCloseSession
         println("<--- CLOSE SESSION")
         Packet(Some(req), None)
 
       case req: CreateRequest =>
         println("<--- CREATE")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.create)), Some(req))
 
       case req: ExistsRequest =>
         println("<--- EXISTS")
+        sessionManager.checkState
         val xid = sessionManager.getXid
         if (req.watch) watchManager.prepareRegister(req.path, WatchType.exists, xid)
         Packet(Some(RequestHeader(xid, opCode.exists)), Some(req))
 
       case req: DeleteRequest =>
         println("<--- DELETE")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.delete)), Some(req))
 
       case req: SetDataRequest =>
         println("<--- SETDATA")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setData)), Some(req))
 
       case req: GetDataRequest =>
         println("<--- GETDATA")
+        sessionManager.checkState
         val xid = sessionManager.getXid
         if (req.watch) watchManager.prepareRegister(req.path, WatchType.data, xid)
         Packet(Some(RequestHeader(xid, opCode.getData)), Some(req))
 
       case req: SyncRequest =>
         println("<--- SYNC")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.sync)), Some(req))
 
       case req: SetACLRequest =>
         println("<--- SETACL")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setACL)), Some(req))
 
       case req: GetACLRequest =>
         println("<--- GETACL")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.getACL)), Some(req))
 
       case req: GetChildrenRequest =>
         println("<--- GETCHILDREN")
+        sessionManager.checkState
         val xid = sessionManager.getXid
         if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
         Packet(Some(RequestHeader(xid, opCode.getChildren)), Some(req))
 
       case req: GetChildren2Request =>
         println("<--- GETCHILDREN2")
+        sessionManager.checkState
         val xid = sessionManager.getXid
         if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
         Packet(Some(RequestHeader(xid, opCode.getChildren2)), Some(req))
 
       case req: SetWatchesRequest =>
         println("<--- SETWATCHES")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.setWatches)), Some(req))
 
       case req: TransactionRequest =>
         println("<--- TRANSACTION")
+        sessionManager.checkState
         Packet(Some(RequestHeader(sessionManager.getXid, opCode.multi)), Some(req))
 
       case _ => throw new RuntimeException("Request type not supported")
@@ -253,7 +270,7 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           case -2 =>
             Future(new ReplyHeader(xid, zxid, err), new EmptyResponse)
           case -1 =>
-            Future(new ReplyHeader(xid, zxid, err), WatcherEvent.decode(br))
+            Future(new ReplyHeader(xid, zxid, err), WatchEvent.decode(br))
           case 1 =>
             Future(new ReplyHeader(xid, zxid, err), new EmptyResponse)
           case -4 =>
@@ -270,8 +287,10 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ConnectResponse(br) match {
             case Return(header) =>
               //correct here
-              Future(new ReplyHeader(0, 0, 0), header)
-            case Throw(exception) => throw exception
+              Future(new ReplyHeader(0, 0, -666), header)
+            case Throw(exception) =>
+              sessionManager.connectionFailed
+              throw exception
           }
 
         case opCode.ping =>
@@ -286,6 +305,7 @@ class RequestMatcher(trans: Transport[ChannelBuffer, ChannelBuffer], sender: Req
           ReplyHeader(br) match {
             case Return(header) =>
               checkAssociation(reqRecord, header)
+              sessionManager.completeCloseSession
               Future(header, new EmptyResponse)
             case Throw(exception) => throw exception
           }

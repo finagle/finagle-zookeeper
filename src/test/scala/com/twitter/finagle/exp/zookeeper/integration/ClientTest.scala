@@ -4,7 +4,7 @@ import org.scalatest.FunSuite
 import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
-import com.twitter.finagle.exp.zookeeper.watcher.{zkState, eventType}
+import com.twitter.finagle.exp.zookeeper.watch.{zkState, eventType}
 
 class ClientTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
