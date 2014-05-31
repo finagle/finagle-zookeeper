@@ -164,7 +164,7 @@ object BufferWriter {
         write(acl.id)
       case id: ID =>
         write(id.scheme)
-        write(id.id)
+        write(id.expression)
       case tab: Array[A] =>
         if (tab == null || tab.size == 0)
           write(0)

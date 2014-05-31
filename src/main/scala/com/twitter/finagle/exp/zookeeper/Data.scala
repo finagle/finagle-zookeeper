@@ -11,7 +11,6 @@ sealed trait serializable {
 
 trait DecoderData[T <: Data] extends (BufferReader => Try[T]) {
   def apply(buffer: BufferReader): Try[T] = Try(decode(buffer))
-
   def decode(buffer: BufferReader): T
 }
 
@@ -55,16 +54,18 @@ object Data {
 }
 
 case class Stat(czxid: Long,
-                mzxid: Long,
-                ctime: Long,
-                mtime: Long,
-                version: Int,
-                cversion: Int,
-                aversion: Int,
-                ephemeralOwner: Long,
-                dataLength: Int,
-                numChildren: Int,
-                pzxid: Long) extends Data with serializable {
+  mzxid: Long,
+  ctime: Long,
+  mtime: Long,
+  version: Int,
+  cversion: Int,
+  aversion: Int,
+  ephemeralOwner: Long,
+  dataLength: Int,
+  numChildren: Int,
+  pzxid: Long)
+  extends Data with serializable {
+
   override def toBuffer: Buffer = {
     val bw = BufferWriter(Buffer.getDynamicBuffer(Data.statMinimumSize))
     bw.write(Data.statMinimumSize)
@@ -86,7 +87,7 @@ case class Stat(czxid: Long,
 
 case class ACL(perms: Int, id: ID) extends Data
 
-case class ID(scheme: String, id: String) extends Data
+case class ID(scheme: String, expression: String) extends Data
 
 object Perms {
   final val READ: Int = 1 << 0
@@ -115,8 +116,47 @@ object ACL extends DecoderData[ACL] {
     for (i <- 0 until size) {
       aclList(i) = decode(buffer)
     }
-
     aclList
+  }
+
+  def check(acl: ACL) {
+    acl.id.scheme match {
+      case "world" => if (acl.id.expression.toUpperCase != "ANYONE")
+        throw new ZKExc("ACL malformed exception (suggested: ((world:anyone), perms)")
+      case "auth" => if (acl.id.expression != "")
+        throw new ZKExc("ACL: Auth malformed exception (suggested: ((auth:), perms)")
+      case "digest" =>
+        if (acl.id.expression.split(':').length != 2) throw new ZKExc("ACL: digest malformed exception")
+      case "ip" =>
+        addr2Bytes(acl.id.expression)
+      case _ => throw new ZKExc("ACL scheme not supported")
+    }
+  }
+  private def addr2Bytes(addr: String): Option[Array[Byte]] = {
+    // TODO implement for ipv6
+    v4addr2Bytes(addr)
+  }
+
+  private def v4addr2Bytes(addr: String): Option[Array[Byte]] = {
+    val parts = addr.split('.')
+    if (parts.length != 4) {
+      throw new ZKExc("ACL: ip malformed exception (4 points required)")
+    }
+    val b = new Array[Byte](4)
+
+    for (i <- 0 until 4) {
+      try {
+        val v: Int = parts(i).toInt
+        if (v >= 0 && v <= 255) {
+          b(i) = v.toByte
+        }
+        else return None
+      }
+      catch {
+        case _ => throw new ZKExc("ACL: ip malformed exception")
+      }
+    }
+    Some(b)
   }
 }
 
