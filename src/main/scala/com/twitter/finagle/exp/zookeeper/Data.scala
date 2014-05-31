@@ -90,16 +90,17 @@ case class ACL(perms: Int, id: ID) extends Data
 case class ID(scheme: String, expression: String) extends Data
 
 object Perms {
-  final val READ: Int = 1 << 0
-  final val WRITE: Int = 1 << 1
-  final val CREATE: Int = 1 << 2
-  final val DELETE: Int = 1 << 3
-  final val ADMIN: Int = 1 << 4
-  final val ALL: Int = READ | WRITE | CREATE | DELETE | ADMIN
+  val READ: Int = 1 << 0
+  val WRITE: Int = 1 << 1
+  val CREATE: Int = 1 << 2
+  val DELETE: Int = 1 << 3
+  val ADMIN: Int = 1 << 4
+  val ALL: Int = READ | WRITE | CREATE | DELETE | ADMIN
+  val CREATE_DELETE = CREATE | DELETE
 }
 
 object ACL extends DecoderData[ACL] {
-  val defaultACL = Array.fill(1)(new ACL(31, new ID("world", "anyone")))
+  val defaultACL = Array.fill(1)(new ACL(Perms.ALL, new ID("world", "anyone")))
 
   def apply(perm: Int, scheme: String, id: String): ACL = {
     new ACL(perm, new ID(scheme, id))
