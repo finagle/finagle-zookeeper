@@ -1,17 +1,17 @@
+# THE DOCUMENTATION IS OUTDATED, see integration test for examples
+
 # finagle-zookeeper
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
 ## Terminology
 * **Request** - object sent to a service to be serialize. Sometimes it can be a RequestHeader or (RequestHeader+Body)
-* **BuffuredResponse** - object received by a service to be deserialize. Each request type has its own deserialization algorithm
 * **Response** - object containing the data received from a server. A response type is specific to a request type (ex: SetDataRequest -> GetDataRequest)
 
 ## Architecture
 ### Client
 - `Client` is based on Finagle 6 client model.
-- `ClientBuilder` is used to build new client
-- `PingTimer` to execute an action every X
+
 
 ### Transport
 - `Buffer` contains a ChannelBuffer, used to read and write
@@ -22,16 +22,14 @@ finagle-zookeeper provides basic tools to communicate with a Zookeeper server as
 - `Data` represents ACL, ID structures with associated serialization/deserialization definitions
 - `Request` contains every request with serialization definitions
 - `Response` contains every response with deserialization definitions
-- `ResponseWrapper` returns corresponding Try[Response] of request type
 - `ZooKeeper` contains DefaultClient definition (Bridge, dispatcher)
 - `ZookeeperDefinitions` contains zookeeper code definitions
 
 ## Commands
-**Watches are not supported yet, so every watch's arguments have been set to false in Client.scala**
 
 Every request returns a *twitter.util.Future* (please use associated methods : *onSuccess*, *onFailure*)
 
-Here is the list of commands supported by version 1.0 :
+Here is the list of commands supported by version 0.1 :
 
 ## Test
 There is currently only one test, its purpose is to connect to a server, send a few requests and then disconnect. Feel free to edit it to your flavour.
