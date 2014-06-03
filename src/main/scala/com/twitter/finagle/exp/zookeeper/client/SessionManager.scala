@@ -6,19 +6,26 @@ import com.twitter.util._
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.util.Throw
 import com.twitter.finagle.exp.zookeeper.ConnectRequest
+import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 
 // TODO check synchronization of variables and functions
-class SessionManager(reqWriter: Request => Future[Response], autoReconnection: Boolean = true) {
+// TODO stop the ping timer when the connection is down
+class SessionManager(
+  requestWriter: Request => Future[Response],
+  watchManagr: WatchManager,
+  autoReconnection: Boolean = true) {
+
   var sessionId: Long = 0
   var timeOut: Int = 0
   var passwd: Array[Byte] = Array[Byte](16)
   val pingTimer = new PingTimer
-  @volatile var writer: Request => Future[Response] = reqWriter
+  @volatile var writer: Request => Future[Response] = requestWriter
   @volatile var lastZxid: Long = 0L
   @volatile private[this] var state: states.ConnectionState = states.NOT_CONNECTED
   @volatile private[this] var xid: Int = 2
   private[this] var isFirstConnect: Boolean = true
   private[this] var autoReconnect: Boolean = autoReconnection
+  private[this] val watchManager = watchManagr
 
   object states extends Enumeration {
     type ConnectionState = Value
@@ -31,12 +38,12 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
 
   def apply(header: ReplyHeader) {
     checkHeader(header)
-    checkState
+    checkState()
   }
 
   def apply(event: WatchEvent) {
     checkWatchEvent(event)
-    checkState
+    checkState()
   }
 
   // TODO Créer une fonction spéciale pour la premiere connection, changer l'état de isFirstConnect après que la connection soit établie
@@ -48,9 +55,9 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
     }
   }
 
-  def prepareConnection { state = states.CONNECTING }
+  def prepareConnection() { state = states.CONNECTING }
 
-  def connectionFailed {
+  def connectionFailed() {
     state = states.CLOSED
   }
 
@@ -63,15 +70,15 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
     startPing(writer(new PingRequest))
   }
 
-  def prepareCloseSession {
-    pingTimer.stopTimer
+  def prepareCloseSession() {
+    pingTimer.currentTask.get.cancel()
   }
 
-  def completeCloseSession {
+  def completeCloseSession() {
     state = states.CLOSED
   }
 
-  def checkState {
+  def checkState() {
 
     if (!isFirstConnect) {
       if (state == states.CONNECTION_LOST) {
@@ -97,7 +104,7 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
 
   }
 
-  def checkStateBeforeConnect {
+  def checkStateBeforeConnect() {
     if (!isFirstConnect && state == states.CONNECTED || isFirstConnect && state == states.CONNECTED)
       throw new RuntimeException("You are already connected ! don't try to connect")
     else if (isFirstConnect && state == states.CONNECTING)
@@ -131,11 +138,12 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
 
   def reconnect: Future[ConnectResponse] = {
     val recoReq = new ConnectRequest(0, lastZxid, timeOut, sessionId, passwd)
-    prepareConnection
+    prepareConnection()
     Try { writer(recoReq) } match {
       case Return(rep) =>
         rep flatMap { connectResponse =>
           completeConnection(connectResponse.asInstanceOf[ConnectResponse])
+          // TODO do we need to set watches back if the session has not expired
           Future(connectResponse.asInstanceOf[ConnectResponse])
         }
       case Throw(exc) =>
@@ -146,10 +154,11 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
 
   def connect: Future[ConnectResponse] = {
     val recoReq = new ConnectRequest(connectionTimeout = timeOut)
-    prepareConnection
+    prepareConnection()
     Try { writer(recoReq) } match {
       case Return(rep) =>
         rep flatMap { connectResponse =>
+          // TODO set watches back if it's a reconnection
           completeConnection(connectResponse.asInstanceOf[ConnectResponse])
           Future(connectResponse.asInstanceOf[ConnectResponse])
         }
@@ -164,10 +173,12 @@ class SessionManager(reqWriter: Request => Future[Response], autoReconnection: B
 class PingTimer {
 
   val timer = DefaultTimer
-  def apply(period: Duration)(f: => Unit) { timer.twitter.schedule(period)(f) }
-  def stopTimer = { timer.twitter.stop() }
+  var currentTask: Option[TimerTask] = None
+  def apply(period: Duration)(f: => Unit) {
+    currentTask = Some(timer.twitter.schedule(period)(f)) }
+  //def stopTimer = { timer.twitter.stop() }
   def updateTimer(period: Duration)(f: => Unit) = {
-    stopTimer
+    currentTask.get.cancel()
     apply(period)(f)
   }
 
