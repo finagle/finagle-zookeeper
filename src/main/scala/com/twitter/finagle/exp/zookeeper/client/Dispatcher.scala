@@ -52,14 +52,12 @@ abstract class BasicDispatcher(trans: Transport[ChannelBuffer, ChannelBuffer])
 }
 
 class ZkDispatcher(trans: Transport[ChannelBuffer, ChannelBuffer]) extends BasicDispatcher(trans) {
-  //we give processor apply, so that it can send/read Req-Rep cf: Ping
-  val processor = new RequestMatcher(trans, apply)
+  //we give the processor apply, thus it can send/read Req-Rep cf: Ping
+  val requestMatcher = new RequestMatcher(trans, apply)
 
   protected def dispatch(req: Request, p: Promise[Response]): Future[Unit] = {
-    processor.write(req) flatMap { unit =>
-      processor.read()
-    } respond {
-      p.updateIfEmpty(_)
+    requestMatcher.write(req) respond { resp =>
+      p.updateIfEmpty(resp)
     }
   }.unit
 }
