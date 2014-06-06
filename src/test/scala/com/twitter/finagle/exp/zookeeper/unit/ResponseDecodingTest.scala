@@ -1,10 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
 import org.scalatest.FunSuite
-import com.twitter.finagle.exp.zookeeper.transport.{BufferWriter, Buffer}
 import com.twitter.util.{Throw, Return, Try}
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import org.jboss.netty.buffer.ChannelBuffers._
 import scala.Some
 

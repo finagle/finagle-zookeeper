@@ -4,24 +4,32 @@ import org.scalatest.FunSuite
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 
 class PathTest extends FunSuite {
-
-  test("validate path /") {
+  test("validate paths") {
     PathUtils.validatePath("/")
-  }
-
-  test("validate path /zookeeper/test/hello") {
+    PathUtils.validatePath("/zookeeper")
+    PathUtils.validatePath("/zk01")
+    PathUtils.validatePath("/zookeeper/edd-001")
     PathUtils.validatePath("/zookeeper/test/hello")
   }
 
-  test("not validate path zookeeper/test/hello") {
+  test("not validate paths") {
     intercept[IllegalArgumentException] {
       PathUtils.validatePath("zookeeper/test/hello")
     }
-  }
-
-  test("not validate path /zookeeper//hello") {
     intercept[IllegalArgumentException] {
       PathUtils.validatePath("/zookeeper//hello")
     }
+    intercept[IllegalArgumentException] {
+      PathUtils.validatePath("/zookeeper//hello")
+    }
+    intercept[IllegalArgumentException] {
+      PathUtils.validatePath("")
+    }
+    intercept[IllegalArgumentException] {
+      PathUtils.validatePath("zk")
+    }
   }
+
+
+
 }

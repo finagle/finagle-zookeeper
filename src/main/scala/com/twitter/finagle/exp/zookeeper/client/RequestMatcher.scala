@@ -1,19 +1,17 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import org.jboss.netty.buffer.ChannelBuffer
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.exp.zookeeper.{Response, Request}
 import com.twitter.util._
-import com.twitter.finagle.exp.zookeeper.transport.BufferReader
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import scala.collection.mutable
-import com.twitter.util.Throw
-import com.twitter.finagle.exp.zookeeper.watch.{WatchType, WatchManager}
+import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 import java.util.concurrent.atomic.AtomicBoolean
+import com.twitter.io.Buf
 
 class RequestMatcher(
-  trans: Transport[ChannelBuffer, ChannelBuffer],
+  trans: Transport[Buf, Buf],
   sender: Request => Future[Response]) {
   /**
    * Local variables
@@ -118,7 +116,6 @@ class RequestMatcher(
         sessionManager.checkState()
         val xid = sessionManager.getXid
         // Notifies the watch manager that we are about to create a new watch
-        if (req.watch) watchManager.prepareRegister(req.path, WatchType.exists, xid)
         Packet(Some(RequestHeader(xid, OpCode.EXISTS)), Some(req))
 
       case req: DeleteRequest =>
@@ -136,7 +133,6 @@ class RequestMatcher(
         sessionManager.checkState()
         val xid = sessionManager.getXid
         // Notifies the watch manager that we are about to create a new watch
-        if (req.watch) watchManager.prepareRegister(req.path, WatchType.data, xid)
         Packet(Some(RequestHeader(xid, OpCode.GET_DATA)), Some(req))
 
       case req: SyncRequest =>
@@ -159,7 +155,6 @@ class RequestMatcher(
         sessionManager.checkState()
         val xid = sessionManager.getXid
         // Notifies the watch manager that we are about to create a new watch
-        if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
         Packet(Some(RequestHeader(xid, OpCode.GET_CHILDREN)), Some(req))
 
       case req: GetChildren2Request =>
@@ -167,7 +162,6 @@ class RequestMatcher(
         sessionManager.checkState()
         val xid = sessionManager.getXid
         // Notifies the watch manager that we are about to create a new watch
-        if (req.watch) watchManager.prepareRegister(req.path, WatchType.child, xid)
         Packet(Some(RequestHeader(xid, OpCode.GET_CHILDREN2)), Some(req))
 
       case req: SetWatchesRequest =>
@@ -214,7 +208,7 @@ class RequestMatcher(
 
   }
 
-  class Reader(trans: Transport[ChannelBuffer, ChannelBuffer]) {
+  class Reader(trans: Transport[Buf, Buf]) {
 
     /**
      * This function will try to decode the buffer depending if a request
@@ -227,20 +221,16 @@ class RequestMatcher(
      */
     def read(
       req: Option[(RequestRecord, Promise[Response])],
-      buffer: ChannelBuffer): Future[Response] = {
-      val bufferReader = BufferReader(buffer)
-
+      buffer: Buf): Future[Response] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
        */
       val rep = req match {
         case Some(record) =>
-          println("Read from request")
-          readFromRequest(record, bufferReader)
+          readFromRequest(record, buffer)
         case None =>
-          println("Read from header")
-          readFromHeader(bufferReader)
+          readFromHeader(buffer)
       }
 
       rep match {
@@ -249,7 +239,6 @@ class RequestMatcher(
         case Throw(exc1) =>
           //Two possibilities : zookeeper exception or decoding error
           if (exc1.isInstanceOf[ZookeeperException]) {
-            println("THROW")
             Future.exception(exc1)
           }
           else {
@@ -257,8 +246,8 @@ class RequestMatcher(
              * This is a decoding error, we should try to decode the buffer
              * as a watchEvent
              */
-            bufferReader.underlying.resetReaderIndex()
-            readFromHeader(bufferReader) match {
+            //bufferReader.underlying.resetReaderIndex()
+            readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
               case Throw(exc2) =>
                 throw new RuntimeException("Impossible to decode this response", exc1)
@@ -270,37 +259,36 @@ class RequestMatcher(
     /**
      * We try to decode the buffer by reading the ReplyHeader
      * and matching the xid to find the message's type
-     * @param br the current buffer reader
+     * @param buf the current buffer
      * @return possibly the (header, response) or an exception
      */
-    def readFromHeader(br: BufferReader): Try[Future[Response]] = Try {
-      val header = ReplyHeader(br) match {
-        case Return(res) => res
-        case Throw(exc) => throw exc
+    def readFromHeader(buf: Buf): Try[Future[Response]] = Try {
+      val header = ReplyHeader(buf) match {
+        case Return((header@ReplyHeader(_, _, 0), rem)) => header
+        case Return((header@ReplyHeader(_, _, err), rem)) =>
+          sessionManager(header)
+          throw ZookeeperException.create("Error while readFromHeader :", err)
+        case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
       }
 
-      if (header.err == 0) {
-        header.xid match {
-          case -2 =>
-            Future(new EmptyResponse)
-          case -1 =>
-            println("---> Watches event")
+      header.xid match {
+        case -2 =>
+          Future(new EmptyResponse)
+        case -1 =>
+          println("---> Watches event")
 
-            WatchEvent(br) match {
-              case Return(event) => Future(event)
-              case Throw(exc) =>
-                sessionManager(header)
-                Future.exception(exc)
-            }
 
-          case 1 =>
-            Future(new EmptyResponse)
-          case -4 =>
-            Future(new EmptyResponse)
-        }
-      } else {
-        sessionManager(header)
-        Future.exception(ZookeeperException.create("Error while readFromHeader :", header.err))
+          WatchEvent(buf) match {
+            case Return((event@WatchEvent(_, _, _), rem2)) => Future(event)
+            case _ =>
+              sessionManager(header)
+              throw ZkDecodingException("Error while decoding watch event")
+          }
+
+        case 1 =>
+          Future(new EmptyResponse)
+        case -4 =>
+          Future(new EmptyResponse)
       }
     }
 
@@ -315,17 +303,17 @@ class RequestMatcher(
      * If any exception is thrown then the readFromHeader will be called
      * with the rewinded buffer reader
      * @param req expected request
-     * @param br current buffer reader
+     * @param buf current buffer reader
      * @return possibly the (header, response) or an exception
      */
     def readFromRequest(
       req: (RequestRecord, Promise[Response]),
-      br: BufferReader): Try[Future[Response]] = Try {
+      buf: Buf): Try[Future[Response]] = Try {
 
       req._1.opCode match {
         case OpCode.AUTH =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
@@ -340,8 +328,8 @@ class RequestMatcher(
           }
 
         case OpCode.CREATE_SESSION =>
-          ConnectResponse(br) match {
-            case Return(body) =>
+          ConnectResponse(buf) match {
+            case Return((body, rem)) =>
               println("---> CONNECT | timeout: " +
                 body.timeOut + " | sessionID: " +
                 body.sessionId + " | canRO: " +
@@ -358,8 +346,8 @@ class RequestMatcher(
           }
 
         case OpCode.PING =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
@@ -374,8 +362,8 @@ class RequestMatcher(
           }
 
         case OpCode.CLOSE_SESSION =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
@@ -392,14 +380,14 @@ class RequestMatcher(
           }
 
         case OpCode.CREATE =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                CreateResponse(br) match {
-                  case Return(body) =>
+                CreateResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> CREATE")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -412,32 +400,19 @@ class RequestMatcher(
           }
 
         case OpCode.EXISTS =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
+              sessionManager(header)
 
-              if (header.err == 0 || header.err == -101) {
+              if (header.err == 0) {
                 // Notifies the watch manager that the watch has successfully registered
-                sessionManager(header)
-                watchManager.register(header.xid) match {
-                  case Some(watch) =>
-                    ExistsResponse.decodeWithWatch(br, Some(watch), header) match {
-                      case Return(body) =>
-                        println("---> EXISTS")
-                        Future(body)
-                      case Throw(exception) => throw exception
-                    }
-                  case None =>
-                    if (header.err == 0) {
-                      ExistsResponse(br) match {
-                        case Return(body) =>
-                          println("---> EXISTS")
-                          Future(body)
-                        case Throw(exception) => throw exception
-                      }
-                    } else throw ZookeeperException.create("Error while exists", header.err)
+                ExistsResponse(rem) match {
+                  case Return((body, rem2)) =>
+                    println("---> EXISTS")
+                    Future(body)
+                  case Throw(exception) => throw exception
                 }
-
               } else {
                 throw ZookeeperException.create("Error while exists", header.err)
               }
@@ -446,8 +421,8 @@ class RequestMatcher(
           }
 
         case OpCode.DELETE =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
@@ -462,14 +437,14 @@ class RequestMatcher(
           }
 
         case OpCode.SET_DATA =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                SetDataResponse(br) match {
-                  case Return(body) =>
+                SetDataResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> SETDATA")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -482,23 +457,19 @@ class RequestMatcher(
           }
 
         case OpCode.GET_DATA =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
+              sessionManager(header)
 
               if (header.err == 0) {
                 // Notifies the watch manager that the watch has successfully registered
-                sessionManager(header)
-                val watch = watchManager.register(header.xid)
-                GetDataResponse.decodeWithWatch(br, watch) match {
-                  case Return(body) =>
+                GetDataResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> GETDATA")
                     Future(body)
                   case Throw(exception) => throw exception
                 }
-              } else if (header.err == -101) {
-                watchManager.cancelPrepare(header.xid)
-                throw ZookeeperException.create("Error while getData", header.err)
               } else {
                 throw ZookeeperException.create("Error while getData", header.err)
               }
@@ -507,14 +478,14 @@ class RequestMatcher(
           }
 
         case OpCode.SYNC =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                SyncResponse(br) match {
-                  case Return(body) =>
+                SyncResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> SYNC")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -527,14 +498,14 @@ class RequestMatcher(
           }
 
         case OpCode.SET_ACL =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                SetACLResponse(br) match {
-                  case Return(body) =>
+                SetACLResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> SETACL")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -547,14 +518,14 @@ class RequestMatcher(
           }
 
         case OpCode.GET_ACL =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                GetACLResponse(br) match {
-                  case Return(body) =>
+                GetACLResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> GET_ACL")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -567,23 +538,19 @@ class RequestMatcher(
           }
 
         case OpCode.GET_CHILDREN =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
                 // Notifies the watch manager that the watch has successfully registered
-                val watch = watchManager.register(header.xid)
-                GetChildrenResponse.decodeWithWatch(br, watch) match {
-                  case Return(body) =>
+                GetChildrenResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> GET_CHILDREN")
                     Future(body)
                   case Throw(exception) => throw exception
                 }
-              } else if (header.err == -101) {
-                watchManager.cancelPrepare(header.xid)
-                throw ZookeeperException.create("Error while getChildren", header.err)
               } else {
                 throw ZookeeperException.create("Error while getChildren", header.err)
               }
@@ -592,23 +559,19 @@ class RequestMatcher(
           }
 
         case OpCode.GET_CHILDREN2 =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
                 // Notifies the watch manager that the watch has successfully registered
-                val watch = watchManager.register(header.xid)
-                GetChildren2Response.decodeWithWatch(br, watch) match {
-                  case Return(body) =>
+                GetChildren2Response(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> GET_CHILDREN2")
                     Future(body)
                   case Throw(exception) => throw exception
                 }
-              } else if (header.err == -101) {
-                watchManager.cancelPrepare(header.xid)
-                throw ZookeeperException.create("Error while getChildren2", header.err)
               } else {
                 throw ZookeeperException.create("Error while getChildren2", header.err)
               }
@@ -617,8 +580,8 @@ class RequestMatcher(
           }
 
         case OpCode.SET_WATCHES =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
@@ -633,14 +596,14 @@ class RequestMatcher(
           }
 
         case OpCode.MULTI =>
-          ReplyHeader(br) match {
-            case Return(header) =>
+          ReplyHeader(buf) match {
+            case Return((header, rem)) =>
               checkAssociation(req._1, header)
               sessionManager(header)
 
               if (header.err == 0) {
-                TransactionResponse(br) match {
-                  case Return(body) =>
+                TransactionResponse(rem) match {
+                  case Return((body, rem2)) =>
                     println("---> TRANSACTION")
                     Future(body)
                   case Throw(exception) => throw exception
@@ -658,7 +621,7 @@ class RequestMatcher(
     }
   }
 
-  class Writer(trans: Transport[ChannelBuffer, ChannelBuffer]) {
-    def write[Req <: Request](packet: Packet): Future[Unit] = trans.write(packet.serialize)
+  class Writer(trans: Transport[Buf, Buf]) {
+    def write[Req <: Request](packet: Packet): Future[Unit] = trans.write(packet.buf)
   }
 }

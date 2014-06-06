@@ -1,18 +1,16 @@
 package com.twitter.finagle.exp.zookeeper.utils
 
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.createMode
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 
 object PathUtils {
 
-  /**
-   * TO CHECK AND TEST
-   */
-
   def validatePath(path: String, createMod: Int): Unit = {
-    if (createMod == createMode.EPHEMERAL_SEQUENTIAL || createMod == createMode.PERSISTENT_SEQUENTIAL)
-      validatePath(path + 1)
-    else
-      validatePath(path)
+    if (createMod == 0 || createMod == 1 || createMod == 2 || createMod == 0) {
+      if (createMod == CreateMode.EPHEMERAL_SEQUENTIAL || createMod == CreateMode.PERSISTENT_SEQUENTIAL)
+        validatePath(path + 1)
+      else
+        validatePath(path)
+    } else throw new IllegalArgumentException("Create mode is not correct")
   }
 
   def validatePath(path: String): Unit = {
@@ -59,7 +57,7 @@ object PathUtils {
         }
       }
       else if (char > '\u0000' && char < '\u001f' || char > '\u007f' && char < '\u009F' || char > '\ud800' && char < '\uf8ff' || char > '\ufff0' && char < '\uffff') {
-        reason = "invalid charater @" + index
+        reason = "invalid character @" + index
         throw new IllegalArgumentException("Invalid path string \"" + path + "\" caused by " + reason)
       }
       lastc = char
@@ -68,14 +66,15 @@ object PathUtils {
   }
 
   def prependChroot(clientPath: String, chRootPath: String): String = {
+    // TODO check and test
     if (chRootPath != null) {
       // handle clientPath = "/"
       if (clientPath.length() == 1) {
-        chRootPath;
+        chRootPath
       }
-      chRootPath + clientPath;
+      chRootPath + clientPath
     } else {
-      clientPath;
+      clientPath
     }
   }
 

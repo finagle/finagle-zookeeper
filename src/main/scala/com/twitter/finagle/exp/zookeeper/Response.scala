@@ -1,8 +1,9 @@
 package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.util.{Future, Try}
-import com.twitter.finagle.exp.zookeeper.transport.BufferReader
-import com.twitter.finagle.exp.zookeeper.watch.{zkState, eventType}
+import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
+import com.twitter.io.Buf
 
 /**
  * This File describes every responses
@@ -19,10 +20,15 @@ import com.twitter.finagle.exp.zookeeper.watch.{zkState, eventType}
  *
  **/
 
-sealed abstract class Response
-sealed trait Decoder[T <: Response] extends (BufferReader => Try[T]) {
-  def apply(br: BufferReader): Try[T] = Try(decode(br))
-  def decode(br: BufferReader): T
+sealed trait Response
+sealed trait Decoder[T <: Response] {
+  def unapply(buffer: Buf): Option[(T, Buf)]
+  def apply(buffer: Buf): Try[(T, Buf)] = Try {
+    unapply(buffer) match {
+      case Some((rep, rem)) => (rep, rem)
+      case None => throw ZkDecodingException("Error while decoding")
+    }
+  }
 }
 
 case class ConnectResponse(
@@ -34,17 +40,21 @@ case class ConnectResponse(
   ) extends Response
 
 case class CreateResponse(path: String) extends Response
-case class ExistsResponse(stat: Stat, watch: Option[Future[WatchEvent]]) extends Response
+
+sealed trait ExistsResponse extends Response
+case class NodeWithWatch(stat: Stat, watch: Option[Future[WatchEvent]]) extends ExistsResponse
+case class NoNodeWatch(watch: Future[WatchEvent]) extends ExistsResponse
+
 case class ErrorResponse(err: Int) extends Response
-class EmptyResponse extends Response
-case class GetACLResponse(acl: Array[ACL], stat: Stat) extends Response
+case class EmptyResponse() extends Response
+case class GetACLResponse(acl: Seq[ACL], stat: Stat) extends Response
 case class GetChildrenResponse(
-  children: Array[String],
+  children: Seq[String],
   watch: Option[Future[WatchEvent]])
   extends Response
 
 case class GetChildren2Response(
-  children: Array[String],
+  children: Seq[String],
   stat: Stat,
   watch: Option[Future[WatchEvent]])
   extends Response
@@ -67,160 +77,120 @@ case class ReplyHeader(
   extends Response
 
 case class TransactionResponse(
-  responseList: Array[OpResult])
+  responseList: Seq[OpResult])
   extends Response
 
 case class WatchEvent(typ: Int, state: Int, path: String) extends Response
 
 object ConnectResponse extends Decoder[ConnectResponse] {
-  override def decode(br: BufferReader): ConnectResponse = {
-
-    val protocolVersion = br.readInt
-    val timeOut = br.readInt
-    val sessionId = br.readLong
-    val passwd: Array[Byte] = br.readBuffer
-    val canRO: Option[Boolean] = {
-      try {
-        Some(br.readBool)
-      } catch {
-        case ex: Exception => throw ex
-      }
-    }
-
-    new ConnectResponse(protocolVersion,
-      timeOut,
-      sessionId,
-      passwd,
-      canRO)
+  def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = {
+    val BufInt(protocolVersion,
+    BufInt(timeOut,
+    BufLong(sessionId,
+    BufArray(passwd,
+    rem
+    )))) = buf
+    Some(ConnectResponse(protocolVersion, timeOut, sessionId, passwd, Some(false)), rem)
   }
 }
 
 object CreateResponse extends Decoder[CreateResponse] {
-  override def decode(br: BufferReader): CreateResponse = {
-
-    new CreateResponse(br.readString)
+  def unapply(buf: Buf): Option[(CreateResponse, Buf)] = {
+    val BufString(path, rem) = buf
+    Some(CreateResponse(path), rem)
   }
 }
+
 
 object ErrorResponse extends Decoder[ErrorResponse] {
-  override def decode(br: BufferReader): ErrorResponse = {
-    // TODO Use this
-
-    new ErrorResponse(br.readInt)
+  def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
+    val BufInt(err, rem) = buf
+    Some(ErrorResponse(err), rem)
   }
 }
 
-object ExistsResponse {
-  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatchEvent]]): Try[ExistsResponse] = Try {
-
-    new ExistsResponse(Stat.decode(br), watch)
+object ExistsResponse extends Decoder[ExistsResponse] {
+  def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = {
+    val Stat(stat, rem) = buf
+    Some(new NodeWithWatch(stat, None), rem)
   }
 }
 
 object GetACLResponse extends Decoder[GetACLResponse] {
-  override def decode(br: BufferReader): GetACLResponse = {
-
-    val aclList = ACL.decodeArray(br)
-    val stat = Stat.decode(br)
-    new GetACLResponse(aclList, stat)
+  def unapply(buf: Buf): Option[(GetACLResponse, Buf)] = {
+    val BufSeqACL(acl, Stat(stat, rem)) = buf
+    Some(new GetACLResponse(acl, stat), buf)
   }
 }
 
-object GetChildrenResponse {
-  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatchEvent]]): Try[GetChildrenResponse] = Try {
-
-    val size = br.readInt
-    val children = new Array[String](size)
-
-    for (i <- 0 to size - 1) {
-      children(i) = br.readString
-    }
-
-    new GetChildrenResponse(children, watch)
+object GetChildrenResponse extends Decoder[GetChildrenResponse] {
+  def unapply(buf: Buf): Option[(GetChildrenResponse, Buf)] = {
+    val BufSeqString(children, rem) = buf
+    Some(new GetChildrenResponse(children, None), buf)
   }
 }
 
-object GetChildren2Response {
-  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatchEvent]]): Try[GetChildren2Response] = Try {
-    val size = br.readInt
-    val children = new Array[String](size)
-
-    for (i <- 0 to size - 1) {
-      children(i) = br.readString
-    }
-    new GetChildren2Response(children, Stat.decode(br), watch)
+object GetChildren2Response extends Decoder[GetChildren2Response] {
+  def unapply(buf: Buf): Option[(GetChildren2Response, Buf)] = {
+    val BufSeqString(children, Stat(stat, rem)) = buf
+    Some(GetChildren2Response(children, stat, None), buf)
   }
 }
 
-object GetDataResponse {
-  def decodeWithWatch(br: BufferReader, watch: Option[Future[WatchEvent]]): Try[GetDataResponse] = Try {
-
-    val data = br.readBuffer
-    val stat = Stat.decode(br)
-
-    new GetDataResponse(data, stat, watch)
+object GetDataResponse extends Decoder[GetDataResponse] {
+  def unapply(buf: Buf): Option[(GetDataResponse, Buf)] = {
+    val BufArray(data, Stat(stat, rem)) = buf
+    Some(GetDataResponse(data, stat, None), rem)
   }
 }
 
 object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
-  override def decode(br: BufferReader): GetMaxChildrenResponse = {
-
-    new GetMaxChildrenResponse(br.readInt)
+  def unapply(buf: Buf): Option[(GetMaxChildrenResponse, Buf)] = {
+    val BufInt(max, rem) = buf
+    Some(new GetMaxChildrenResponse(max), rem)
   }
 }
 
 object ReplyHeader extends Decoder[ReplyHeader] {
-  override def decode(br: BufferReader): ReplyHeader = {
-
-    val xid = br.readInt
-    val zxid = br.readLong
-    val err = br.readInt
-
-    if (err == 0)
-      new ReplyHeader(xid, zxid, err)
-    else {
-      throw ZookeeperException.create("Error :", err)
-    }
+  def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
+    val BufInt(xid, BufLong(zxid, BufInt(err, rem))) = buf
+    Some(new ReplyHeader(xid, zxid, err), rem)
   }
 }
 
 object SetACLResponse extends Decoder[SetACLResponse] {
-  override def decode(br: BufferReader): SetACLResponse = {
-
-    new SetACLResponse(Stat.decode(br))
+  def unapply(buf: Buf): Option[(SetACLResponse, Buf)] = {
+    val Stat(stat, rem) = buf
+    Some(new SetACLResponse(stat), rem)
   }
 }
 
 object SetDataResponse extends Decoder[SetDataResponse] {
-  override def decode(br: BufferReader): SetDataResponse = {
-
-    new SetDataResponse(Stat.decode(br))
+  def unapply(buf: Buf): Option[(SetDataResponse, Buf)] = {
+    val Stat(stat, rem) = buf
+    Some(new SetDataResponse(stat), rem)
   }
 }
 
 object SyncResponse extends Decoder[SyncResponse] {
-  override def decode(br: BufferReader): SyncResponse = {
-
-    new SyncResponse(br.readString)
+  def unapply(buf: Buf): Option[(SyncResponse, Buf)] = {
+    val BufString(path, rem) = buf
+    Some(new SyncResponse(path), rem)
   }
 }
 
 object TransactionResponse extends Decoder[TransactionResponse] {
-  override def decode(br: BufferReader): TransactionResponse = {
+  def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
 
-    new TransactionResponse(Transaction.decode(br))
+    // Fixme need to give a partial response
+    val Transaction(trans, rem) = buf
+    Some(trans, rem)
   }
 }
 
 object WatchEvent extends Decoder[WatchEvent] {
-  override def decode(br: BufferReader): WatchEvent = {
-
-    val typ = br.readInt
-    val state = br.readInt
-    val path = br.readString
-
-    println("---[ Event type: %s | state: %s | path: %s  ]".format(eventType.getEvent(typ), zkState.getState(state), path))
-
-    new WatchEvent(typ, state, path)
+  def unapply(buf: Buf): Option[(WatchEvent, Buf)] = {
+    val BufInt(typ, BufInt(state, BufString(path, rem))) = buf
+    Some(new WatchEvent(typ, state, path), rem)
   }
 }

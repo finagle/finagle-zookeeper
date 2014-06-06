@@ -1,49 +1,32 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.service.{TimeoutFilter, RetryPolicy, RetryingFilter}
-import com.twitter.finagle.exp.zookeeper.transport.{ZooKeeperTransporter, ZkTransport}
-import com.twitter.finagle.util.DefaultTimer
+import com.twitter.finagle.exp.zookeeper.transport.{NettyTrans, ZkTransport}
 import com.twitter.finagle.client.{Bridge, DefaultClient}
-import com.twitter.finagle.{ServiceFactory, Name}
-import com.twitter.conversions.time._
-import com.twitter.finagle
-import com.twitter.finagle.exp.zookeeper.client.{ZkDispatcher, Client}
-import org.jboss.netty.buffer.ChannelBuffer
+import com.twitter.finagle.{Client, ServiceFactory, Name}
+import com.twitter.finagle.exp.zookeeper.client.{ZkDispatcher, ZkClient}
+import com.twitter.io.Buf
 
-trait ZKRichClient {self: finagle.Client[Request, Response] =>
-  def newRichClient(dest: Name, label: String): Client =
-    client.Client(newClient(dest, label))
+/**
+ * -- ZkDispatcher
+ * The zookeeper protocol allows the server to send notifications
+ * with model is not basically supported by Finagle, that's the reason
+ * why we are using a dedicated dispatcher based on SerialClientDispatcher and
+ * GenSerialClientDispatcher.
+ *
+ * -- ZkTransport
+ * We need to frame Rep here, that's why we use ZkTransport
+ * which is responsible of queueing every incoming responses
+ * and reading new ones from the transport if queue is empty.
+ */
+object ZooKeeperClient extends DefaultClient[Request, Response](
+  name = "zookeeper",
+  endpointer = Bridge[Buf, Buf, Request, Response](
+    NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
 
-  def newRichClient(dest: String): Client =
-    client.Client(newClient(dest))
+object ZooKeeper extends Client[Request, Response] {
+  def newClient(name: Name, label: String): ServiceFactory[Request, Response] =
+    ZooKeeperClient.newClient(name, label)
+
+  def newRichClient(dest: String): ZkClient =
+    new ZkClient(newClient(dest))
 }
-
-class ZKClient extends com.twitter.finagle.Client[Request, Response]
-with ZKRichClient {
-  val defaultClient = new DefaultClient[Request, Response](
-    name = "zookeeper",
-    endpointer = {
-      val bridge = Bridge[ChannelBuffer, ChannelBuffer, Request, Response](
-        ZooKeeperTransporter(_, _) map { new ZkTransport(_) },
-        new ZkDispatcher(_)
-      )
-      (sa, sr) => bridge(sa, sr)
-    }
-  )
-
-  override def newClient(dest: Name, label: String): ServiceFactory[Request, Response] =
-    defaultClient.newClient(dest, label)
-}
-
-object Filter {
-  val retry = new RetryingFilter[Request, Response](
-    retryPolicy = RetryPolicy.tries(3),
-    timer = DefaultTimer.twitter)
-
-  val timeout = new TimeoutFilter[Request, Response](
-    timeout = 3.seconds,
-    timer = DefaultTimer.twitter)
-}
-
-
-object ZooKeeper extends ZKClient()

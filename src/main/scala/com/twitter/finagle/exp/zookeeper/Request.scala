@@ -1,9 +1,11 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.exp.zookeeper.transport.{BufferWriter, Buffer}
-import org.jboss.netty.buffer.ChannelBuffers._
-import org.jboss.netty.buffer.ChannelBuffer
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
+import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
+import com.twitter.finagle.exp.zookeeper.data.ACL
+import com.twitter.io.Buf
+import com.twitter.finagle.exp.zookeeper.data.Auth
+import scala.Some
 
 /**
  * Same as the Response type, a Request can be composed by a header or
@@ -13,42 +15,49 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
  */
 
 sealed trait Request {
-  val toChannelBuffer: ChannelBuffer
+  def buf: Buf
 }
 
-case class RequestHeader(xid: Int, opCode: Int){
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
-
-    bw.underlying.copy
-  }
+case class RequestHeader(xid: Int, opCode: Int) {
+  def buf: Buf = Buf.Empty
+    .concat(BufInt(xid))
+    .concat(BufInt(opCode))
 }
 
-case class ConnectRequest(protocolVersion: Int = 0,
+case class AuthRequest(
+  typ: Int,
+  auth: Auth
+  ) extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufInt(typ))
+    .concat(BufString(auth.scheme))
+    .concat(BufArray(auth.data))
+}
+
+case class CheckWatchesRequest(
+  path: String,
+  typ: Int
+  ) extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(typ))
+}
+
+case class ConnectRequest(
+  protocolVersion: Int = 0,
   lastZxidSeen: Long = 0L,
   connectionTimeout: Int = 2000,
   sessionId: Long = 0L,
   passwd: Array[Byte] = Array[Byte](16),
   canBeRO: Option[Boolean] = Some(true))
   extends Request {
-
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(-1)
-    bw.write(protocolVersion)
-    bw.write(lastZxidSeen)
-    bw.write(connectionTimeout)
-    bw.write(sessionId)
-    bw.write(passwd)
-    bw.write(canBeRO.getOrElse(false))
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufInt(protocolVersion))
+    .concat(BufLong(lastZxidSeen))
+    .concat(BufInt(connectionTimeout))
+    .concat(BufLong(sessionId))
+    .concat(BufArray(passwd))
+    .concat(BufBool(canBeRO.getOrElse(false)))
 }
 
 case class CreateRequest(
@@ -57,202 +66,129 @@ case class CreateRequest(
   aclList: Array[ACL],
   createMode: Int)
   extends Request {
-
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(path)
-    bw.write(data)
-    bw.write(aclList)
-    bw.write(createMode)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufSeqACL(aclList))
+    .concat(BufInt(createMode))
 }
 
 
 case class GetACLRequest(path: String)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(path.length))
-
-    bw.write(path)
-    bw.underlying.copy()
-  }
+  def buf: Buf = BufString(path)
 }
 
 case class GetDataRequest(path: String, watch: Boolean)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(2 * path.length))
-
-    bw.write(path)
-    bw.write(watch)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufBool(watch))
 }
 
-case class GetMaxChildrenRequestBody(path: String)
+case class GetMaxChildrenRequest(path: String)
   extends Request {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(path)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = BufString(path)
 }
 
 case class DeleteRequest(path: String, version: Int)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(version)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(version))
 }
 
 case class ExistsRequest(path: String, watch: Boolean)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(watch)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufBool(watch))
 }
 
-class PingRequest extends RequestHeader(-2, opCode.ping) with Request {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
-
-    bw.underlying.copy()
-  }
-}
-class CloseSessionRequest extends RequestHeader(1, opCode.closeSession) with Request {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(-1)
-    bw.write(xid)
-    bw.write(opCode)
-
-    bw.underlying.copy()
-  }
-}
-
+class PingRequest extends RequestHeader(-2, OpCode.PING) with Request
+class CloseSessionRequest extends RequestHeader(1, OpCode.CLOSE_SESSION) with Request
 case class SetDataRequest(
   path: String,
   data: Array[Byte],
   version: Int)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(data)
-    bw.write(version)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufInt(version))
 }
 
 case class GetChildrenRequest(path: String, watch: Boolean)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(watch)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufBool(watch))
 }
 
 case class GetChildren2Request(path: String, watch: Boolean)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufBool(watch))
+}
 
-    bw.write(path)
-    bw.write(watch)
+case class ReconfigRequest(
+  joiningServers: String,
+  leavingServers: String,
+  newMembers: String,
+  curConfigId: Long
+  ) extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(joiningServers))
+    .concat(BufString(leavingServers))
+    .concat(BufString(newMembers))
+    .concat(BufLong(curConfigId))
+}
 
-    bw.underlying.copy()
-  }
+case class RemoveWatchesRequest(
+  path: String,
+  typ: Int
+  ) extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(typ))
 }
 
 case class SetACLRequest(path: String, acl: Array[ACL], version: Int)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(acl)
-    bw.write(version)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufSeqACL(acl))
+    .concat(BufInt(version))
 }
 
 case class SetMaxChildrenRequest(path: String, max: Int)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(max)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(max))
 }
 
 case class SyncRequest(path: String)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = BufString(path)
 }
 
 /* Only available during client reconnection to set watches */
 case class SetWatchesRequest(
   relativeZxid: Int,
   dataWatches: Array[String],
-  existsWatches: Array[String],
+  existWatches: Array[String],
   childWatches: Array[String])
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(relativeZxid)
-    bw.write(dataWatches)
-    bw.write(existsWatches)
-    bw.write(childWatches)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = Buf.Empty
+    .concat(BufLong(relativeZxid))
+    .concat(BufSeqString(dataWatches))
+    .concat(BufSeqString(existWatches))
+    .concat(BufSeqString(childWatches))
 }
 
 case class TransactionRequest(transaction: Transaction)
   extends Request {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(transaction.toChannelBuffer)
-
-    bw.underlying.copy()
-  }
+  def buf: Buf = transaction.buf
 }

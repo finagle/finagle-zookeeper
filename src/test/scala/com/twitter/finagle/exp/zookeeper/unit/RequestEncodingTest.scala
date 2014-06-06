@@ -2,8 +2,7 @@ package com.twitter.finagle.exp.zookeeper.unit
 
 import org.scalatest.FunSuite
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.transport.BufferReader
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.{createMode, opCode}
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.{CreateMode, OpCode}
 import com.twitter.finagle.exp.zookeeper.ConnectRequest
 import scala.Some
 import com.twitter.finagle.exp.zookeeper.RequestHeader

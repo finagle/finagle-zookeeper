@@ -1,103 +1,74 @@
 package com.twitter.finagle.exp.zookeeper
 
-import org.jboss.netty.buffer.ChannelBuffer
-import com.twitter.finagle.exp.zookeeper.transport.{BufferReader, BufferWriter, Buffer}
-import com.twitter.util.Try
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefinitions.opCode
-
+import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
+import com.twitter.io.Buf
+import scala.annotation.tailrec
+import com.twitter.util.{Throw, Return, Try}
 
 sealed trait OpResult
 sealed trait OpRequest {
-  val toChannelBuffer: ChannelBuffer
+  def buf: Buf
 }
 
-trait ResultDecoder[U <: OpResult] extends (BufferReader => Try[U]) {
-  def apply(buffer: BufferReader): Try[U] = Try(decode(buffer))
-  def decode(buffer: BufferReader): U
-}
-
-class Transaction(opList: Array[OpRequest]) {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    opList foreach {
-      case create: CreateOp =>
-        val multiHeader = new MultiHeader(opCode.create, false, -1)
-        bw.write(multiHeader.toChannelBuffer)
-        bw.write(create.toChannelBuffer)
-
-      case delete: DeleteOp =>
-        val multiHeader = new MultiHeader(opCode.delete, false, -1)
-        bw.write(multiHeader.toChannelBuffer)
-        bw.write(delete.toChannelBuffer)
-
-      case setData: SetDataOp =>
-        val multiHeader = new MultiHeader(opCode.setData, false, -1)
-        bw.write(multiHeader.toChannelBuffer)
-        bw.write(setData.toChannelBuffer)
-
-      case check: CheckOp =>
-        val multiHeader = new MultiHeader(opCode.check, false, -1)
-        bw.write(multiHeader.toChannelBuffer)
-        bw.write(check.toChannelBuffer)
-
-      case _ => throw new RuntimeException("Request not supported for Transaction")
+trait ResultDecoder[U <: OpResult] {
+  def unapply(buffer: Buf): Option[(U, Buf)]
+  def apply(buffer: Buf): Try[(U, Buf)] = Try {
+    unapply(buffer) match {
+      case Some((rep, rem)) => (rep, rem)
+      case None => throw ZkDecodingException("Error while decoding")
     }
-
-    val lastOne = new MultiHeader(-1, true, -1)
-    bw.write(lastOne.toChannelBuffer)
-
-    bw.underlying
   }
 }
 
-object Transaction {
-  def decode(buffer: BufferReader): Array[OpResult] = {
-    val operations = collection.mutable.ArrayBuffer[OpResult]()
-
-    //TODO maybe synchronize this
-    var h = MultiHeader.decode(buffer)
-
-    while (!h.state) {
-      if (h.err == 0) {
-        h.typ match {
-          case opCode.create => operations += CreateOp.decode(buffer)
-          case opCode.delete => operations += DeleteOp.decode(buffer)
-          case opCode.setData => operations += SetDataOp.decode(buffer)
-          case opCode.check => operations += CheckOp.decode(buffer)
-        }
-        h = MultiHeader.decode(buffer)
-      } else {
-        throw ZookeeperException.create("Error while transaction ", h.err)
-      }
-    }
-    operations.toArray
-  }
+class Transaction(opList: Seq[OpRequest]) {
+  def buf: Buf =
+    opList.foldLeft(Buf.Empty)((buf, op) => buf.concat(op.buf))
+      .concat(MultiHeader(-1, true, -1).buf)
 }
 
+/**
+ * A MultiHeader is used to describe an operation
+ * @param typ type of the operation
+ * @param state state
+ * @param err error
+ */
 case class MultiHeader(typ: Int, state: Boolean, err: Int)
-  extends OpRequest {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(typ)
-    bw.write(state)
-    bw.write(err)
-
-    bw.underlying
-  }
+  extends OpRequest with OpResult {
+  def buf: Buf = Buf.Empty
+    .concat(BufInt(typ))
+    .concat(BufBool(state))
+    .concat(BufInt(err))
 }
 
-object MultiHeader {
-  def decode(buffer: BufferReader): MultiHeader = {
-    new MultiHeader(buffer.readInt, buffer.readBool, buffer.readInt)
-  }
-}
+/**
+ * A result from a create operation.  This kind of result allows the
+ * path to be retrieved since the create might have been a sequential
+ * create.
+ */
+case class CreateResult(path: String) extends OpResult
+/**
+ * An error result from any kind of operation.  The point of error results
+ * is that they contain an error code which helps understand what happened.
+ * @see ZookeeperExceptions
+ */
+case class ErrorResult(errorCode: Int) extends OpResult
+/**
+ * A result from a delete operation.  No special values are available.
+ */
+class DeleteResult() extends OpResult
+/**
+ * A result from a setData operation.  This kind of result provides access
+ * to the Stat structure from the update.
+ */
+case class SetDataResult(stat: Stat) extends OpResult
+/**
+ * A result from a version check operation.  No special values are available.
+ */
+class CheckResult() extends OpResult
 
-case class CreateResult(typ: Int, path: String) extends OpResult
-case class DeleteResult(typ: Int) extends OpResult
-case class SetDataResult(typ: Int, stat: Stat) extends OpResult
-case class CheckResult(typ: Int) extends OpResult
+case class Create2Result(path: String, stat: Stat) extends OpResult
 
 case class CreateOp(
   path: String,
@@ -105,75 +76,112 @@ case class CreateOp(
   aclList: Array[ACL],
   createMode: Int)
   extends OpRequest {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
-
-    bw.write(path)
-    bw.write(data)
-    bw.write(aclList)
-    bw.write(createMode)
-
-    bw.underlying
-  }
-}
-
-object CreateOp extends ResultDecoder[CreateResult] {
-  override def decode(buffer: BufferReader): CreateResult = {
-    new CreateResult(opCode.create, buffer.readString)
-  }
+  def buf: Buf = Buf.Empty
+    .concat(MultiHeader(OpCode.CREATE, false, -1).buf)
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufSeqACL(aclList))
+    .concat(BufInt(createMode))
 }
 
 case class DeleteOp(path: String, version: Int)
   extends OpRequest {
-  val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(version)
-
-    bw.underlying
-  }
-}
-
-object DeleteOp extends ResultDecoder[DeleteResult] {
-  override def decode(buffer: BufferReader): DeleteResult = {
-    new DeleteResult(buffer.readInt)
-  }
+  def buf: Buf = Buf.Empty
+    .concat(MultiHeader(OpCode.DELETE, false, -1).buf)
+    .concat(BufString(path))
+    .concat(BufInt(version))
 }
 
 case class SetDataOp(path: String, data: Array[Byte], version: Int)
   extends OpRequest {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(4))
-
-    bw.write(path)
-    bw.write(data)
-    bw.write(version)
-
-    bw.underlying
-  }
-}
-
-object SetDataOp extends ResultDecoder[SetDataResult] {
-  override def decode(buffer: BufferReader): SetDataResult = {
-    new SetDataResult(buffer.readInt, Stat.decode(buffer))
-  }
+  def buf: Buf = Buf.Empty
+    .concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufInt(version))
 }
 
 case class CheckOp(path: String, version: Int)
   extends OpRequest {
-  override val toChannelBuffer: ChannelBuffer = {
-    val bw = BufferWriter(Buffer.getDynamicBuffer(0))
+  def buf: Buf = Buf.Empty
+    .concat(MultiHeader(OpCode.CHECK, false, -1).buf)
+    .concat(BufString(path))
+    .concat(BufInt(version))
+}
 
-    bw.write(path)
-    bw.write(version)
 
-    bw.underlying
+object Transaction {
+  def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
+
+    Try(decode(buf, Seq.empty[OpResult])) match {
+      case Return(res) => Some((TransactionResponse(res._1), res._2))
+      case Throw(exc) => None
+    }
+  }
+
+  @tailrec
+  private[this] def decode(buf: Buf, results: Seq[OpResult]): (Seq[OpResult], Buf) = {
+    val MultiHeader(header, opBuf) = buf
+    if (header.state) (results, opBuf)
+    else {
+      val (res, rem) = header.typ match {
+        case OpCode.CREATE2 =>
+          val Create2Result(rep, rem) = opBuf
+          (Create2Result(rep.path, rep.stat), rem)
+
+        case OpCode.DELETE =>
+          (new DeleteResult, opBuf)
+
+        case OpCode.SET_DATA =>
+          val SetDataResult(rep, rem) = opBuf
+          (SetDataResult(rep.stat), rem)
+
+        case OpCode.CHECK =>
+          (new CheckResult, opBuf)
+
+        case OpCode.ERROR =>
+          val ErrorResponse(rep, rem) = opBuf
+          (ErrorResult(rep.err), rem)
+
+        case typ =>
+          throw new Exception("Invalid type %d in MultiResponse".format(typ))
+      }
+      decode(rem, results :+ res)
+    }
   }
 }
 
-object CheckOp extends ResultDecoder[CheckResult] {
-  override def decode(buffer: BufferReader): CheckResult = {
-    new CheckResult(buffer.readInt)
+object MultiHeader extends ResultDecoder[MultiHeader] {
+  def unapply(buf: Buf): Option[(MultiHeader, Buf)] = {
+    val BufInt(typ, BufBool(done, BufInt(err, rem))) = buf
+    Some(MultiHeader(typ, done, err), rem)
+  }
+}
+
+object CreateResult extends ResultDecoder[CreateResult] {
+  def unapply(buf: Buf): Option[(CreateResult, Buf)] = {
+    val BufString(path, rem) = buf
+    Some(CreateResult(path), rem)
+  }
+}
+
+object ErrorResult extends ResultDecoder[ErrorResult] {
+  def unapply(buf: Buf): Option[(ErrorResult, Buf)] = {
+    val BufInt(errorCode, rem) = buf
+    Some(ErrorResult(errorCode), rem)
+  }
+}
+
+object SetDataResult extends ResultDecoder[SetDataResult] {
+  def unapply(buf: Buf): Option[(SetDataResult, Buf)] = {
+    val Stat(stat, rem) = buf
+    Some(SetDataResult(stat), rem)
+  }
+}
+
+object Create2Result extends ResultDecoder[Create2Result] {
+  def unapply(buf: Buf): Option[(Create2Result, Buf)] = {
+    val BufString(path, Stat(stat, rem)) = buf
+    Some(Create2Result(path, stat), rem)
   }
 }

@@ -1,11 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.utils
 
-import com.twitter.finagle.exp.zookeeper.transport.Buffer
+import com.twitter.finagle.exp.zookeeper.data.ACL
 
 object Implicits {
-  implicit def someToBuffer(buff: Option[Buffer]): Buffer = buff match {
-    case Some(buff) => buff
-    case None => Buffer.getDynamicBuffer(0)
-  }
-
+  implicit def aclToArray(acl: ACL): Array[ACL] = Array[ACL](acl)
 }
