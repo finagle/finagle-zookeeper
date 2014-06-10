@@ -1,14 +1,14 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.transport.Transport
-import com.twitter.finagle.exp.zookeeper.{Response, Request}
-import com.twitter.util._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
-import scala.collection.mutable
-import com.twitter.finagle.exp.zookeeper.watch.WatchManager
-import java.util.concurrent.atomic.AtomicBoolean
 import com.twitter.io.Buf
+import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.{Response, Request}
+import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
+import com.twitter.finagle.transport.Transport
+import com.twitter.util._
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.collection.mutable
 
 class RequestMatcher(
   trans: Transport[Buf, Buf],
@@ -24,7 +24,7 @@ class RequestMatcher(
    * decoder - creates a response from a Buffer
    */
   val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[Response])]
-  val watchManager = new WatchManager()
+  @volatile var watchManager = new WatchManager(None)
   val sessionManager = new SessionManager(sender, watchManager, true)
   val isReading = new AtomicBoolean(false)
 
@@ -49,12 +49,9 @@ class RequestMatcher(
     fullRep transform {
       case Return(rep) => rep match {
         case rep: WatchEvent =>
-          // Notifies the watch manager we have a new watchEvent
-          watchManager.process(rep)
-          // Notifies the session manager we have a new watchEvent
-          sessionManager(rep)
-          // Continue to read if a response if expected
+          println("Received event")
           Future.Done
+
         case rep: Response =>
           // The request record is dequeued now that it's satisfied
           processedReq.dequeue()._2.setValue(rep)
@@ -62,8 +59,7 @@ class RequestMatcher(
       }
 
       // This case is already handled during decoder.read (see onFailure)
-      case Throw(exc) =>
-        Future.Done
+      case Throw(exc) => Future.Done
     }
   }
 
@@ -157,6 +153,10 @@ class RequestMatcher(
         // Notifies the watch manager that we are about to create a new watch
         Packet(Some(RequestHeader(xid, OpCode.GET_CHILDREN)), Some(req))
 
+      /*case req: PrepareRequest =>
+        watchManager = req.watchManager
+        return*/
+
       case req: GetChildren2Request =>
         println("<--- GETCHILDREN2")
         sessionManager.checkState()
@@ -179,7 +179,7 @@ class RequestMatcher(
 
     val reqRecord = packet match {
       case Packet(Some(header), _) => RequestRecord(header.opCode, Some(header.xid))
-      case Packet(None, _) => RequestRecord(OpCode.CREATE_SESSION, None)
+      case Packet(None, Some(req: ConnectRequest)) => RequestRecord(OpCode.CREATE_SESSION, None)
     }
 
     // The request is about to be written, so we enqueue it in the waiting request queue
@@ -204,7 +204,7 @@ class RequestMatcher(
   def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader) = {
     println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
     if (reqRecord.xid.isDefined)
-      if (reqRecord.xid.get != repHeader.xid) throw new RuntimeException("wrong association")
+      if (reqRecord.xid.get != repHeader.xid) throw new ZkDispatchingException("wrong association")
 
   }
 
@@ -215,44 +215,48 @@ class RequestMatcher(
      * is waiting for a response or not.
      * In case there is a request, it will try to decode with readFromRequest,
      * if an exception is thrown then it will try again with readFromHeader.
-     * @param req expected request description
+     * @param pendingRequest expected request description
      * @param buffer current buffer
      * @return
      */
     def read(
-      req: Option[(RequestRecord, Promise[Response])],
+      pendingRequest: Option[(RequestRecord, Promise[Response])],
       buffer: Buf): Future[Response] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
        */
-      val rep = req match {
-        case Some(record) =>
-          readFromRequest(record, buffer)
-        case None =>
-          readFromHeader(buffer)
+      val rep = pendingRequest match {
+        case Some(record) => readFromRequest(record, buffer)
+        case None => readFromHeader(buffer)
       }
 
       rep match {
         case Return(response) => response
 
-        case Throw(exc1) =>
-          //Two possibilities : zookeeper exception or decoding error
-          if (exc1.isInstanceOf[ZookeeperException]) {
-            Future.exception(exc1)
-          }
-          else {
+        case Throw(exc1) => exc1 match {
+          case decodingExc: ZkDecodingException =>
+
             /**
              * This is a decoding error, we should try to decode the buffer
              * as a watchEvent
              */
-            //bufferReader.underlying.resetReaderIndex()
             readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
               case Throw(exc2) =>
-                throw new RuntimeException("Impossible to decode this response", exc1)
+                Future.exception(ZkDecodingException("Impossible to decode this response").initCause(exc2))
             }
-          }
+
+          case dispatchingExc: ZkDispatchingException =>
+            readFromHeader(buffer) match {
+              case Return(eventRep) => eventRep
+              case Throw(exc2) =>
+                Future.exception(ZkDecodingException("Impossible to decode this response").initCause(exc2))
+            }
+          case serverExc: ZookeeperException => Future.exception(exc1)
+
+          case _ => Future.exception(new RuntimeException("Unexpected exception during decoding"))
+        }
       }
     }
 
@@ -263,9 +267,11 @@ class RequestMatcher(
      * @return possibly the (header, response) or an exception
      */
     def readFromHeader(buf: Buf): Try[Future[Response]] = Try {
-      val header = ReplyHeader(buf) match {
-        case Return((header@ReplyHeader(_, _, 0), rem)) => header
-        case Return((header@ReplyHeader(_, _, err), rem)) =>
+      val (header, rem) = ReplyHeader(buf) match {
+        case Return((header@ReplyHeader(_, _, 0), buf2)) =>
+          sessionManager(header)
+          (header, buf2)
+        case Return((header@ReplyHeader(_, _, err), buf2)) =>
           sessionManager(header)
           throw ZookeeperException.create("Error while readFromHeader :", err)
         case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
@@ -277,18 +283,25 @@ class RequestMatcher(
         case -1 =>
           println("---> Watches event")
 
-
-          WatchEvent(buf) match {
-            case Return((event@WatchEvent(_, _, _), rem2)) => Future(event)
-            case _ =>
+          WatchEvent(rem) match {
+            case Return((event@WatchEvent(_, _, _), rem2)) =>
+              // Notifies the watch manager we have a new watchEvent
+              watchManager.process(event)
+              // Notifies the session manager we have a new watchEvent
+              sessionManager(event)
+              // Continue to read if a response if expected
+              Future(event)
+            case Throw(exc) =>
               sessionManager(header)
-              throw ZkDecodingException("Error while decoding watch event")
+              throw ZkDecodingException("Error while decoding watch event").initCause(exc)
           }
 
         case 1 =>
           Future(new EmptyResponse)
         case -4 =>
           Future(new EmptyResponse)
+        case _ =>
+          throw ZkDecodingException("Could not decode this Buf")
       }
     }
 
@@ -309,12 +322,13 @@ class RequestMatcher(
     def readFromRequest(
       req: (RequestRecord, Promise[Response]),
       buf: Buf): Try[Future[Response]] = Try {
+      val (reqRecord, _) = req
 
-      req._1.opCode match {
+      reqRecord.opCode match {
         case OpCode.AUTH =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -348,7 +362,7 @@ class RequestMatcher(
         case OpCode.PING =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -364,7 +378,7 @@ class RequestMatcher(
         case OpCode.CLOSE_SESSION =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -382,7 +396,7 @@ class RequestMatcher(
         case OpCode.CREATE =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -402,7 +416,7 @@ class RequestMatcher(
         case OpCode.EXISTS =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -423,7 +437,7 @@ class RequestMatcher(
         case OpCode.DELETE =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -439,7 +453,7 @@ class RequestMatcher(
         case OpCode.SET_DATA =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -459,7 +473,7 @@ class RequestMatcher(
         case OpCode.GET_DATA =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -480,7 +494,7 @@ class RequestMatcher(
         case OpCode.SYNC =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -500,7 +514,7 @@ class RequestMatcher(
         case OpCode.SET_ACL =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -520,7 +534,7 @@ class RequestMatcher(
         case OpCode.GET_ACL =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -540,7 +554,7 @@ class RequestMatcher(
         case OpCode.GET_CHILDREN =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -561,7 +575,7 @@ class RequestMatcher(
         case OpCode.GET_CHILDREN2 =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -582,7 +596,7 @@ class RequestMatcher(
         case OpCode.SET_WATCHES =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
               if (header.err == 0) {
@@ -598,9 +612,10 @@ class RequestMatcher(
         case OpCode.MULTI =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
-              checkAssociation(req._1, header)
+              checkAssociation(reqRecord, header)
               sessionManager(header)
 
+              // fixme maybe continue to read even if header does not eq 0
               if (header.err == 0) {
                 TransactionResponse(rem) match {
                   case Return((body, rem2)) =>

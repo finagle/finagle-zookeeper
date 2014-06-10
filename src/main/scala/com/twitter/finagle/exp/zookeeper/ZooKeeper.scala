@@ -1,9 +1,9 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.exp.zookeeper.transport.{NettyTrans, ZkTransport}
 import com.twitter.finagle.client.{Bridge, DefaultClient}
-import com.twitter.finagle.{Client, ServiceFactory, Name}
+import com.twitter.finagle.{ServiceFactory, Name}
 import com.twitter.finagle.exp.zookeeper.client.{ZkDispatcher, ZkClient}
+import com.twitter.finagle.exp.zookeeper.transport.{NettyTrans, ZkTransport}
 import com.twitter.io.Buf
 
 /**
@@ -23,10 +23,10 @@ object ZooKeeperClient extends DefaultClient[Request, Response](
   endpointer = Bridge[Buf, Buf, Request, Response](
     NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
 
-object ZooKeeper extends Client[Request, Response] {
+object ZooKeeper {
   def newClient(name: Name, label: String): ServiceFactory[Request, Response] =
     ZooKeeperClient.newClient(name, label)
 
   def newRichClient(dest: String): ZkClient =
-    new ZkClient(newClient(dest))
+    new ZkClient(ZooKeeperClient.newClient(dest))
 }

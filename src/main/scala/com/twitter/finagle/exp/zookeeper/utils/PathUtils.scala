@@ -65,17 +65,7 @@ object PathUtils {
     }
   }
 
-  def prependChroot(clientPath: String, chRootPath: String): String = {
-    // TODO check and test
-    if (chRootPath != null) {
-      // handle clientPath = "/"
-      if (clientPath.length() == 1) {
-        chRootPath
-      }
-      chRootPath + clientPath
-    } else {
-      clientPath
-    }
-  }
+  def prependChroot(path: String, chroot: Option[String]): String =
+    chroot.fold(path)({ c => if (path == "/") c else c + path })
 
 }

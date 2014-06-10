@@ -1,11 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.transport
 
-import org.jboss.netty.buffer.{ChannelBuffers, ChannelBuffer}
+import com.twitter.finagle.netty3.ChannelBufferBuf
 import com.twitter.finagle.transport.Transport
+import com.twitter.io.Buf
 import com.twitter.util.{Future, Time}
 import java.net.SocketAddress
-import com.twitter.io.Buf
-import com.twitter.finagle.netty3.ChannelBufferBuf
+import org.jboss.netty.buffer.{ChannelBuffers, ChannelBuffer}
 
 class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
   extends Transport[Buf, Buf] {

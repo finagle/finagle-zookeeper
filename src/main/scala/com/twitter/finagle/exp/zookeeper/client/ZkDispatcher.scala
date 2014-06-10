@@ -1,10 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.transport.Transport
-import com.twitter.util._
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.dispatch.GenSerialClientDispatcher
+import com.twitter.finagle.transport.Transport
 import com.twitter.io.Buf
+import com.twitter.util._
 
 class ZkDispatcher(trans: Transport[Buf, Buf])
   extends GenSerialClientDispatcher[Request, Response, Buf, Buf](trans) {

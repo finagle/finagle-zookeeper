@@ -1,11 +1,12 @@
 package com.twitter.finagle.exp.zookeeper
 
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
-import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.io.Buf
-import scala.annotation.tailrec
 import com.twitter.util.{Throw, Return, Try}
+import scala.annotation.tailrec
+import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 
 sealed trait OpResult
 sealed trait OpRequest {
@@ -129,6 +130,10 @@ object Transaction {
           val Create2Result(rep, rem) = opBuf
           (Create2Result(rep.path, rep.stat), rem)
 
+        case OpCode.CREATE =>
+          val CreateResult(rep, rem) = opBuf
+          (CreateResult(rep.path), rem)
+
         case OpCode.DELETE =>
           (new DeleteResult, opBuf)
 
@@ -147,6 +152,38 @@ object Transaction {
           throw new Exception("Invalid type %d in MultiResponse".format(typ))
       }
       decode(rem, results :+ res)
+    }
+  }
+
+  def prepareAndCheck(opList: Seq[OpRequest], chroot: Option[String]): Try[Seq[OpRequest]] = Try {
+    opList map {
+      case op: CreateOp =>
+        ACL.check(op.aclList)
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath, op.createMode)
+        CreateOp(finalPath, op.data, op.aclList, op.createMode)
+      case op: DeleteOp =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        DeleteOp(finalPath, op.version)
+      case op: SetDataOp =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        SetDataOp(finalPath, op.data, op.version)
+      case op: CheckOp =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        CheckOp(finalPath, op.version)
+    }
+  }
+
+  def formatPath(opList: Seq[OpResult], chroot: Option[String]): Seq[OpResult] = {
+    opList map {
+      case op: Create2Result =>
+        Create2Result(op.path.substring(chroot.getOrElse("").length), op.stat)
+      case op: CreateResult =>
+        CreateResult(op.path.substring(chroot.getOrElse("").length))
+      case op: OpResult => op
     }
   }
 }

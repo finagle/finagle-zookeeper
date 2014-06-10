@@ -1,11 +1,11 @@
 package com.twitter.finagle.exp.zookeeper
 
+import com.twitter.finagle.exp.zookeeper.data.ACL
+import com.twitter.finagle.exp.zookeeper.data.Auth
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
-import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.io.Buf
-import com.twitter.finagle.exp.zookeeper.data.Auth
-import scala.Some
+import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 
 /**
  * Same as the Response type, a Request can be composed by a header or
@@ -73,7 +73,6 @@ case class CreateRequest(
     .concat(BufInt(createMode))
 }
 
-
 case class GetACLRequest(path: String)
   extends Request {
   def buf: Buf = BufString(path)
@@ -106,6 +105,9 @@ case class ExistsRequest(path: String, watch: Boolean)
 }
 
 class PingRequest extends RequestHeader(-2, OpCode.PING) with Request
+case class PrepareRequest(watchManager: WatchManager) extends Request {
+  def buf: Buf = null
+}
 class CloseSessionRequest extends RequestHeader(1, OpCode.CLOSE_SESSION) with Request
 case class SetDataRequest(
   path: String,

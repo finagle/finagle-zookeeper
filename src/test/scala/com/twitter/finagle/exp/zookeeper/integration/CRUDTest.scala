@@ -29,6 +29,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     val disconnect = client.get.closeSession()
     Await.ready(disconnect)
+    Await.ready(client.get.closeService)
   }
 
   test("Node creation and exists") {

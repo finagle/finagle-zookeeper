@@ -1,14 +1,14 @@
 package com.twitter.finagle.exp.zookeeper.watch
 
 import com.twitter.finagle.exp.zookeeper.WatchEvent
-import scala.collection.mutable
 import com.twitter.util.Promise
+import scala.collection.mutable
 
 /**
  * WatchManager may be used to manage watcher events, keep a Set of current watches.
  */
 
-class WatchManager {
+class WatchManager(chroot: Option[String]) {
   private val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
   private val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
   private val childWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
@@ -51,10 +51,14 @@ class WatchManager {
 
   /**
    * We use this to process every watches events that comes in
-   * @param event the watch event that was received
+   * @param watchEvent the watch event that was received
    * @return
    */
-  def process(event: WatchEvent) = {
+  def process(watchEvent: WatchEvent) = {
+    val event = WatchEvent(
+      watchEvent.typ,
+      watchEvent.state,
+      watchEvent.path.substring(chroot.getOrElse("").length))
     event.typ match {
       case eventType.NONE => // TODO
       case eventType.NODE_CREATED =>
@@ -131,19 +135,9 @@ class WatchManager {
             case None =>
           }
         }
+      // fixme handle exception in a Try
       case _ => throw new RuntimeException("This Watch event is not supported")
     }
-  }
-
-  /**
-   * Just to know if we are currently waiting for some events
-   * @return if the watch manager has some watches
-   */
-  def hasWatches: Boolean = {
-    if (!dataWatches.keySet.isEmpty || !existsWatches.keySet.isEmpty
-      || !childWatches.keySet.isEmpty)
-      true
-    else false
   }
 }
 

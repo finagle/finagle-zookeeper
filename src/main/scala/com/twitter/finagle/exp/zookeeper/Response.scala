@@ -1,24 +1,9 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.util.{Future, Try}
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.io.Buf
-
-/**
- * This File describes every responses
- * A response is usually composed by a header + a body
- * but there are some exceptions where there is only a header (ReplyHeader).
- * For example a CreateResponse is composed by a ReplyHeader and a CreateResponseBody
- * this way : new CreateResponse(h: ReplyHeader, b: CreateResponseBody).
- *
- * That's the reason why header extends Response.
- *
- * A BufferedResponse is a raw container (BufferReader) of response, as we have many
- * different responses, we use a common wrapper, that we can then decode with
- * the request opCode. With a BufferedResponse and an opCode we can give a Response
- *
- **/
+import com.twitter.util.{Future, Try}
 
 sealed trait Response
 sealed trait Decoder[T <: Response] {
@@ -82,6 +67,10 @@ case class TransactionResponse(
 
 case class WatchEvent(typ: Int, state: Int, path: String) extends Response
 
+/**
+ * Decoders
+ */
+
 object ConnectResponse extends Decoder[ConnectResponse] {
   def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = {
     val BufInt(protocolVersion,
@@ -101,7 +90,6 @@ object CreateResponse extends Decoder[CreateResponse] {
   }
 }
 
-
 object ErrorResponse extends Decoder[ErrorResponse] {
   def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
     val BufInt(err, rem) = buf
@@ -112,27 +100,27 @@ object ErrorResponse extends Decoder[ErrorResponse] {
 object ExistsResponse extends Decoder[ExistsResponse] {
   def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = {
     val Stat(stat, rem) = buf
-    Some(new NodeWithWatch(stat, None), rem)
+    Some(NodeWithWatch(stat, None), rem)
   }
 }
 
 object GetACLResponse extends Decoder[GetACLResponse] {
   def unapply(buf: Buf): Option[(GetACLResponse, Buf)] = {
-    val BufSeqACL(acl, Stat(stat, rem)) = buf
-    Some(new GetACLResponse(acl, stat), buf)
+    val BufSeqACL(acl, Stat(stat, _)) = buf
+    Some(GetACLResponse(acl, stat), buf)
   }
 }
 
 object GetChildrenResponse extends Decoder[GetChildrenResponse] {
   def unapply(buf: Buf): Option[(GetChildrenResponse, Buf)] = {
-    val BufSeqString(children, rem) = buf
-    Some(new GetChildrenResponse(children, None), buf)
+    val BufSeqString(children, _) = buf
+    Some(GetChildrenResponse(children, None), buf)
   }
 }
 
 object GetChildren2Response extends Decoder[GetChildren2Response] {
   def unapply(buf: Buf): Option[(GetChildren2Response, Buf)] = {
-    val BufSeqString(children, Stat(stat, rem)) = buf
+    val BufSeqString(children, Stat(stat, _)) = buf
     Some(GetChildren2Response(children, stat, None), buf)
   }
 }
@@ -147,44 +135,47 @@ object GetDataResponse extends Decoder[GetDataResponse] {
 object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
   def unapply(buf: Buf): Option[(GetMaxChildrenResponse, Buf)] = {
     val BufInt(max, rem) = buf
-    Some(new GetMaxChildrenResponse(max), rem)
+    Some(GetMaxChildrenResponse(max), rem)
   }
 }
 
 object ReplyHeader extends Decoder[ReplyHeader] {
   def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
     val BufInt(xid, BufLong(zxid, BufInt(err, rem))) = buf
-    Some(new ReplyHeader(xid, zxid, err), rem)
+    Some(ReplyHeader(xid, zxid, err), rem)
   }
 }
 
 object SetACLResponse extends Decoder[SetACLResponse] {
   def unapply(buf: Buf): Option[(SetACLResponse, Buf)] = {
     val Stat(stat, rem) = buf
-    Some(new SetACLResponse(stat), rem)
+    Some(SetACLResponse(stat), rem)
   }
 }
 
 object SetDataResponse extends Decoder[SetDataResponse] {
   def unapply(buf: Buf): Option[(SetDataResponse, Buf)] = {
     val Stat(stat, rem) = buf
-    Some(new SetDataResponse(stat), rem)
+    Some(SetDataResponse(stat), rem)
   }
 }
 
 object SyncResponse extends Decoder[SyncResponse] {
   def unapply(buf: Buf): Option[(SyncResponse, Buf)] = {
     val BufString(path, rem) = buf
-    Some(new SyncResponse(path), rem)
+    Some(SyncResponse(path), rem)
   }
 }
 
 object TransactionResponse extends Decoder[TransactionResponse] {
   def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
 
-    // Fixme need to give a partial response
+    // Fixme need to give a partial response in case of failure
     val Transaction(trans, rem) = buf
-    Some(trans, rem)
+    (trans,rem) match {
+      case res: (TransactionResponse, Buf) => Some(res)
+      case _ => None
+    }
   }
 }
 

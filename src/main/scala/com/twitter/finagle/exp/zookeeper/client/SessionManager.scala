@@ -1,12 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.exp.zookeeper._
 import com.twitter.conversions.time._
-import com.twitter.util._
-import com.twitter.finagle.util.DefaultTimer
-import com.twitter.util.Throw
-import com.twitter.finagle.exp.zookeeper.ConnectRequest
+import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.finagle.util.DefaultTimer
+import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SessionManager(
@@ -216,6 +214,7 @@ class SessionManager(
       case 0 => state = States.NOT_CONNECTED
       case 3 => state = States.CONNECTED
       case -112 => state = States.SESSION_EXPIRED
+      case _ =>
     }
   }
 
