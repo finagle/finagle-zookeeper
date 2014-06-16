@@ -2,8 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.io.Buf
 
-
-case class Packet(header: Option[RequestHeader], request: Option[Request]) {
+case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
 
   def buf: Buf = {
 
@@ -23,4 +22,11 @@ case class Packet(header: Option[RequestHeader], request: Option[Request]) {
   }
 }
 
+case class RepPacket(header: StateHeader, response: Option[Response])
+
 case class RequestRecord(opCode: Int, xid: Option[Int])
+
+case class StateHeader(err: Int, zxid: Long)
+object StateHeader {
+  def apply(header: ReplyHeader): StateHeader = new StateHeader(header.err, header.zxid)
+}

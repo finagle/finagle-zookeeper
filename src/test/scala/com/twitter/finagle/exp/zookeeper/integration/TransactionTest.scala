@@ -32,5 +32,4 @@ class TransactionTest extends FunSuite with IntegrationConfig {
     disconnect()
     Await.ready(client.get.closeService)
   }
-
 }

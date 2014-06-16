@@ -17,7 +17,7 @@ class WatchManager(chroot: Option[String]) {
   def getExistsWatches = this.synchronized(existsWatches)
   def getChildWatches = this.synchronized(childWatches)
 
-  def register(path: String, watchType: Int): Promise[WatchEvent] = {
+  private[finagle] def register(path: String, watchType: Int): Promise[WatchEvent] = {
     println("Registering " + path)
 
     watchType match {
@@ -54,11 +54,12 @@ class WatchManager(chroot: Option[String]) {
    * @param watchEvent the watch event that was received
    * @return
    */
-  def process(watchEvent: WatchEvent) = {
+  private[finagle] def process(watchEvent: WatchEvent) = {
     val event = WatchEvent(
       watchEvent.typ,
       watchEvent.state,
       watchEvent.path.substring(chroot.getOrElse("").length))
+
     event.typ match {
       case eventType.NONE => // TODO
       case eventType.NODE_CREATED =>

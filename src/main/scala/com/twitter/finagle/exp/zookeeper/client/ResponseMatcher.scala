@@ -1,5 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.client
 
+import com.twitter.finagle.exp.zookeeper.session.Session
+import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.io.Buf
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.{Response, Request}
@@ -10,9 +12,9 @@ import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
-class RequestMatcher(
-  trans: Transport[Buf, Buf],
-  sender: Request => Future[Response]) {
+class ResponseMatcher(
+  trans: Transport[Buf, Buf]
+  /* sender: ReqPacket => Future[RepPacket]*/) {
   /**
    * Local variables
    * processesReq - queue of requests waiting for responses
@@ -23,9 +25,9 @@ class RequestMatcher(
    * encoder - creates a complete Packet from a request
    * decoder - creates a response from a Buffer
    */
-  val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[Response])]
+  val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
   @volatile var watchManager = new WatchManager(None)
-  val sessionManager = new SessionManager(sender, watchManager, true)
+  @volatile var session: Session = new Session()
   val isReading = new AtomicBoolean(false)
 
   val encoder = new Writer(trans)
@@ -33,7 +35,7 @@ class RequestMatcher(
 
   def read(): Future[Unit] = {
     val fullRep = trans.read() flatMap { buffer =>
-      val currentReq: Option[(RequestRecord, Promise[Response])] =
+      val currentReq: Option[(RequestRecord, Promise[RepPacket])] =
         if (processedReq.size > 0) Some(processedReq.front) else None
 
       decoder.read(currentReq, buffer) onFailure { exc =>
@@ -47,13 +49,15 @@ class RequestMatcher(
     }
 
     fullRep transform {
-      case Return(rep) => rep match {
-        case rep: WatchEvent =>
-          println("Received event")
+      case Return(rep) => rep.response match {
+        case Some(event: WatchEvent) => Future.Done
+
+        case Some(resp: Response) =>
+          // The request record is dequeued now that it's satisfied
+          processedReq.dequeue()._2.setValue(rep)
           Future.Done
 
-        case rep: Response =>
-          // The request record is dequeued now that it's satisfied
+        case None =>
           processedReq.dequeue()._2.setValue(rep)
           Future.Done
       }
@@ -64,7 +68,7 @@ class RequestMatcher(
   }
 
   def readLoop(): Future[Unit] = {
-    if (!sessionManager.isClosing) read() before readLoop()
+    if (!session.isClosingSession.get()) read() before readLoop()
     else Future.Done
   }
 
@@ -75,125 +79,34 @@ class RequestMatcher(
    * @param req the request to send
    * @return a Future[Unit] when the request is completely written
    */
-  def write(req: Request): Future[Response] = {
-    val packet = req match {
-      case req: AuthRequest =>
-        println("<--- AUTH")
-        // Check the connection state before writing
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(-4, OpCode.AUTH)), Some(req))
+  def write(req: ReqPacket): Future[RepPacket] = req match {
+    case ReqPacket(None, Some(ConfigureRequest(Left(watchManagr)))) =>
+      watchManager = watchManagr
+      println("Configured new watchManager")
+      Future(RepPacket(StateHeader(0, 0), None))
 
-      case req: ConnectRequest =>
-        println("<--- CONNECT")
-        sessionManager.checkStateBeforeConnect()
-        // Notifies the session manager that a new connection is being created
-        sessionManager.prepareConnection()
-        Packet(None, Some(req))
+    case ReqPacket(None, Some(ConfigureRequest(Right(sess)))) =>
+      session = sess
+      println("Configured new Session")
+      Future(RepPacket(StateHeader(0, 0), None))
 
-      case req: PingRequest =>
-        println("<--- PING")
-        sessionManager.checkState()
-        Packet(Some(req), None)
-
-      case req: CloseSessionRequest =>
-        sessionManager.checkState()
-        // Notifies the session manager that the connection is being closed
-        sessionManager.prepareCloseSession()
-        println("<--- CLOSE SESSION")
-        Packet(Some(req), None)
-
-      case req: CreateRequest =>
-        println("<--- CREATE")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.CREATE)), Some(req))
-
-      case req: ExistsRequest =>
-        println("<--- EXISTS")
-        sessionManager.checkState()
-        val xid = sessionManager.getXid
-        // Notifies the watch manager that we are about to create a new watch
-        Packet(Some(RequestHeader(xid, OpCode.EXISTS)), Some(req))
-
-      case req: DeleteRequest =>
-        println("<--- DELETE")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.DELETE)), Some(req))
-
-      case req: SetDataRequest =>
-        println("<--- SETDATA")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.SET_DATA)), Some(req))
-
-      case req: GetDataRequest =>
-        println("<--- GETDATA")
-        sessionManager.checkState()
-        val xid = sessionManager.getXid
-        // Notifies the watch manager that we are about to create a new watch
-        Packet(Some(RequestHeader(xid, OpCode.GET_DATA)), Some(req))
-
-      case req: SyncRequest =>
-        println("<--- SYNC")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.SYNC)), Some(req))
-
-      case req: SetACLRequest =>
-        println("<--- SETACL")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.SET_ACL)), Some(req))
-
-      case req: GetACLRequest =>
-        println("<--- GETACL")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.GET_ACL)), Some(req))
-
-      case req: GetChildrenRequest =>
-        println("<--- GETCHILDREN")
-        sessionManager.checkState()
-        val xid = sessionManager.getXid
-        // Notifies the watch manager that we are about to create a new watch
-        Packet(Some(RequestHeader(xid, OpCode.GET_CHILDREN)), Some(req))
-
-      /*case req: PrepareRequest =>
-        watchManager = req.watchManager
-        return*/
-
-      case req: GetChildren2Request =>
-        println("<--- GETCHILDREN2")
-        sessionManager.checkState()
-        val xid = sessionManager.getXid
-        // Notifies the watch manager that we are about to create a new watch
-        Packet(Some(RequestHeader(xid, OpCode.GET_CHILDREN2)), Some(req))
-
-      case req: SetWatchesRequest =>
-        println("<--- SETWATCHES")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(-8, OpCode.SET_WATCHES)), Some(req))
-
-      case req: TransactionRequest =>
-        println("<--- TRANSACTION")
-        sessionManager.checkState()
-        Packet(Some(RequestHeader(sessionManager.getXid, OpCode.MULTI)), Some(req))
-
-      case _ => throw new RuntimeException("Request type not supported")
-    }
-
-    val reqRecord = packet match {
-      case Packet(Some(header), _) => RequestRecord(header.opCode, Some(header.xid))
-      case Packet(None, Some(req: ConnectRequest)) => RequestRecord(OpCode.CREATE_SESSION, None)
-    }
-
-    // The request is about to be written, so we enqueue it in the waiting request queue
-    val p = new Promise[Response]()
-
-    synchronized {
-      processedReq.enqueue((reqRecord, p))
-      encoder.write(packet) flatMap { unit =>
-        if (!isReading.getAndSet(true)) {
-          readLoop()
-        }
-        p
+    case ReqPacket(_, _) =>
+      val reqRecord = req match {
+        case ReqPacket(Some(header), _) => RequestRecord(header.opCode, Some(header.xid))
+        case ReqPacket(None, Some(req: ConnectRequest)) => RequestRecord(OpCode.CREATE_SESSION, None)
       }
-    }
+      // The request is about to be written, so we enqueue it in the waiting request queue
+      val p = new Promise[RepPacket]()
+
+      synchronized {
+        processedReq.enqueue((reqRecord, p))
+        encoder.write(req) flatMap { unit =>
+          if (!isReading.getAndSet(true)) {
+            readLoop()
+          }
+          p
+        }
+      }
   }
 
   /**
@@ -205,7 +118,6 @@ class RequestMatcher(
     println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
     if (reqRecord.xid.isDefined)
       if (reqRecord.xid.get != repHeader.xid) throw new ZkDispatchingException("wrong association")
-
   }
 
   class Reader(trans: Transport[Buf, Buf]) {
@@ -220,8 +132,8 @@ class RequestMatcher(
      * @return
      */
     def read(
-      pendingRequest: Option[(RequestRecord, Promise[Response])],
-      buffer: Buf): Future[Response] = {
+      pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
+      buffer: Buf): Future[RepPacket] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
@@ -266,20 +178,18 @@ class RequestMatcher(
      * @param buf the current buffer
      * @return possibly the (header, response) or an exception
      */
-    def readFromHeader(buf: Buf): Try[Future[Response]] = Try {
+    def readFromHeader(buf: Buf): Try[Future[RepPacket]] = Try {
       val (header, rem) = ReplyHeader(buf) match {
-        case Return((header@ReplyHeader(_, _, 0), buf2)) =>
-          sessionManager(header)
-          (header, buf2)
+        case Return((header@ReplyHeader(_, _, 0), buf2)) => (header, buf2)
         case Return((header@ReplyHeader(_, _, err), buf2)) =>
-          sessionManager(header)
           throw ZookeeperException.create("Error while readFromHeader :", err)
         case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
       }
 
       header.xid match {
         case -2 =>
-          Future(new EmptyResponse)
+          val packet = RepPacket(StateHeader(header), None)
+          Future(packet)
         case -1 =>
           println("---> Watches event")
 
@@ -287,19 +197,19 @@ class RequestMatcher(
             case Return((event@WatchEvent(_, _, _), rem2)) =>
               // Notifies the watch manager we have a new watchEvent
               watchManager.process(event)
-              // Notifies the session manager we have a new watchEvent
-              sessionManager(event)
               // Continue to read if a response if expected
-              Future(event)
+              val packet = RepPacket(StateHeader(header), Some(event))
+              Future(packet)
             case Throw(exc) =>
-              sessionManager(header)
               throw ZkDecodingException("Error while decoding watch event").initCause(exc)
           }
 
         case 1 =>
-          Future(new EmptyResponse)
+          val packet = RepPacket(StateHeader(header), None)
+          Future(packet)
         case -4 =>
-          Future(new EmptyResponse)
+          val packet = RepPacket(StateHeader(header), None)
+          Future(packet)
         case _ =>
           throw ZkDecodingException("Could not decode this Buf")
       }
@@ -320,8 +230,8 @@ class RequestMatcher(
      * @return possibly the (header, response) or an exception
      */
     def readFromRequest(
-      req: (RequestRecord, Promise[Response]),
-      buf: Buf): Try[Future[Response]] = Try {
+      req: (RequestRecord, Promise[RepPacket]),
+      buf: Buf): Try[Future[RepPacket]] = Try {
       val (reqRecord, _) = req
 
       reqRecord.opCode match {
@@ -329,15 +239,8 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
-              if (header.err == 0) {
-                println("---> AUTH")
-                Future(new EmptyResponse)
-              } else {
-                throw ZookeeperException.create("Error while auth", header.err)
-              }
-
+              println("---> AUTH")
+              Future(RepPacket(StateHeader(header), None))
             case Throw(exc) => throw exc
           }
 
@@ -348,30 +251,24 @@ class RequestMatcher(
                 body.timeOut + " | sessionID: " +
                 body.sessionId + " | canRO: " +
                 body.canRO.getOrElse(false))
-              // Notifies the session manager the connection is established
-              sessionManager.completeConnection(body)
+              // Create a temporary session
+              session = new Session(
+                body.sessionId,
+                body.passwd,
+                body.timeOut)
+              session.state = States.CONNECTED
+              session.isFirstConnect = false
+              Future(RepPacket(StateHeader(0, 0), Some(body)))
 
-              Future(body)
-
-            case Throw(exception) =>
-              // Notifies the session manager the connection has failed
-              sessionManager.connectionFailed()
-              throw exception
+            case Throw(exception) => throw exception
           }
 
         case OpCode.PING =>
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
-              if (header.err == 0) {
-                println("---> PING")
-                Future(new EmptyResponse)
-              } else {
-                throw ZookeeperException.create("Error while ping", header.err)
-              }
-
+              println("---> PING")
+              Future(RepPacket(StateHeader(header), None))
             case Throw(exception) => throw exception
           }
 
@@ -379,17 +276,8 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
-              if (header.err == 0) {
-                // Notifies the session manager the connection has successfully closed
-                sessionManager.completeCloseSession()
-                println("---> CLOSE SESSION")
-                Future(new EmptyResponse)
-              } else {
-                throw ZookeeperException.create("Error while close session", header.err)
-              }
-
+              println("---> CLOSE SESSION")
+              Future(RepPacket(StateHeader(header), None))
             case Throw(exception) => throw exception
           }
 
@@ -397,17 +285,15 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               if (header.err == 0) {
                 CreateResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> CREATE")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while create :", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -417,18 +303,17 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
+              // Notifies the watch manager that the watch has successfully registered
               if (header.err == 0) {
-                // Notifies the watch manager that the watch has successfully registered
                 ExistsResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> EXISTS")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while exists", header.err)
+                println("---> EXISTS")
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -438,14 +323,8 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
-              if (header.err == 0) {
-                println("---> DELETE")
-                Future(new EmptyResponse)
-              } else {
-                throw ZookeeperException.create("Error while delete", header.err)
-              }
+              println("---> DELETE")
+              Future(RepPacket(StateHeader(header), None))
 
             case Throw(exception) => throw exception
           }
@@ -454,17 +333,15 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               if (header.err == 0) {
                 SetDataResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> SETDATA")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while setData", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -474,18 +351,16 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
+              // Notifies the watch manager that the watch has successfully registered
               if (header.err == 0) {
-                // Notifies the watch manager that the watch has successfully registered
                 GetDataResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> GETDATA")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while getData", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -495,17 +370,15 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               if (header.err == 0) {
                 SyncResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> SYNC")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while sync", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -515,17 +388,15 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               if (header.err == 0) {
                 SetACLResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> SETACL")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while setACL", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -535,17 +406,15 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               if (header.err == 0) {
                 GetACLResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> GET_ACL")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while getACL", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -555,18 +424,16 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
+              // Notifies the watch manager that the watch has successfully registered
               if (header.err == 0) {
-                // Notifies the watch manager that the watch has successfully registered
                 GetChildrenResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> GET_CHILDREN")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while getChildren", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -576,18 +443,16 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
+              // Notifies the watch manager that the watch has successfully registered
               if (header.err == 0) {
-                // Notifies the watch manager that the watch has successfully registered
                 GetChildren2Response(rem) match {
                   case Return((body, rem2)) =>
                     println("---> GET_CHILDREN2")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                throw ZookeeperException.create("Error while getChildren2", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
 
             case Throw(exception) => throw exception
@@ -597,14 +462,8 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
-              if (header.err == 0) {
-                println("---> SET_WATCHES")
-                Future(new EmptyResponse)
-              } else {
-                throw ZookeeperException.create("Error while setWatches", header.err)
-              }
+              println("---> SET_WATCHES")
+              Future(RepPacket(StateHeader(header), None))
 
             case Throw(exception) => throw exception
           }
@@ -613,20 +472,20 @@ class RequestMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              sessionManager(header)
-
               // fixme maybe continue to read even if header does not eq 0
+
               if (header.err == 0) {
                 TransactionResponse(rem) match {
                   case Return((body, rem2)) =>
                     println("---> TRANSACTION")
-                    Future(body)
+                    Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                // TODO return partial result
-                throw ZookeeperException.create("Error while transaction", header.err)
+                Future(RepPacket(StateHeader(header), None))
               }
+
+            // TODO return partial result
 
             case Throw(exception) => throw exception
           }
@@ -637,6 +496,6 @@ class RequestMatcher(
   }
 
   class Writer(trans: Transport[Buf, Buf]) {
-    def write[Req <: Request](packet: Packet): Future[Unit] = trans.write(packet.buf)
+    def write[Req <: Request](packet: ReqPacket): Future[Unit] = trans.write(packet.buf)
   }
 }

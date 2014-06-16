@@ -23,6 +23,7 @@ class WatchTest extends IntegrationConfig {
     newClient()
     connect()
 
+
     val res = for {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
       exist <- client.get.exists("/zookeeper/test", watch = true)
@@ -40,7 +41,7 @@ class WatchTest extends IntegrationConfig {
     Await.ready(ret.watch.get)
 
     disconnect()
-    Await.ready(client.get.closeService)()
+    Await.ready(client.get.closeService())
   }
 
   test("Create, getData with watches , SetData") {
@@ -63,7 +64,7 @@ class WatchTest extends IntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService)()
+    Await.ready(client.get.closeService())
   }
 
   test("Create, getChildren with watches , delete child") {
@@ -88,7 +89,7 @@ class WatchTest extends IntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService)()
+    Await.ready(client.get.closeService())
   }
 
   test("Create, getChildren2 with watches , delete child") {
@@ -113,7 +114,7 @@ class WatchTest extends IntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService)()
+    Await.ready(client.get.closeService())
   }
 
   test("Create, getChildren(watch on parent) exists(watch on child) , delete child") {
@@ -149,7 +150,7 @@ class WatchTest extends IntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService)()
+    Await.ready(client.get.closeService())
   }
 
 

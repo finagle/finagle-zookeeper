@@ -2,6 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.finagle.exp.zookeeper.data.Auth
+import com.twitter.finagle.exp.zookeeper.session.Session
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.io.Buf
@@ -41,6 +42,11 @@ case class CheckWatchesRequest(
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(typ))
+}
+
+case class ConfigureRequest(req: Either[WatchManager, Session])
+  extends Request {
+  override def buf: Buf = Buf.Empty
 }
 
 case class ConnectRequest(
@@ -104,11 +110,9 @@ case class ExistsRequest(path: String, watch: Boolean)
     .concat(BufBool(watch))
 }
 
-class PingRequest extends RequestHeader(-2, OpCode.PING) with Request
 case class PrepareRequest(watchManager: WatchManager) extends Request {
   def buf: Buf = null
 }
-class CloseSessionRequest extends RequestHeader(1, OpCode.CLOSE_SESSION) with Request
 case class SetDataRequest(
   path: String,
   data: Array[Byte],

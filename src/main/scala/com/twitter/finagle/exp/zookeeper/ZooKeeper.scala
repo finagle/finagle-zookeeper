@@ -18,15 +18,15 @@ import com.twitter.io.Buf
  * which is responsible of queueing every incoming responses
  * and reading new ones from the transport if queue is empty.
  */
-object ZooKeeperClient extends DefaultClient[Request, Response](
+object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
   name = "zookeeper",
-  endpointer = Bridge[Buf, Buf, Request, Response](
+  endpointer = Bridge[Buf, Buf, ReqPacket, RepPacket](
     NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
 
 object ZooKeeper {
-  def newClient(name: Name, label: String): ServiceFactory[Request, Response] =
+  def newClient(name: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
     ZooKeeperClient.newClient(name, label)
 
-  def newRichClient(dest: String): ZkClient =
-    new ZkClient(ZooKeeperClient.newClient(dest))
+  def newRichClient(hostList: String): ZkClient =
+    new ZkClient(hostList)
 }
