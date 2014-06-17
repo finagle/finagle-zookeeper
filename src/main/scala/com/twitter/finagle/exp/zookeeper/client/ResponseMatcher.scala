@@ -1,9 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.exp.zookeeper.session.Session
-import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.io.Buf
 import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.session.Session
+import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.{Response, Request}
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
@@ -13,13 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 class ResponseMatcher(
-  trans: Transport[Buf, Buf]
-  /* sender: ReqPacket => Future[RepPacket]*/) {
+  trans: Transport[Buf, Buf]) {
   /**
    * Local variables
    * processesReq - queue of requests waiting for responses
    * watchManager - the session watch manager
-   * sessionManager - the session manager
    * isReading - the reading loop is started or not
    *
    * encoder - creates a complete Packet from a request
@@ -39,7 +37,7 @@ class ResponseMatcher(
         if (processedReq.size > 0) Some(processedReq.front) else None
 
       decoder.read(currentReq, buffer) onFailure { exc =>
-        // If this exception is associated to a request, then propagate in the promise
+        // If this exception is associated to a request, then propagate to the promise
         if (currentReq.isDefined) {
           processedReq.dequeue()._2.setException(exc)
         } else {
@@ -50,13 +48,14 @@ class ResponseMatcher(
 
     fullRep transform {
       case Return(rep) => rep.response match {
+        // This is a notification
         case Some(event: WatchEvent) => Future.Done
-
+        // This is a Response with Body
         case Some(resp: Response) =>
           // The request record is dequeued now that it's satisfied
           processedReq.dequeue()._2.setValue(rep)
           Future.Done
-
+        // This is a Response without Body
         case None =>
           processedReq.dequeue()._2.setValue(rep)
           Future.Done
@@ -73,23 +72,22 @@ class ResponseMatcher(
   }
 
   /**
-   * We make decisions depending on request type, a Packet is created,
+   * We make decisions depending on request type,
    * a request record of the Packet is added to the queue, the packet is
    * finally written to the transport.
    * @param req the request to send
-   * @return a Future[Unit] when the request is completely written
+   * @return a Future[Unit] when the request is finally written
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
     case ReqPacket(None, Some(ConfigureRequest(Left(watchManagr)))) =>
       watchManager = watchManagr
-      println("Configured new watchManager")
       Future(RepPacket(StateHeader(0, 0), None))
 
     case ReqPacket(None, Some(ConfigureRequest(Right(sess)))) =>
       session = sess
-      println("Configured new Session")
       Future(RepPacket(StateHeader(0, 0), None))
 
+    // ZooKeeper Request
     case ReqPacket(_, _) =>
       val reqRecord = req match {
         case ReqPacket(Some(header), _) => RequestRecord(header.opCode, Some(header.xid))
@@ -147,18 +145,18 @@ class ResponseMatcher(
         case Return(response) => response
 
         case Throw(exc1) => exc1 match {
+          /**
+           * This is a decoding error, we should try to decode the buffer
+           * as a watchEvent
+           */
           case decodingExc: ZkDecodingException =>
-
-            /**
-             * This is a decoding error, we should try to decode the buffer
-             * as a watchEvent
-             */
             readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
               case Throw(exc2) =>
                 Future.exception(ZkDecodingException("Impossible to decode this response").initCause(exc2))
             }
 
+          // fixme we should discard dispatchingExc at the moment
           case dispatchingExc: ZkDispatchingException =>
             readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
@@ -186,18 +184,17 @@ class ResponseMatcher(
         case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
       }
 
+      //fixme we should only decode notifications
       header.xid match {
         case -2 =>
           val packet = RepPacket(StateHeader(header), None)
           Future(packet)
         case -1 =>
-          println("---> Watches event")
 
           WatchEvent(rem) match {
             case Return((event@WatchEvent(_, _, _), rem2)) =>
               // Notifies the watch manager we have a new watchEvent
               watchManager.process(event)
-              // Continue to read if a response if expected
               val packet = RepPacket(StateHeader(header), Some(event))
               Future(packet)
             case Throw(exc) =>
@@ -217,7 +214,7 @@ class ResponseMatcher(
 
     /**
      * If a request is expected, this function will be called first
-     * the expected response opCode is matched, so that we have the
+     * the expected response's opCode is matched, so that we have the
      * correct way to decode. The header is decoded first, the resulting
      * header is checked with checkAssociation to make sure both xids
      * are equal.
@@ -239,7 +236,6 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              println("---> AUTH")
               Future(RepPacket(StateHeader(header), None))
             case Throw(exc) => throw exc
           }
@@ -247,11 +243,8 @@ class ResponseMatcher(
         case OpCode.CREATE_SESSION =>
           ConnectResponse(buf) match {
             case Return((body, rem)) =>
-              println("---> CONNECT | timeout: " +
-                body.timeOut + " | sessionID: " +
-                body.sessionId + " | canRO: " +
-                body.canRO.getOrElse(false))
               // Create a temporary session
+              // fixme maybe we should start to ping here if the timeout is too tight
               session = new Session(
                 body.sessionId,
                 body.passwd,
@@ -267,7 +260,6 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              println("---> PING")
               Future(RepPacket(StateHeader(header), None))
             case Throw(exception) => throw exception
           }
@@ -276,7 +268,6 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              println("---> CLOSE SESSION")
               Future(RepPacket(StateHeader(header), None))
             case Throw(exception) => throw exception
           }
@@ -285,10 +276,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
+
               if (header.err == 0) {
                 CreateResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> CREATE")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -303,16 +294,14 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              // Notifies the watch manager that the watch has successfully registered
+
               if (header.err == 0) {
                 ExistsResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> EXISTS")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
               } else {
-                println("---> EXISTS")
                 Future(RepPacket(StateHeader(header), None))
               }
 
@@ -323,7 +312,6 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              println("---> DELETE")
               Future(RepPacket(StateHeader(header), None))
 
             case Throw(exception) => throw exception
@@ -333,10 +321,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
+
               if (header.err == 0) {
                 SetDataResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> SETDATA")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -351,11 +339,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              // Notifies the watch manager that the watch has successfully registered
+
               if (header.err == 0) {
                 GetDataResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> GETDATA")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -370,10 +357,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
+
               if (header.err == 0) {
                 SyncResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> SYNC")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -388,10 +375,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
+
               if (header.err == 0) {
                 SetACLResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> SETACL")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -406,10 +393,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
+
               if (header.err == 0) {
                 GetACLResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> GET_ACL")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -424,11 +411,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              // Notifies the watch manager that the watch has successfully registered
+
               if (header.err == 0) {
                 GetChildrenResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> GET_CHILDREN")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -443,11 +429,10 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              // Notifies the watch manager that the watch has successfully registered
+
               if (header.err == 0) {
                 GetChildren2Response(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> GET_CHILDREN2")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }
@@ -462,7 +447,6 @@ class ResponseMatcher(
           ReplyHeader(buf) match {
             case Return((header, rem)) =>
               checkAssociation(reqRecord, header)
-              println("---> SET_WATCHES")
               Future(RepPacket(StateHeader(header), None))
 
             case Throw(exception) => throw exception

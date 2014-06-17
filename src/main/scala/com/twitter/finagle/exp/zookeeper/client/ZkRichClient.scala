@@ -18,19 +18,17 @@ class ZkClient(
   autoReconnect: Boolean = true
   ) extends Closable {
 
-
   private[this] val connectionManager = new ConnectionManager(hostList)
   private[this] val sessionManager = new SessionManager(autoReconnect, this)
+  @volatile private[this] var session: Session = sessionManager.session
+  private[finagle] val watchManager: WatchManager = new WatchManager(chroot)
   @volatile private[this] var connection: Connection = {
     connectionManager.initConnection()
     connectionManager.connection
   }
-  @volatile private[this] var session: Session = sessionManager.session
-  private[finagle] val watchManager: WatchManager = new WatchManager(chroot)
-
-  //TODO implement request to the dispatcher (getState, getSessionID, getPassword
 
   def addAuth(auth: Auth): Future[Unit] = {
+    checkState()
     // TODO check auth ?
     val rep = ReqPacket(
       Some(RequestHeader(-4, OpCode.AUTH)),
@@ -47,6 +45,7 @@ class ZkClient(
   }
 
   def addAuth(scheme: String, data: Array[Byte]): Future[Unit] = {
+    checkState()
     // TODO check auth ?
     val rep = ReqPacket(
       Some(RequestHeader(-4, OpCode.AUTH)),
@@ -70,15 +69,20 @@ class ZkClient(
 
     connection.serve(rep) flatMap { rep =>
       session.parseStateHeader(rep.header)
-      Future(rep.response.get.asInstanceOf[ConnectResponse])
-    } onSuccess { rep =>
-      sessionManager.initSession(rep)
+      sessionManager.initSession(rep.response.get.asInstanceOf[ConnectResponse])
       session = sessionManager.session
+      // fixme make sure session and watchManager is configured before continue
       // gives the current session to the dispatcher
-      configureSession(session)
+      Await.result(configureSession(session))
       // gives the watchManger to the dispatcher
-      configureWatchManager(watchManager)
+      Await.result(configureWatchManager(watchManager))
       session.startPing(ping())
+      val finalRep = rep.response.get.asInstanceOf[ConnectResponse]
+      println("---> CONNECT | timeout: " +
+        finalRep.timeOut + " | sessionID: " +
+        finalRep.sessionId + " | canRO: " +
+        finalRep.canRO.getOrElse(false))
+      Future(finalRep)
     } onFailure { exc =>
       session.state = States.CLOSED
       Future.exception(exc)
@@ -90,27 +94,40 @@ class ZkClient(
   def closeSession(): Future[Unit] = {
     checkState()
     session.prepareClose()
-    // fixme manage if close session failed
+    // fixme implement canClose
 
     val rep = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
 
     connection.serve(rep) flatMap { rep =>
       session.parseStateHeader(rep.header)
-      Future.Unit
+      if (rep.header.err == 0) {
+        Future.Unit
+      } else {
+        Future.exception(ZookeeperException.create("Error while close", rep.header.err))
+      }
     } onSuccess (_ => session.close())
   }
 
+  /**
+   * We use this to configure the dispatcher session
+   * with the client Session.
+   * @param session client Session
+   * @return
+   */
   private[this] def configureSession(session: Session): Future[Unit] = {
-
     val req = ReqPacket(None, Some(ConfigureRequest(Right(session))))
     connection.serve(req).unit
-
   }
-  private[this] def configureWatchManager(manager: WatchManager): Future[Unit] = {
 
+  /**
+   * We use this to give the client WatchManager to the dispatcher
+   * dispatcher needs it when receiving watch event.
+   * @param manager client WatchManager
+   * @return
+   */
+  private[this] def configureWatchManager(manager: WatchManager): Future[Unit] = {
     val req = ReqPacket(None, Some(ConfigureRequest(Left(manager))))
     connection.serve(req).unit
-
   }
 
   def create(
@@ -119,6 +136,7 @@ class ZkClient(
     acl: Array[ACL],
     createMode: Int): Future[String] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
@@ -141,6 +159,7 @@ class ZkClient(
 
   def delete(path: String, version: Int): Future[Unit] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -162,6 +181,7 @@ class ZkClient(
 
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -194,6 +214,7 @@ class ZkClient(
 
   def getACL(path: String): Future[GetACLResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -213,6 +234,7 @@ class ZkClient(
 
   def getChildren(path: String, watch: Boolean = false): Future[GetChildrenResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -242,6 +264,7 @@ class ZkClient(
 
   def getChildren2(path: String, watch: Boolean = false): Future[GetChildren2Response] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -256,12 +279,12 @@ class ZkClient(
         if (watch) {
           val watch = watchManager.register(path, WatchType.exists)
           val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
-          val rep = GetChildren2Response(childrenList, res.stat, Some(watch))
-          Future(rep)
+          val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
+          Future(finalRep)
         } else {
           val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
-          val rep = GetChildren2Response(childrenList, res.stat, None)
-          Future(rep)
+          val finalRep = GetChildren2Response(childrenList, res.stat, None)
+          Future(finalRep)
         }
       } else {
         Future.exception(ZookeeperException.create("Error while getChildren2", rep.header.err))
@@ -271,6 +294,7 @@ class ZkClient(
 
   def getData(path: String, watch: Boolean = false): Future[GetDataResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -284,8 +308,8 @@ class ZkClient(
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
           val watch = watchManager.register(path, WatchType.exists)
-          val rep = GetDataResponse(res.data, res.stat, Some(watch))
-          Future(rep)
+          val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
+          Future(finalRep)
         } else {
           Future(res)
         }
@@ -308,18 +332,23 @@ class ZkClient(
   }*/
 
   private[this] def ping(): Future[Unit] = {
-    checkState()
 
+    checkState()
     val req = ReqPacket(Some(RequestHeader(-2, OpCode.PING)), None)
 
     connection.serve(req) flatMap { rep =>
       session.parseStateHeader(rep.header)
-      Future.Unit
+      if (rep.header.err == 0) {
+        Future.Unit
+      } else {
+        Future.exception(ZookeeperException.create("Error while ping", rep.header.err))
+      }
     }
   }
 
   def setACL(path: String, acl: Array[ACL], version: Int): Future[SetACLResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     ACL.check(acl)
@@ -340,6 +369,8 @@ class ZkClient(
   }
 
   def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
+
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -358,12 +389,15 @@ class ZkClient(
     }
   }
 
-  // We can only use this on reconnection
-  private[this] def setWatches(relativeZxid: Int,
+  // Only use this on reconnection
+  private[this] def setWatches(
+    relativeZxid: Int,
     dataWatches: Array[String],
     existsWatches: Array[String],
     childWatches: Array[String]
     ): Future[Unit] = {
+
+    checkState()
     val req = ReqPacket(
       Some(RequestHeader(-8, OpCode.SET_WATCHES)),
       Some(SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches)))
@@ -383,6 +417,7 @@ class ZkClient(
 
   def sync(path: String): Future[SyncResponse] = {
 
+    checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ReqPacket(
@@ -404,6 +439,7 @@ class ZkClient(
 
   def transaction(opList: Array[OpRequest]): Future[TransactionResponse] = {
 
+    checkState()
     Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>
         val transaction = new Transaction(res)
@@ -413,7 +449,7 @@ class ZkClient(
 
         connection.serve(req) flatMap { rep =>
           session.parseStateHeader(rep.header)
-
+          // fixme return partial result
           if (rep.header.err == 0) {
             val res = rep.response.get.asInstanceOf[TransactionResponse]
             val finalOpList = Transaction.formatPath(res.responseList, chroot)
@@ -425,7 +461,6 @@ class ZkClient(
       case Throw(exc) => Future.exception(exc)
     }
   }
-
 
   /**
    * This method is called each time we try to write on the Transport
@@ -459,8 +494,6 @@ class ZkClient(
         throw new RuntimeException("No connection exception: Did you ever connected to the server ? " + session.state)
     }
   }
-
-
 }
 
 object ZkClient {

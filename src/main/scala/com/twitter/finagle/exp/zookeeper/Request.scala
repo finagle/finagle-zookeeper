@@ -46,7 +46,7 @@ case class CheckWatchesRequest(
 
 case class ConfigureRequest(req: Either[WatchManager, Session])
   extends Request {
-  override def buf: Buf = Buf.Empty
+  def buf: Buf = Buf.Empty
 }
 
 case class ConnectRequest(
@@ -110,9 +110,6 @@ case class ExistsRequest(path: String, watch: Boolean)
     .concat(BufBool(watch))
 }
 
-case class PrepareRequest(watchManager: WatchManager) extends Request {
-  def buf: Buf = null
-}
 case class SetDataRequest(
   path: String,
   data: Array[Byte],
