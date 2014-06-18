@@ -8,7 +8,7 @@ import scala.collection.mutable
  * WatchManager may be used to manage watcher events, keep a Set of current watches.
  */
 
-class WatchManager(chroot: Option[String]) {
+class WatchManager(chroot: String) {
   private val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
   private val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
   private val childWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
@@ -58,7 +58,7 @@ class WatchManager(chroot: Option[String]) {
     val event = WatchEvent(
       watchEvent.typ,
       watchEvent.state,
-      watchEvent.path.substring(chroot.getOrElse("").length))
+      watchEvent.path.substring(chroot.length))
 
     event.typ match {
       case eventType.NONE => // TODO

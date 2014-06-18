@@ -14,18 +14,23 @@ import com.twitter.util._
 class ZkClient(
   hostList: String,
   readOnly: Boolean = false,
-  chroot: Option[String] = None,
+  chRoot: Option[String] = None,
   autoReconnect: Boolean = true
   ) extends Closable {
 
+  private[this] val chroot = chRoot.getOrElse("")
   private[this] val connectionManager = new ConnectionManager(hostList)
   private[this] val sessionManager = new SessionManager(autoReconnect, this)
-  @volatile private[this] var session: Session = sessionManager.session
-  private[finagle] val watchManager: WatchManager = new WatchManager(chroot)
-  @volatile private[this] var connection: Connection = {
+  private[this] val watchManager: WatchManager = new WatchManager(chroot)
+  private[this] var session: Session = sessionManager.session
+  private[this] var connection: Connection = {
     connectionManager.initConnection()
     connectionManager.connection
   }
+
+  def getSessionId: Long = session.sessionId
+  def getSessionPwd: Array[Byte] = session.sessionPassword
+  def getTimeout: Int = session.sessionTimeOut
 
   def addAuth(auth: Auth): Future[Unit] = {
     checkState()
@@ -69,19 +74,20 @@ class ZkClient(
 
     connection.serve(rep) flatMap { rep =>
       session.parseStateHeader(rep.header)
-      sessionManager.initSession(rep.response.get.asInstanceOf[ConnectResponse])
+      val finalRep = rep.response.get.asInstanceOf[ConnectResponse]
+
+      sessionManager.initSession(finalRep)
       session = sessionManager.session
+      session.startPing(ping())
       // fixme make sure session and watchManager is configured before continue
       // gives the current session to the dispatcher
-      Await.result(configureSession(session))
-      // gives the watchManger to the dispatcher
-      Await.result(configureWatchManager(watchManager))
-      session.startPing(ping())
-      val finalRep = rep.response.get.asInstanceOf[ConnectResponse]
-      println("---> CONNECT | timeout: " +
+      Await.result(configureDispatcher())
+
+      /*println("---> CONNECT | timeout: " +
         finalRep.timeOut + " | sessionID: " +
         finalRep.sessionId + " | canRO: " +
-        finalRep.canRO.getOrElse(false))
+        finalRep.canRO.getOrElse(false))*/
+
       Future(finalRep)
     } onFailure { exc =>
       session.state = States.CLOSED
@@ -93,8 +99,8 @@ class ZkClient(
   def closeService(): Future[Unit] = connection.close()
   def closeSession(): Future[Unit] = {
     checkState()
+    session.canClose
     session.prepareClose()
-    // fixme implement canClose
 
     val rep = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
 
@@ -111,22 +117,13 @@ class ZkClient(
   /**
    * We use this to configure the dispatcher session
    * with the client Session.
-   * @param session client Session
    * @return
    */
-  private[this] def configureSession(session: Session): Future[Unit] = {
-    val req = ReqPacket(None, Some(ConfigureRequest(Right(session))))
-    connection.serve(req).unit
-  }
-
-  /**
-   * We use this to give the client WatchManager to the dispatcher
-   * dispatcher needs it when receiving watch event.
-   * @param manager client WatchManager
-   * @return
-   */
-  private[this] def configureWatchManager(manager: WatchManager): Future[Unit] = {
-    val req = ReqPacket(None, Some(ConfigureRequest(Left(manager))))
+  private[this] def configureDispatcher(): Future[Unit] = {
+    val req = ReqPacket(None, Some(ConfigureRequest(
+      watchManager,
+      sessionManager
+    )))
     connection.serve(req).unit
   }
 
@@ -150,7 +147,7 @@ class ZkClient(
       if (rep.header.err == 0) {
         session.parseStateHeader(rep.header)
         val finalRep = rep.response.get.asInstanceOf[CreateResponse]
-        Future(finalRep.path.substring(chroot.getOrElse("").length))
+        Future(finalRep.path.substring(chroot.length))
       } else {
         Future.exception(ZookeeperException.create("Error while create", rep.header.err))
       }
@@ -248,11 +245,11 @@ class ZkClient(
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
           val watch = watchManager.register(path, WatchType.exists)
-          val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
+          val childrenList = res.children map (_.substring(chroot.length))
           val rep = GetChildrenResponse(childrenList, Some(watch))
           Future(rep)
         } else {
-          val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
+          val childrenList = res.children map (_.substring(chroot.length))
           val rep = GetChildrenResponse(childrenList, None)
           Future(rep)
         }
@@ -278,11 +275,11 @@ class ZkClient(
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
           val watch = watchManager.register(path, WatchType.exists)
-          val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
+          val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
           Future(finalRep)
         } else {
-          val childrenList = res.children map (_.substring(chroot.getOrElse("").length))
+          val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildren2Response(childrenList, res.stat, None)
           Future(finalRep)
         }
@@ -429,7 +426,7 @@ class ZkClient(
 
       if (rep.header.err == 0) {
         val res = rep.response.get.asInstanceOf[SyncResponse]
-        val finalRep = SyncResponse(res.path.substring(chroot.getOrElse("").length))
+        val finalRep = SyncResponse(res.path.substring(chroot.length))
         Future(finalRep)
       } else {
         Future.exception(ZookeeperException.create("Error while sync", rep.header.err))

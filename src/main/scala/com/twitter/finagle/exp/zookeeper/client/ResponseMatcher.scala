@@ -1,13 +1,12 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.io.Buf
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.session.Session
 import com.twitter.finagle.exp.zookeeper.session.Session.States
-import com.twitter.finagle.exp.zookeeper.{Response, Request}
+import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.transport.Transport
+import com.twitter.io.Buf
 import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
@@ -24,10 +23,12 @@ class ResponseMatcher(
    * decoder - creates a response from a Buffer
    */
   val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
-  @volatile var watchManager = new WatchManager(None)
-  @volatile var session: Session = new Session()
-  val isReading = new AtomicBoolean(false)
 
+  var sessionManager: Option[SessionManager] = None
+  var watchManager: Option[WatchManager] = None
+  var session: Session = new Session()
+
+  val isReading = new AtomicBoolean(false)
   val encoder = new Writer(trans)
   val decoder = new Reader(trans)
 
@@ -79,12 +80,9 @@ class ResponseMatcher(
    * @return a Future[Unit] when the request is finally written
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
-    case ReqPacket(None, Some(ConfigureRequest(Left(watchManagr)))) =>
-      watchManager = watchManagr
-      Future(RepPacket(StateHeader(0, 0), None))
-
-    case ReqPacket(None, Some(ConfigureRequest(Right(sess)))) =>
-      session = sess
+    case ReqPacket(None, Some(ConfigureRequest(watchMngr,sessMngr))) =>
+      watchManager = Some(watchMngr)
+      sessionManager = Some(sessMngr)
       Future(RepPacket(StateHeader(0, 0), None))
 
     // ZooKeeper Request
@@ -113,7 +111,7 @@ class ResponseMatcher(
    * @param repHeader freshly decoded ReplyHeader
    */
   def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader) = {
-    println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
+    //println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
     if (reqRecord.xid.isDefined)
       if (reqRecord.xid.get != repHeader.xid) throw new ZkDispatchingException("wrong association")
   }
@@ -194,7 +192,7 @@ class ResponseMatcher(
           WatchEvent(rem) match {
             case Return((event@WatchEvent(_, _, _), rem2)) =>
               // Notifies the watch manager we have a new watchEvent
-              watchManager.process(event)
+              watchManager.get.process(event)
               val packet = RepPacket(StateHeader(header), Some(event))
               Future(packet)
             case Throw(exc) =>

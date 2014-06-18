@@ -44,24 +44,6 @@ case class Stat(
 }
 
 object Stat {
-  //def apply(buffer: BufferReader): Try[Stat] = Try(decode(buffer))
-  /*def decode(buffer: BufferReader): Stat = {
-
-    val czxid = buffer.readLong
-    val mzxid = buffer.readLong
-    val ctime = buffer.readLong
-    val mtime = buffer.readLong
-    val version = buffer.readInt
-    val cversion = buffer.readInt
-    val aversion = buffer.readInt
-    val ephemeralOwner = buffer.readLong
-    val dataLength = buffer.readInt
-    val numChildren = buffer.readInt
-    val pzxid = buffer.readLong
-
-    new Stat(czxid, mzxid, ctime, mtime, version, cversion, aversion, ephemeralOwner, dataLength, numChildren, pzxid)
-  }*/
-
   def unapply(buf: Buf): Option[(Stat, Buf)] = {
     val BufLong(czxid,
     BufLong(mzxid,

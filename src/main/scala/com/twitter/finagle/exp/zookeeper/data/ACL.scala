@@ -15,20 +15,6 @@ object ACL {
   def apply(perm: Int, scheme: String, id: String): ACL = new ACL(perm, new Id(scheme, id))
   def apply(perm: Int, id: String) = parseACL(id + perm)(0)
 
-  /*def decodeArray(buffer: BufferReader): Try[Array[ACL]] = Try {
-    val size = buffer.readInt
-    val aclList = new Array[ACL](size)
-
-    for (i <- 0 until size) {
-      aclList(i) = decode(buffer)
-    }
-    aclList
-  }*/
-
-  /*def decode(buffer: BufferReader): ACL = {
-    ACL(buffer.readInt, buffer.readString, buffer.readString)
-  }*/
-
   def unapply(buf: Buf): Option[(ACL, Buf)] = {
     val BufInt(perms, Id(id, rem)) = buf
     Some(ACL(perms, id), rem)
@@ -61,7 +47,6 @@ object ACL {
    */
   private def ipToBytes(addr: String): Array[Byte] = {
     // TODO implement for ipv6
-
 
     def ipv4ToBytes(addr: String): Array[Byte] = {
       val parts = addr.split('.')

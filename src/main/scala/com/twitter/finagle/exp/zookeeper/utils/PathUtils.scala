@@ -65,7 +65,10 @@ object PathUtils {
     }
   }
 
-  def prependChroot(path: String, chroot: Option[String]): String =
-    chroot.fold(path)({ c => if (path == "/") c else c + path })
+  def prependChroot(path: String, chroot: String): String =
+    if (chroot.trim.isEmpty) path
+    else {
+      if (path == "/") chroot else chroot + path
+    }
 
 }

@@ -15,10 +15,10 @@ sealed trait OpRequest {
 
 trait ResultDecoder[U <: OpResult] {
   def unapply(buffer: Buf): Option[(U, Buf)]
-  def apply(buffer: Buf): Try[(U, Buf)] = Try {
+  def apply(buffer: Buf): Try[(U, Buf)] = {
     unapply(buffer) match {
-      case Some((rep, rem)) => (rep, rem)
-      case None => throw ZkDecodingException("Error while decoding")
+      case Some((rep, rem)) => Return((rep, rem))
+      case None => Throw(ZkDecodingException("Error while decoding"))
     }
   }
 }
@@ -155,7 +155,7 @@ object Transaction {
     }
   }
 
-  def prepareAndCheck(opList: Seq[OpRequest], chroot: Option[String]): Try[Seq[OpRequest]] = Try {
+  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = Try {
     opList map {
       case op: CreateOp =>
         ACL.check(op.aclList)
@@ -177,12 +177,12 @@ object Transaction {
     }
   }
 
-  def formatPath(opList: Seq[OpResult], chroot: Option[String]): Seq[OpResult] = {
+  def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] = {
     opList map {
       case op: Create2Result =>
-        Create2Result(op.path.substring(chroot.getOrElse("").length), op.stat)
+        Create2Result(op.path.substring(chroot.length), op.stat)
       case op: CreateResult =>
-        CreateResult(op.path.substring(chroot.getOrElse("").length))
+        CreateResult(op.path.substring(chroot.length))
       case op: OpResult => op
     }
   }

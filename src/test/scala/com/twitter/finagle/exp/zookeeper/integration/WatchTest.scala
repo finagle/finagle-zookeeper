@@ -135,15 +135,15 @@ class WatchTest extends IntegrationConfig {
     } yield (getchild, exist)
 
 
-    val ret = Await.result(res)
+    val (getChildrenRep, existsRep) = Await.result(res)
 
-    ret._2.asInstanceOf[NodeWithWatch].watch.get onSuccess { rep =>
+    existsRep.asInstanceOf[NodeWithWatch].watch.get onSuccess { rep =>
       assert(rep.typ === eventType.NODE_DELETED)
       assert(rep.state === zkState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test/hello")
     }
 
-    ret._1.watch.get onSuccess { rep =>
+    getChildrenRep.watch.get onSuccess { rep =>
       assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
       assert(rep.state === zkState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")

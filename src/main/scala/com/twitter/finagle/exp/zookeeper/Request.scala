@@ -2,9 +2,8 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.finagle.exp.zookeeper.data.Auth
-import com.twitter.finagle.exp.zookeeper.session.Session
+import com.twitter.finagle.exp.zookeeper.session.{SessionManager}
 import com.twitter.finagle.exp.zookeeper.transport._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.io.Buf
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 
@@ -44,8 +43,10 @@ case class CheckWatchesRequest(
     .concat(BufInt(typ))
 }
 
-case class ConfigureRequest(req: Either[WatchManager, Session])
-  extends Request {
+case class ConfigureRequest(
+  watchManagr: WatchManager,
+  sessionManagr: SessionManager
+  ) extends Request {
   def buf: Buf = Buf.Empty
 }
 

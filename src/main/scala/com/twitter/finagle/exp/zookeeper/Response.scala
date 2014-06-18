@@ -3,15 +3,15 @@ package com.twitter.finagle.exp.zookeeper
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.io.Buf
-import com.twitter.util.{Future, Try}
+import com.twitter.util.{Throw, Return, Future, Try}
 
 sealed trait Response
 sealed trait Decoder[T <: Response] {
   def unapply(buffer: Buf): Option[(T, Buf)]
-  def apply(buffer: Buf): Try[(T, Buf)] = Try {
+  def apply(buffer: Buf): Try[(T, Buf)] = {
     unapply(buffer) match {
-      case Some((rep, rem)) => (rep, rem)
-      case None => throw ZkDecodingException("Error while decoding")
+      case Some((rep, rem)) => Return((rep, rem))
+      case None => Throw(ZkDecodingException("Error while decoding"))
     }
   }
 }
@@ -172,7 +172,7 @@ object TransactionResponse extends Decoder[TransactionResponse] {
 
     // Fixme need to give a partial response in case of failure
     val Transaction(trans, rem) = buf
-    (trans,rem) match {
+    (trans, rem) match {
       case res: (TransactionResponse, Buf) => Some(res)
       case _ => None
     }

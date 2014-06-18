@@ -32,4 +32,7 @@ class TransactionTest extends FunSuite with IntegrationConfig {
     disconnect()
     Await.ready(client.get.closeService)
   }
+
+  // TODO write more test
+  // TODO test partial result
 }
