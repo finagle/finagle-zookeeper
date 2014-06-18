@@ -4,10 +4,8 @@ import com.twitter.io.Buf
 
 case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
 
-  def buf: Buf = {
-
-    header match {
-      case Some(requestHeader: RequestHeader) =>
+  def buf: Buf = header match {
+      case Some(requestHeader) =>
         request match {
           case Some(req: Request) =>
             requestHeader.buf
@@ -15,11 +13,10 @@ case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
           case None => requestHeader.buf
         }
       case None =>
-        request match {
+        (request: @unchecked) match {
           case Some(req: ConnectRequest) => req.buf
         }
     }
-  }
 }
 
 case class RepPacket(header: StateHeader, response: Option[Response])

@@ -2,9 +2,9 @@ package com.twitter.finagle.exp.zookeeper.connection
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import com.twitter.finagle.exp.zookeeper.{RepPacket, ReqPacket}
 import com.twitter.finagle.{Service, ServiceFactory}
-import com.twitter.finagle.exp.zookeeper.{RepPacket, ReqPacket, Response, Request}
-import com.twitter.util.{Await, Duration, Time, Future}
+import com.twitter.util.{Await, Duration, Future, Time}
 
 class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
   @volatile private[this] var service: Service[ReqPacket, RepPacket] = Await.result(serviceFactory.apply())

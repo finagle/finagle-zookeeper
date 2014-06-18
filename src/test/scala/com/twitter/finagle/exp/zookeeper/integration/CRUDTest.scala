@@ -45,6 +45,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     rep match {
       case rep: NodeWithWatch => assert(rep.stat.dataLength === "HELLO".getBytes.length)
+      case _ => throw new RuntimeException("Test failed")
     }
 
     disconnect()
@@ -66,6 +67,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
     val ret = Await.result(res)
     ret._1 match {
       case rep: NodeWithWatch => assert(rep.stat.dataLength === "HELLO".getBytes.length)
+      case _ => throw new RuntimeException("Test failed")
     }
     assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
     assert(ret._3.data === "CHANGE IS GOOD1".getBytes)
@@ -157,6 +159,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     ret match {
       case rep: NodeWithWatch => assert(rep.stat.numChildren === 0)
+      case _ => throw new RuntimeException("Test failed")
     }
 
     disconnect()
@@ -272,5 +275,4 @@ class CRUDTest extends FunSuite with IntegrationConfig {
     disconnect()
     Await.result(client.get.closeService())
   }
-
 }

@@ -18,8 +18,6 @@ class WatchManager(chroot: String) {
   def getChildWatches = this.synchronized(childWatches)
 
   private[finagle] def register(path: String, watchType: Int): Promise[WatchEvent] = {
-    println("Registering " + path)
-
     watchType match {
       case WatchType.data =>
         dataWatches.get(path) match {
@@ -59,7 +57,6 @@ class WatchManager(chroot: String) {
       watchEvent.typ,
       watchEvent.state,
       watchEvent.path.substring(chroot.length))
-
     event.typ match {
       case eventType.NONE => // TODO
       case eventType.NODE_CREATED =>

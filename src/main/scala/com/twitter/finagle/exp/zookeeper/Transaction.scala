@@ -155,26 +155,28 @@ object Transaction {
     }
   }
 
-  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = Try {
-    opList map {
+  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = {
+    Try.collect(opList map {
       case op: CreateOp =>
         ACL.check(op.aclList)
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath, op.createMode)
-        CreateOp(finalPath, op.data, op.aclList, op.createMode)
+        Return(CreateOp(finalPath, op.data, op.aclList, op.createMode))
       case op: DeleteOp =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
-        DeleteOp(finalPath, op.version)
+        Return(DeleteOp(finalPath, op.version))
       case op: SetDataOp =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
-        SetDataOp(finalPath, op.data, op.version)
+        Return(SetDataOp(finalPath, op.data, op.version))
       case op: CheckOp =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
-        CheckOp(finalPath, op.version)
-    }
+        Return(CheckOp(finalPath, op.version))
+      case multi: MultiHeader =>
+        Throw(new IllegalArgumentException("MultiHeader not an OpRequest"))
+    })
   }
 
   def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] = {

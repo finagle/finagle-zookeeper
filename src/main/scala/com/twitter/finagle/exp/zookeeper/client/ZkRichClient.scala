@@ -1,5 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.client
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.connection.{Connection, ConnectionManager}
@@ -27,6 +29,7 @@ class ZkClient(
     connectionManager.initConnection()
     connectionManager.connection
   }
+  private[this] val isCheckingState = new AtomicBoolean(false)
 
   def getSessionId: Long = session.sessionId
   def getSessionPwd: Array[Byte] = session.sessionPassword
@@ -79,16 +82,15 @@ class ZkClient(
       sessionManager.initSession(finalRep)
       session = sessionManager.session
       session.startPing(ping())
-      // fixme make sure session and watchManager is configured before continue
-      // gives the current session to the dispatcher
-      Await.result(configureDispatcher())
+
+      //if(!isCheckingState.getAndSet(true)) stateLoop()
 
       /*println("---> CONNECT | timeout: " +
         finalRep.timeOut + " | sessionID: " +
         finalRep.sessionId + " | canRO: " +
         finalRep.canRO.getOrElse(false))*/
 
-      Future(finalRep)
+      configureDispatcher() flatMap { rep => Future(finalRep) }
     } onFailure { exc =>
       session.state = States.CLOSED
       Future.exception(exc)
@@ -98,6 +100,7 @@ class ZkClient(
   def close(deadline: Time): Future[Unit] = connection.close(deadline)
   def closeService(): Future[Unit] = connection.close()
   def closeSession(): Future[Unit] = {
+
     checkState()
     session.canClose
     session.prepareClose()
@@ -192,8 +195,8 @@ class ZkClient(
         case Some(response: NodeWithWatch) =>
           if (watch) {
             val watch = watchManager.register(path, WatchType.exists)
-            val rep = NodeWithWatch(response.stat, Some(watch))
-            Future(rep)
+            val finalRep = NodeWithWatch(response.stat, Some(watch))
+            Future(finalRep)
           } else {
             Future(response)
           }
@@ -204,6 +207,8 @@ class ZkClient(
           } else {
             Future.exception(ZookeeperException.create("Error while exists", rep.header.err))
           }
+        case _ =>
+          Future.exception(ZookeeperException.create("Match exception while exists"))
       }
     }
   }
@@ -246,12 +251,12 @@ class ZkClient(
         if (watch) {
           val watch = watchManager.register(path, WatchType.exists)
           val childrenList = res.children map (_.substring(chroot.length))
-          val rep = GetChildrenResponse(childrenList, Some(watch))
-          Future(rep)
+          val finalRep = GetChildrenResponse(childrenList, Some(watch))
+          Future(finalRep)
         } else {
           val childrenList = res.children map (_.substring(chroot.length))
-          val rep = GetChildrenResponse(childrenList, None)
-          Future(rep)
+          val finalRep = GetChildrenResponse(childrenList, None)
+          Future(finalRep)
         }
       } else {
         Future.exception(ZookeeperException.create("Error while getChildren", rep.header.err))
@@ -366,7 +371,6 @@ class ZkClient(
   }
 
   def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
-
     checkState()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -376,7 +380,6 @@ class ZkClient(
 
     connection.serve(req) flatMap { rep =>
       session.parseStateHeader(rep.header)
-
       if (rep.header.err == 0) {
         val res = rep.response.get.asInstanceOf[SetDataResponse]
         Future(res)
@@ -465,30 +468,46 @@ class ZkClient(
    * try to reconnect ( if the session has not expired ) or create a new session
    * if the session has expired. It won't connect if the client has never connected
    */
-  def checkState() {
+  def checkState(): Future[Unit] = {
     if (!session.isFirstConnect) {
       if (session.state == States.CONNECTION_LOST) {
         // We can try to reconnect with last zxid and set the watches back
         session.pingScheduler.currentTask.get.cancel()
         //reconnect
-
+        // todo
+        Future.Unit
       } else if (session.state == States.SESSION_MOVED) {
         // The session has moved to another server
         // TODO what ?
-
+        Future.Unit
       } else if (session.state == States.SESSION_EXPIRED) {
         // Reconnect with a new session
         session.pingScheduler.currentTask.get.cancel()
         //connect
-
+        // todo
+        Future.Unit
       } else if (session.state != States.CONNECTED) {
         // TRY to reconnect with a new session
-        throw new RuntimeException("Client is not connected, see SessionManager")
+        // todo
+        //throw new RuntimeException("Client is not connected, see SessionManager")
+        Future.Unit
+      } else {
+        // todo
+        Future.Unit
       }
     } else {
       // TODO this is false while pinging RW server
-      if (session.state != States.CONNECTING)
+      if (session.state != States.CONNECTING) // todo
         throw new RuntimeException("No connection exception: Did you ever connected to the server ? " + session.state)
+      else Future.Unit // todo
+    }
+  }
+
+  def stateLoop(): Future[Unit] = {
+    if (!session.isClosingSession.get()) checkState() before stateLoop()
+    else {
+      isCheckingState.set(false)
+      Future.Done
     }
   }
 }

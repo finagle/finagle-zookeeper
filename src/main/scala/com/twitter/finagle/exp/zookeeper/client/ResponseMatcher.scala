@@ -42,7 +42,7 @@ class ResponseMatcher(
         if (currentReq.isDefined) {
           processedReq.dequeue()._2.setException(exc)
         } else {
-          throw new RuntimeException("Undefined exception during reading ", exc)
+          Throw(new RuntimeException("Undefined exception during reading ", exc))
         }
       }
     }
@@ -80,9 +80,10 @@ class ResponseMatcher(
    * @return a Future[Unit] when the request is finally written
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
-    case ReqPacket(None, Some(ConfigureRequest(watchMngr,sessMngr))) =>
+    case ReqPacket(None, Some(ConfigureRequest(watchMngr, sessMngr))) =>
       watchManager = Some(watchMngr)
       sessionManager = Some(sessMngr)
+      session = sessionManager.get.session
       Future(RepPacket(StateHeader(0, 0), None))
 
     // ZooKeeper Request
@@ -174,7 +175,7 @@ class ResponseMatcher(
      * @param buf the current buffer
      * @return possibly the (header, response) or an exception
      */
-    def readFromHeader(buf: Buf): Try[Future[RepPacket]] = Try {
+    def readFromHeader(buf: Buf): Try[Future[RepPacket]] = {
       val (header, rem) = ReplyHeader(buf) match {
         case Return((header@ReplyHeader(_, _, 0), buf2)) => (header, buf2)
         case Return((header@ReplyHeader(_, _, err), buf2)) =>
@@ -182,31 +183,20 @@ class ResponseMatcher(
         case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
       }
 
-      //fixme we should only decode notifications
       header.xid match {
-        case -2 =>
-          val packet = RepPacket(StateHeader(header), None)
-          Future(packet)
         case -1 =>
-
           WatchEvent(rem) match {
             case Return((event@WatchEvent(_, _, _), rem2)) =>
               // Notifies the watch manager we have a new watchEvent
               watchManager.get.process(event)
               val packet = RepPacket(StateHeader(header), Some(event))
-              Future(packet)
+              Return(Future(packet))
             case Throw(exc) =>
-              throw ZkDecodingException("Error while decoding watch event").initCause(exc)
+              Throw(ZkDecodingException("Error while decoding watch event").initCause(exc))
           }
 
-        case 1 =>
-          val packet = RepPacket(StateHeader(header), None)
-          Future(packet)
-        case -4 =>
-          val packet = RepPacket(StateHeader(header), None)
-          Future(packet)
         case _ =>
-          throw ZkDecodingException("Could not decode this Buf")
+          Throw(ZkDecodingException("Could not decode this Buf"))
       }
     }
 
@@ -242,7 +232,6 @@ class ResponseMatcher(
           ConnectResponse(buf) match {
             case Return((body, rem)) =>
               // Create a temporary session
-              // fixme maybe we should start to ping here if the timeout is too tight
               session = new Session(
                 body.sessionId,
                 body.passwd,
