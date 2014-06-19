@@ -31,9 +31,8 @@ class Session(
   @volatile private[this] var lastZxid: Long = 0L
   @volatile var state: States.ConnectionState = States.NOT_CONNECTED
 
-  private[finagle] var isFirstConnect: Boolean = true
+  private[finagle] val isFirstConnect = new AtomicBoolean(true)
   private[finagle] val isClosingSession = new AtomicBoolean(false)
-  val isValid = new AtomicBoolean(true)
   private[finagle] val pingScheduler = new PingScheduler
 
   /**
@@ -110,7 +109,7 @@ class Session(
       case -666 =>
         // -666 is the code for first connect
         if (state == States.CONNECTING) {
-          isFirstConnect = false
+          isFirstConnect.set(false)
           state = States.CONNECTED
         }
       case _ =>

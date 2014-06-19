@@ -1,5 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.client
 
+import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
+import com.twitter.finagle.{CancelledRequestException, WriteException, ChannelException}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
@@ -11,8 +13,7 @@ import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
-class ResponseMatcher(
-  trans: Transport[Buf, Buf]) {
+class ResponseMatcher(trans: Transport[Buf, Buf]) {
   /**
    * Local variables
    * processesReq - queue of requests waiting for responses
@@ -22,31 +23,50 @@ class ResponseMatcher(
    * encoder - creates a complete Packet from a request
    * decoder - creates a response from a Buffer
    */
-  val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
+  private[this] val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
 
-  var sessionManager: Option[SessionManager] = None
-  var watchManager: Option[WatchManager] = None
-  var session: Session = new Session()
+  private[this] var connectionManager: Option[ConnectionManager] = None
+  private[this] var sessionManager: Option[SessionManager] = None
+  private[this] var watchManager: Option[WatchManager] = None
+  private[this] var session: Session = new Session()
 
-  val isReading = new AtomicBoolean(false)
-  val encoder = new Writer(trans)
-  val decoder = new Reader(trans)
+  private[this] val isReading = new AtomicBoolean(false)
+  private[this] var hasDispatcherFailed = false
+  private[this] val encoder = new Writer(trans)
+  private[this] val decoder = new Reader(trans)
 
   def read(): Future[Unit] = {
-    val fullRep = trans.read() flatMap { buffer =>
-      val currentReq: Option[(RequestRecord, Promise[RepPacket])] =
-        if (processedReq.size > 0) Some(processedReq.front) else None
+    val fullRep = if (!hasDispatcherFailed) {
+      trans.read() transform {
+        case Return(buffer) =>
 
-      decoder.read(currentReq, buffer) onFailure { exc =>
-        // If this exception is associated to a request, then propagate to the promise
-        if (currentReq.isDefined) {
-          processedReq.dequeue()._2.setException(exc)
-        } else {
-          Throw(new RuntimeException("Undefined exception during reading ", exc))
+          val currentReq: Option[(RequestRecord, Promise[RepPacket])] =
+            if (processedReq.size > 0) Some(processedReq.front) else None
+
+          decoder.read(currentReq, buffer) onFailure { exc =>
+            // If this exception is associated to a request, then propagate to the promise
+            if (currentReq.isDefined) {
+              processedReq.dequeue()._2.setException(exc)
+            } else {
+              Throw(new RuntimeException("Undefined exception during reading ", exc))
+            }
+          }
+
+        case Throw(exc) => exc match {
+          case excpt: ChannelException =>
+            failDispatcher(excpt)
+            Future.exception(new CancelledRequestException(excpt))
+          case excpt: WriteException =>
+            failDispatcher(excpt)
+            Future.exception(new CancelledRequestException(excpt))
+          case exc: Exception => Future.exception(new CancelledRequestException(exc))
         }
       }
+    } else {
+      Future.exception(new CancelledRequestException)
     }
 
+    // Fixme in case of connection failure, the pending request queue can be emptied while decoding a correct response
     fullRep transform {
       case Return(rep) => rep.response match {
         // This is a notification
@@ -68,7 +88,7 @@ class ResponseMatcher(
   }
 
   def readLoop(): Future[Unit] = {
-    if (!session.isClosingSession.get()) read() before readLoop()
+    if (!session.isClosingSession.get() && !hasDispatcherFailed) read() before readLoop()
     else Future.Done
   }
 
@@ -80,10 +100,11 @@ class ResponseMatcher(
    * @return a Future[Unit] when the request is finally written
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
-    case ReqPacket(None, Some(ConfigureRequest(watchMngr, sessMngr))) =>
-      watchManager = Some(watchMngr)
+    case ReqPacket(None, Some(ConfigureRequest(conMngr, sessMngr, watchMngr))) =>
+      connectionManager = Some(conMngr)
       sessionManager = Some(sessMngr)
       session = sessionManager.get.session
+      watchManager = Some(watchMngr)
       Future(RepPacket(StateHeader(0, 0), None))
 
     // ZooKeeper Request
@@ -129,8 +150,8 @@ class ResponseMatcher(
      * @return
      */
     def read(
-      pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
-      buffer: Buf): Future[RepPacket] = {
+              pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
+              buffer: Buf): Future[RepPacket] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
@@ -188,6 +209,7 @@ class ResponseMatcher(
           WatchEvent(rem) match {
             case Return((event@WatchEvent(_, _, _), rem2)) =>
               // Notifies the watch manager we have a new watchEvent
+              sessionManager.get.session.parseWatchEvent(event)
               watchManager.get.process(event)
               val packet = RepPacket(StateHeader(header), Some(event))
               Return(Future(packet))
@@ -215,8 +237,8 @@ class ResponseMatcher(
      * @return possibly the (header, response) or an exception
      */
     def readFromRequest(
-      req: (RequestRecord, Promise[RepPacket]),
-      buf: Buf): Try[Future[RepPacket]] = Try {
+                         req: (RequestRecord, Promise[RepPacket]),
+                         buf: Buf): Try[Future[RepPacket]] = Try {
       val (reqRecord, _) = req
 
       reqRecord.opCode match {
@@ -237,7 +259,7 @@ class ResponseMatcher(
                 body.passwd,
                 body.timeOut)
               session.state = States.CONNECTED
-              session.isFirstConnect = false
+              session.isFirstConnect.set(false)
               Future(RepPacket(StateHeader(0, 0), Some(body)))
 
             case Throw(exception) => throw exception
@@ -467,6 +489,37 @@ class ResponseMatcher(
   }
 
   class Writer(trans: Transport[Buf, Buf]) {
-    def write[Req <: Request](packet: ReqPacket): Future[Unit] = trans.write(packet.buf)
+    def write[Req <: Request](packet: ReqPacket): Future[Unit] =
+      if (!hasDispatcherFailed) {
+        trans.write(packet.buf) transform {
+          case Return(res) => Future(res)
+          case Throw(exc) => exc match {
+            case excpt: ChannelException =>
+              failDispatcher(excpt)
+              Future.exception(new CancelledRequestException(excpt))
+            case excpt: WriteException =>
+              failDispatcher(excpt)
+              Future.exception(new CancelledRequestException(excpt))
+            case exc: Exception => Future.exception(new CancelledRequestException(exc))
+          }
+        }
+      } else {
+        Future.exception(new CancelledRequestException)
+      }
+  }
+
+  def failDispatcher(exc: Throwable) {
+    // fail incoming requests
+    hasDispatcherFailed = true
+    // inform connection manager that the connection is no longer valid
+    connectionManager.get.connection.isValid.set(false)
+    // fail pending requests
+    failPendingRequests(exc)
+  }
+
+  def failPendingRequests(exc: Throwable) {
+    processedReq.dequeueAll(_ => true).map { record =>
+      record._2.setException(new CancelledRequestException(exc))
+    }
   }
 }

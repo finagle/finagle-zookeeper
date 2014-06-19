@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper
 
+import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.finagle.exp.zookeeper.data.Auth
 import com.twitter.finagle.exp.zookeeper.session.{SessionManager}
@@ -44,8 +45,9 @@ case class CheckWatchesRequest(
 }
 
 case class ConfigureRequest(
-  watchManagr: WatchManager,
-  sessionManagr: SessionManager
+  connectionManager: ConnectionManager,
+  sessionManagr: SessionManager,
+  watchManagr: WatchManager
   ) extends Request {
   def buf: Buf = Buf.Empty
 }
@@ -56,7 +58,7 @@ case class ConnectRequest(
   connectionTimeout: Int = 2000,
   sessionId: Long = 0L,
   passwd: Array[Byte] = Array[Byte](16),
-  canBeRO: Option[Boolean] = Some(true))
+  canBeRO: Boolean = false)
   extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufInt(protocolVersion))
@@ -64,7 +66,7 @@ case class ConnectRequest(
     .concat(BufInt(connectionTimeout))
     .concat(BufLong(sessionId))
     .concat(BufArray(passwd))
-    .concat(BufBool(canBeRO.getOrElse(false)))
+    .concat(BufBool(canBeRO))
 }
 
 case class CreateRequest(

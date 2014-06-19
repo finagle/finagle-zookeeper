@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object finaglezk extends Build {
-  val FinVersion = "6.16.0"
+  val FinVersion = "6.17.0"
 
   logLevel := Level.Info
 

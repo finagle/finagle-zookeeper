@@ -13,8 +13,9 @@ case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
           case None => requestHeader.buf
         }
       case None =>
-        (request: @unchecked) match {
+        request  match {
           case Some(req: ConnectRequest) => req.buf
+          case _ => throw new IllegalArgumentException("Not expected body in ReqPacket")
         }
     }
 }

@@ -14,7 +14,7 @@ class SessionManager(autoReconnection: Boolean = true, richClient: ZkClient) {
       conReq.passwd,
       conReq.timeOut)
     session.state = States.CONNECTED
-    session.isFirstConnect = false
+    session.isFirstConnect.set(false)
   }
 }
 

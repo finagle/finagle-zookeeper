@@ -9,22 +9,12 @@ import com.twitter.finagle.exp.zookeeper._
  */
 class ConnectionManager(dest: String) {
 
-  @volatile var connection: Connection = null
-
-  def initConnection() {
-    if (connection == null) {
-      connection = new Connection(findNextServer)
-    } else {
-      throw new ZookeeperException(
-        "Connection init exception : a connection is already created")
-    }
-  }
+  @volatile var connection: Connection = new Connection(findNextServer)
 
   def findNextServer: ServiceFactory[ReqPacket, RepPacket] = {
     val serviceFactory = ZooKeeperClient.newClient(formatHostList(dest)(0))
     serviceFactory
   }
-
 
   def formatHostList(list: String): Seq[String] = list.trim.split(",")
 }

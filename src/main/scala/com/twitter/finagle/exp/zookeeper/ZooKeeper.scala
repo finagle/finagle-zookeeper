@@ -28,5 +28,5 @@ object ZooKeeper extends Client[ReqPacket, RepPacket]{
     ZooKeeperClient.newClient(name, label)
 
   def newRichClient(hostList: String): ZkClient =
-    new ZkClient(hostList)
+    new ZkClient(hostList = hostList)
 }
