@@ -43,7 +43,6 @@ trait Autolive {self: ZkClient =>
   private[this] def checkConnection(): Future[Unit] = {
     if (!connectionManager.connection.get.isValid.get() &&
       !sessionManager.session.isClosingSession.get()) {
-      sessionManager.session.pingScheduler.currentTask.get.cancel()
       canRunStateLoop.set(false)
       reconnectWithSession()
     } else {
@@ -147,7 +146,7 @@ trait Autolive {self: ZkClient =>
             // problem with the current connection
             // find a new RW server and reconnectWithSession
             sessionManager.session.state = States.CLOSED
-            connectionManager.findNextServer flatMap { server =>
+            connectionManager.findNextServer(connectionManager.hostList) flatMap { server =>
               connectionManager.connection = Some(new Connection(server))
               reconnectWithSession(triesCounter + 1)
             }
@@ -162,7 +161,7 @@ trait Autolive {self: ZkClient =>
         // we need to find a new server to connect to
         // find next RW server
         // connect with current ids
-        connectionManager.findNextServer flatMap { server =>
+        connectionManager.findNextServer(connectionManager.hostList) flatMap { server =>
           connectionManager.connection = Some(new Connection(server))
           reconnectWithSession(triesCounter + 1)
         }
@@ -211,7 +210,7 @@ trait Autolive {self: ZkClient =>
           case Throw(exc: Throwable) =>
             sessionManager.session.state = States.CLOSED
             // will try with a new connection
-            connectionManager.findNextServer flatMap { server =>
+            connectionManager.findNextServer(connectionManager.hostList) flatMap { server =>
               connectionManager.connection = Some(new Connection(server))
               reconnect(triesCounter + 1)
             }
@@ -220,7 +219,7 @@ trait Autolive {self: ZkClient =>
         // we need to find a new server to connect to
         // find next RW server
         // connect with current ids
-        connectionManager.findNextServer flatMap { server =>
+        connectionManager.findNextServer(connectionManager.hostList) flatMap { server =>
           connectionManager.connection = Some(new Connection(server))
           reconnect(triesCounter + 1)
         }

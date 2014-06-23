@@ -34,8 +34,14 @@ class ConnectionManager(
    * this will try to connect to each server and find a good one.
    * @return future client ServiceFactory
    */
-  def findNextServer: Future[ServiceFactory[ReqPacket, RepPacket]] = {
-    findServer(hostList)(withRwRequest) transform {
+  def findNextServer(hostsList: Seq[String]):
+  Future[ServiceFactory[ReqPacket, RepPacket]] = {
+    val finalHostList = {
+      if (seenRwServer.isDefined)
+        seenRwServer.get +: hostList.filter(host => host == seenRwServer.get)
+      else hostList
+    }
+    searchServer(finalHostList)(withRwRequest) transform {
       // Found a RW server, best choice
       case Return(serviceFactory) => Future(serviceFactory)
 
@@ -51,11 +57,11 @@ class ConnectionManager(
         }
 
       // isro request not supported, will search by connecting to server
-      case Throw(exc: Throwable) => findServer(hostList)(withConnectRequest)
+      case Throw(exc: Throwable) => searchServer(finalHostList)(withConnectRequest)
     }
   }
 
-  def findServer(hostList: Seq[String])(implicit searchMethod: SearchMethod):
+  def searchServer(hostList: Seq[String])(implicit searchMethod: SearchMethod):
   Future[ServiceFactory[ReqPacket, RepPacket]] = hostList match {
     case Seq() =>
       Future.exception(NoServerFound("No server available for connection"))
@@ -65,23 +71,23 @@ class ConnectionManager(
       case exc: Throwable => Future.exception(exc)
     }
     case server +: tail => searchMethod(server) rescue {
-      case exc: NoRwServerFound => findServer(tail)
-      case exc: CouldNotConnect => findServer(tail)
+      case exc: NoRwServerFound => searchServer(tail)
+      case exc: CouldNotConnect => searchServer(tail)
       case exc: Throwable => Future.exception(exc)
     }
   }
 
   def initConnection(): Future[Unit] = {
-    findNextServer flatMap { factory =>
+    findNextServer(hostList) flatMap { factory =>
       connection = Some(new Connection(factory))
-      if(timeBetweenPrevntvSrch.isDefined)
+      if (timeBetweenPrevntvSrch.isDefined)
         PreventiveSearchScheduler.apply(timeBetweenPrevntvSrch.get)(preventiveRwServerSearch())
       Future.Unit
     }
   }
 
   def preventiveRwServerSearch(): Future[Unit] = {
-    findServer(hostList)(withRwRequest) transform {
+    searchServer(hostList)(withRwRequest) transform {
       // Found a RW server, best choice
       // the RW server address is in seenRwServer value
       case Return(serviceFactory) => serviceFactory.close()
@@ -93,12 +99,13 @@ class ConnectionManager(
 
   def searchRwServer(timeInterval: Duration):
   Future[ServiceFactory[ReqPacket, RepPacket]] = {
-    findServer(hostList)(withRwRequest) transform {
+    searchServer(hostList)(withRwRequest) transform {
       // Found a RW server, best choice
       case Return(serviceFactory) => Future(serviceFactory)
 
       // isro request not supported, will search by connecting to server
-      case Throw(exc: Throwable) => searchRwServer(timeInterval).delayed(timeInterval)(DefaultTimer.twitter)
+      case Throw(exc: Throwable) =>
+        searchRwServer(timeInterval).delayed(timeInterval)(DefaultTimer.twitter)
     }
   }
 
