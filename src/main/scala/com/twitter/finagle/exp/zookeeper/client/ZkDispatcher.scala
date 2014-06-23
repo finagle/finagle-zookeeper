@@ -9,10 +9,10 @@ import com.twitter.util._
 class ZkDispatcher(trans: Transport[Buf, Buf])
   extends GenSerialClientDispatcher[ReqPacket, RepPacket, Buf, Buf](trans) {
   //we give the processor apply, thus it can send/read Req-Rep cf: Ping
-  val requestMatcher = new ResponseMatcher(trans)
+  val responseMatcher = new ResponseMatcher(trans)
 
   protected def dispatch(req: ReqPacket, p: Promise[RepPacket]): Future[Unit] = {
-    requestMatcher.write(req) respond { resp =>
+    responseMatcher.write(req) respond { resp =>
       p.updateIfEmpty(resp)
     }
   }.unit

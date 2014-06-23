@@ -12,6 +12,8 @@ case class SystemErrorException(msg: String) extends ZookeeperException(msg)
 case class RuntimeInconsistencyException(msg: String) extends ZookeeperException(msg)
 /** A data inconsistency was found */
 case class DataInconsistencyException(msg: String) extends ZookeeperException(msg)
+// client internal exception : bad response to connect request
+case class CouldNotConnect(msg: String) extends ZookeeperException(msg)
 /** Connection to the server has been lost */
 case class ConnectionLossException(msg: String) extends ZookeeperException(msg)
 /** Error while marshalling or unmarshalling data */
@@ -39,6 +41,10 @@ case class ApiErrorException(msg: String) extends ZookeeperException(msg)
 case class NoNodeException(msg: String) extends ZookeeperException(msg)
 /** Not authenticated */
 case class NoAuthException(msg: String) extends ZookeeperException(msg)
+// client internal exception : No server found during available server lookup
+case class NoServerFound(msg: String) extends ZookeeperException(msg)
+// client internal exception : No read-write server found
+case class NoRwServerFound(msg: String) extends ZookeeperException(msg)
 /** Version conflict */
 case class BadVersionException(msg: String) extends ZookeeperException(msg)
 /** Ephemeral nodes may not have children */

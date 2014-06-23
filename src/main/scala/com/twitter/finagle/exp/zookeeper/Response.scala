@@ -3,7 +3,8 @@ package com.twitter.finagle.exp.zookeeper
 import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.io.Buf
-import com.twitter.util.{Throw, Return, Future, Try}
+import com.twitter.util._
+import com.twitter.util.TimeConversions._
 
 sealed trait Response
 sealed trait Decoder[T <: Response] {
@@ -18,10 +19,10 @@ sealed trait Decoder[T <: Response] {
 
 case class ConnectResponse(
   protocolVersion: Int,
-  timeOut: Int,
+  timeOut: Duration,
   sessionId: Long,
   passwd: Array[Byte],
-  canRO: Option[Boolean]
+  isRO: Boolean
   ) extends Response
 
 case class CreateResponse(path: String) extends Response
@@ -77,9 +78,10 @@ object ConnectResponse extends Decoder[ConnectResponse] {
     BufInt(timeOut,
     BufLong(sessionId,
     BufArray(passwd,
+    BufBool(isRO,
     rem
-    )))) = buf
-    Some(ConnectResponse(protocolVersion, timeOut, sessionId, passwd, Some(false)), rem)
+    ))))) = buf
+    Some(ConnectResponse(protocolVersion, timeOut.milliseconds, sessionId, passwd, Option(isRO).getOrElse(false)), rem)
   }
 }
 

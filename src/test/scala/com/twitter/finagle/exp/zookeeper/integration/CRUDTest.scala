@@ -22,8 +22,8 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
   test("Client connection") {
     newClient()
-    val connect = client.get.connect(2000)
-    Await.ready(connect)
+    val connect = client.get.connect()
+    Await.result(connect)
 
     Thread.sleep(500)
 

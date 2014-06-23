@@ -8,14 +8,19 @@ import com.twitter.util.{Duration, TimerTask}
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Une session represente un accès à un serveur zookeeper
- * Il définit l'activité de la liaison établie
+ * Represents a ZooKeeper Session
+ * @param sessionID ZooKeeper session ID
+ * @param sessionPwd ZooKeeper session password
+ * @param sessTimeout requested session timeout
+ * @param negoTimeout negotiated session timeout
  */
-
 class Session(
-  sessionID: Long = 0L
-  , sessionPwd: Array[Byte] = Array[Byte](16)
-  , timeout: Int = 3000) {
+  sessionID: Long = 0L,
+  sessionPwd: Array[Byte] = Array[Byte](16),
+  sessTimeout: Duration = 3000.milliseconds,
+  negoTimeout: Duration = 3000.milliseconds,
+  canReadOnly: Boolean = false
+  ) {
   /**
    * Session variables
    * sessionId - current session Id
@@ -24,11 +29,16 @@ class Session(
    * xid - current request Id
    * lastZxid - last ZooKeeper Transaction Id
    */
+  var isReadOnly = false
   val sessionId: Long = sessionID
   val sessionPassword: Array[Byte] = sessionPwd
-  val sessionTimeOut: Int = timeout
+  val sessionTimeout: Duration = sessTimeout
+  var negotiatedTimeout: Duration = negoTimeout
+  // Ping at 1/3 of timeout, connect to a new host if no response at 2/3 of timeout
+  var pingTimeout: Duration = negotiatedTimeout * 1 / 3
+  var readTimeout: Duration = negotiatedTimeout * 2 / 3
   @volatile private[this] var xid = 2
-  @volatile private[this] var lastZxid: Long = 0L
+  @volatile var lastZxid: Long = 0L
   @volatile var state: States.ConnectionState = States.NOT_CONNECTED
 
   private[finagle] val isFirstConnect = new AtomicBoolean(true)
@@ -50,27 +60,26 @@ class Session(
    * This is how we start to send ping every x milliseconds
    * @param f a request writer taking a PingRequest as argument
    */
-  private[finagle] def startPing(f: => Unit) = pingScheduler(realTimeout.milliseconds)(f)
+  private[finagle] def startPing(f: => Unit) = pingScheduler(pingTimeout)(f)
   /**
    * Classic way to determine the real interval between two pings
    * @return effective period to send ping
    */
-  private[this] def realTimeout: Long = timeout * 2 / 3
 
   /**
    * Connect session management :
    */
-  def canConnect {
+  def canConnect(): Boolean = {
     if (state == States.NOT_CONNECTED ||
       state == States.CLOSED ||
       state == States.SESSION_EXPIRED ||
-      state == States.CONNECTION_LOST) true
+      state == States.CONNECTION_LOSS) true
     else {
       throw new ZookeeperException("Connection exception: Session is already established")
     }
   }
 
-  def canClose {
+  def canClose(): Boolean = {
     if (state != States.CONNECTING &&
       state != States.ASSOCIATING &&
       state != States.CLOSED &&
@@ -103,7 +112,7 @@ class Session(
   def parseStateHeader(header: StateHeader) {
     header.err match {
       case 0 => state = States.CONNECTED // TODO not if readonly manage this
-      case -4 => state = States.CONNECTION_LOST
+      case -4 => state = States.CONNECTION_LOSS
       case -112 => state = States.SESSION_EXPIRED
       case -118 => state = States.SESSION_MOVED
       case -666 =>
@@ -128,12 +137,13 @@ class Session(
       case 3 => state = States.CONNECTED
       case -112 => state = States.SESSION_EXPIRED
       case 4 => state = States.AUTH_FAILED
-      case 5 => state = States.CONNECTED_READONLY
+      case 5 =>
+        isReadOnly = true
+        state = States.CONNECTED_READONLY
       case 6 => state = States.SASL_AUTHENTICATED
       case _ =>
     }
   }
-
 }
 
 /**
@@ -168,6 +178,6 @@ object Session {
   object States extends Enumeration {
     type ConnectionState = Value
     val CONNECTING, ASSOCIATING, CONNECTED, CONNECTED_READONLY, CLOSED, AUTH_FAILED, NOT_CONNECTED = Value
-    val CONNECTION_LOST, SESSION_EXPIRED, SESSION_MOVED, SASL_AUTHENTICATED = Value
+    val CONNECTION_LOSS, SESSION_EXPIRED, SESSION_MOVED, SASL_AUTHENTICATED = Value
   }
 }

@@ -100,30 +100,40 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
    * @return a Future[Unit] when the request is finally written
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
-    case ReqPacket(None, Some(ConfigureRequest(conMngr, sessMngr, watchMngr))) =>
+    case ReqPacket(None,
+    Some(ConfigureRequest(Some(conMngr), Some(sessMngr), Some(watchMngr)))) =>
       connectionManager = Some(conMngr)
       sessionManager = Some(sessMngr)
-      session = sessionManager.get.session
       watchManager = Some(watchMngr)
+      Future(RepPacket(StateHeader(0, 0), None))
+
+    case ReqPacket(None, Some(ConfigureRequest(None, None, None))) =>
+      session = sessionManager.get.session
       Future(RepPacket(StateHeader(0, 0), None))
 
     // ZooKeeper Request
     case ReqPacket(_, _) =>
-      val reqRecord = req match {
-        case ReqPacket(Some(header), _) => RequestRecord(header.opCode, Some(header.xid))
-        case ReqPacket(None, Some(req: ConnectRequest)) => RequestRecord(OpCode.CREATE_SESSION, None)
-      }
-      // The request is about to be written, so we enqueue it in the waiting request queue
-      val p = new Promise[RepPacket]()
-
-      synchronized {
-        processedReq.enqueue((reqRecord, p))
-        encoder.write(req) flatMap { unit =>
-          if (!isReading.getAndSet(true)) {
-            readLoop()
-          }
-          p
+      if (!hasDispatcherFailed) {
+        val reqRecord = req match {
+          case ReqPacket(Some(header), _) =>
+            RequestRecord(header.opCode, Some(header.xid))
+          case ReqPacket(None, Some(req: ConnectRequest)) =>
+            RequestRecord(OpCode.CREATE_SESSION, None)
         }
+        // The request is about to be written, so we enqueue it in the waiting request queue
+        val p = new Promise[RepPacket]()
+
+        synchronized {
+          processedReq.enqueue((reqRecord, p))
+          encoder.write(req) flatMap { unit =>
+            if (!isReading.getAndSet(true)) {
+              readLoop()
+            }
+            p
+          }
+        }
+      } else {
+        Future.exception(new CancelledRequestException)
       }
   }
 
@@ -134,6 +144,17 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
    */
   def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader) = {
     //println("--- associating:  %d and %d ---".format(reqRecord.xid.get, repHeader.xid))
+    /*if (packet.requestHeader.getXid() != replyHdr.getXid()) {
+      packet.replyHeader.setErr(
+        KeeperException.Code.CONNECTIONLOSS.intValue());
+      throw new IOException("Xid out of order. Got Xid "
+        + replyHdr.getXid() + " with err " +
+        + replyHdr.getErr() +
+        " expected Xid "
+        + packet.requestHeader.getXid()
+        + " for a packet with details: "
+        + packet );
+    }*/
     if (reqRecord.xid.isDefined)
       if (reqRecord.xid.get != repHeader.xid) throw new ZkDispatchingException("wrong association")
   }
@@ -150,8 +171,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
      * @return
      */
     def read(
-              pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
-              buffer: Buf): Future[RepPacket] = {
+      pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
+      buffer: Buf): Future[RepPacket] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
@@ -173,7 +194,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
             readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
               case Throw(exc2) =>
-                Future.exception(ZkDecodingException("Impossible to decode this response").initCause(exc2))
+                Future.exception(ZkDecodingException("Impossible to decode this response")
+                  .initCause(exc2))
             }
 
           // fixme we should discard dispatchingExc at the moment
@@ -181,7 +203,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
             readFromHeader(buffer) match {
               case Return(eventRep) => eventRep
               case Throw(exc2) =>
-                Future.exception(ZkDecodingException("Impossible to decode this response").initCause(exc2))
+                Future.exception(ZkDecodingException("Impossible to decode this response")
+                  .initCause(exc2))
             }
           case serverExc: ZookeeperException => Future.exception(exc1)
 
@@ -201,7 +224,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
         case Return((header@ReplyHeader(_, _, 0), buf2)) => (header, buf2)
         case Return((header@ReplyHeader(_, _, err), buf2)) =>
           throw ZookeeperException.create("Error while readFromHeader :", err)
-        case Throw(exc) => throw ZkDecodingException("Error while decoding header").initCause(exc)
+        case Throw(exc) => throw ZkDecodingException("Error while decoding header")
+          .initCause(exc)
       }
 
       header.xid match {
@@ -237,8 +261,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
      * @return possibly the (header, response) or an exception
      */
     def readFromRequest(
-                         req: (RequestRecord, Promise[RepPacket]),
-                         buf: Buf): Try[Future[RepPacket]] = Try {
+      req: (RequestRecord, Promise[RepPacket]),
+      buf: Buf): Try[Future[RepPacket]] = Try {
       val (reqRecord, _) = req
 
       reqRecord.opCode match {
@@ -254,10 +278,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
           ConnectResponse(buf) match {
             case Return((body, rem)) =>
               // Create a temporary session
-              session = new Session(
-                body.sessionId,
-                body.passwd,
-                body.timeOut)
+              session = new Session()
               session.state = States.CONNECTED
               session.isFirstConnect.set(false)
               Future(RepPacket(StateHeader(0, 0), Some(body)))
@@ -509,10 +530,12 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
   }
 
   def failDispatcher(exc: Throwable) {
+    // Stop ping
+    sessionManager.get.session.pingScheduler.currentTask.get.cancel()
     // fail incoming requests
     hasDispatcherFailed = true
     // inform connection manager that the connection is no longer valid
-    connectionManager.get.connection.isValid.set(false)
+    connectionManager.get.connection.get.isValid.set(false)
     // fail pending requests
     failPendingRequests(exc)
   }

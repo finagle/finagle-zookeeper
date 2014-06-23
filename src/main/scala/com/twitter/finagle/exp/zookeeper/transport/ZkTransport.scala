@@ -33,6 +33,10 @@ class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
   def read(): Future[Buf] =
     read(4) flatMap { case BufInt(len, _) => read(len) }
 
+  /*if (len < 0 || len >= ClientCnxn.packetLen) {
+    throw new IOException("Packet len" + len + " is out of range!");
+  }*/
+
   private[this] def read(len: Int): Future[Buf] =
     if (buf.length < len) {
       trans.read flatMap { chanBuf =>
@@ -43,5 +47,26 @@ class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
       val out = buf.slice(0, len)
       buf = buf.slice(len, buf.length)
       Future.value(out)
+    }
+}
+
+class BufTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
+  extends Transport[Buf, Buf] {
+
+  def remoteAddress: SocketAddress = trans.remoteAddress
+  def localAddress: SocketAddress = trans.localAddress
+  def isOpen: Boolean = trans.isOpen
+  val onClose: Future[Throwable] = trans.onClose
+  def close(deadline: Time): Future[Unit] = trans.close(deadline)
+
+  def write(req: Buf): Future[Unit] = {
+    val bytes = new Array[Byte](req.length)
+    req.write(bytes, 0)
+    trans.write(ChannelBuffers.wrappedBuffer(bytes))
+  }
+
+  def read(): Future[Buf] =
+    trans.read flatMap { chanBuf =>
+      Future(ChannelBufferBuf(chanBuf))
     }
 }

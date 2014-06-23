@@ -1,12 +1,13 @@
 package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
-import com.twitter.finagle.exp.zookeeper.data.ACL
-import com.twitter.finagle.exp.zookeeper.data.Auth
-import com.twitter.finagle.exp.zookeeper.session.{SessionManager}
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
+import com.twitter.finagle.exp.zookeeper.session.SessionManager
 import com.twitter.finagle.exp.zookeeper.transport._
-import com.twitter.io.Buf
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.io.Buf
+import com.twitter.util.Duration
+import com.twitter.util.TimeConversions._
 
 /**
  * Same as the Response type, a Request can be composed by a header or
@@ -45,9 +46,9 @@ case class CheckWatchesRequest(
 }
 
 case class ConfigureRequest(
-  connectionManager: ConnectionManager,
-  sessionManagr: SessionManager,
-  watchManagr: WatchManager
+  connectionManager: Option[ConnectionManager],
+  sessionManagr: Option[SessionManager],
+  watchManagr: Option[WatchManager]
   ) extends Request {
   def buf: Buf = Buf.Empty
 }
@@ -55,7 +56,7 @@ case class ConfigureRequest(
 case class ConnectRequest(
   protocolVersion: Int = 0,
   lastZxidSeen: Long = 0L,
-  connectionTimeout: Int = 2000,
+  sessionTimeout: Duration = 2000.milliseconds,
   sessionId: Long = 0L,
   passwd: Array[Byte] = Array[Byte](16),
   canBeRO: Boolean = false)
@@ -63,7 +64,7 @@ case class ConnectRequest(
   def buf: Buf = Buf.Empty
     .concat(BufInt(protocolVersion))
     .concat(BufLong(lastZxidSeen))
-    .concat(BufInt(connectionTimeout))
+    .concat(BufInt(sessionTimeout.inMilliseconds.toInt))
     .concat(BufLong(sessionId))
     .concat(BufArray(passwd))
     .concat(BufBool(canBeRO))
@@ -82,6 +83,20 @@ case class CreateRequest(
     .concat(BufInt(createMode))
 }
 
+case class DeleteRequest(path: String, version: Int)
+  extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(version))
+}
+
+case class ExistsRequest(path: String, watch: Boolean)
+  extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufBool(watch))
+}
+
 case class GetACLRequest(path: String)
   extends Request {
   def buf: Buf = BufString(path)
@@ -97,31 +112,6 @@ case class GetDataRequest(path: String, watch: Boolean)
 case class GetMaxChildrenRequest(path: String)
   extends Request {
   def buf: Buf = BufString(path)
-}
-
-case class DeleteRequest(path: String, version: Int)
-  extends Request {
-  def buf: Buf = Buf.Empty
-    .concat(BufString(path))
-    .concat(BufInt(version))
-}
-
-case class ExistsRequest(path: String, watch: Boolean)
-  extends Request {
-  def buf: Buf = Buf.Empty
-    .concat(BufString(path))
-    .concat(BufBool(watch))
-}
-
-case class SetDataRequest(
-  path: String,
-  data: Array[Byte],
-  version: Int)
-  extends Request {
-  def buf: Buf = Buf.Empty
-    .concat(BufString(path))
-    .concat(BufArray(data))
-    .concat(BufInt(version))
 }
 
 case class GetChildrenRequest(path: String, watch: Boolean)
@@ -168,6 +158,17 @@ case class SetACLRequest(path: String, acl: Array[ACL], version: Int)
     .concat(BufInt(version))
 }
 
+case class SetDataRequest(
+  path: String,
+  data: Array[Byte],
+  version: Int)
+  extends Request {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufInt(version))
+}
+
 case class SetMaxChildrenRequest(path: String, max: Int)
   extends Request {
   def buf: Buf = Buf.Empty
@@ -175,23 +176,23 @@ case class SetMaxChildrenRequest(path: String, max: Int)
     .concat(BufInt(max))
 }
 
-case class SyncRequest(path: String)
-  extends Request {
-  def buf: Buf = BufString(path)
-}
-
 /* Only available during client reconnection to set watches */
 case class SetWatchesRequest(
-  relativeZxid: Int,
-  dataWatches: Array[String],
-  existWatches: Array[String],
-  childWatches: Array[String])
+  relativeZxid: Long,
+  dataWatches: Seq[String],
+  existWatches: Seq[String],
+  childWatches: Seq[String])
   extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufLong(relativeZxid))
     .concat(BufSeqString(dataWatches))
     .concat(BufSeqString(existWatches))
     .concat(BufSeqString(childWatches))
+}
+
+case class SyncRequest(path: String)
+  extends Request {
+  def buf: Buf = BufString(path)
 }
 
 case class TransactionRequest(transaction: Transaction)
