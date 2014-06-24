@@ -1,9 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
-import org.scalatest.FunSuite
+import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
 import com.twitter.finagle.exp.zookeeper.data.{Id, ACL, Ids}
 import com.twitter.finagle.exp.zookeeper.utils.Implicits._
-import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
+import org.scalatest.FunSuite
 
 class ACLTest extends FunSuite {
 

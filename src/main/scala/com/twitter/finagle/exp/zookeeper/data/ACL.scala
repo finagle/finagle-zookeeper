@@ -24,7 +24,7 @@ object ACL {
    * Check an ACL list
    * @param aclList the ACL list to check
    */
-  def check(aclList: Array[ACL]) {
+  def check(aclList: Seq[ACL]) {
     aclList.map { acl =>
       acl.id.scheme match {
         case "world" => if (acl.id.data.toUpperCase != "ANYONE")
@@ -103,7 +103,6 @@ object ACL {
     }
     aclList
   }
-
 
   /**
    * Permissions associated to an ACL

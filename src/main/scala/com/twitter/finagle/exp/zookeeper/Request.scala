@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper
 
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
@@ -20,26 +21,31 @@ sealed trait Request {
   def buf: Buf
 }
 
+sealed trait OpRequest {
+  def buf: Buf
+}
+
 case class RequestHeader(xid: Int, opCode: Int) {
   def buf: Buf = Buf.Empty
     .concat(BufInt(xid))
     .concat(BufInt(opCode))
 }
 
-case class AuthRequest(
-  typ: Int,
-  auth: Auth
-  ) extends Request {
+case class AuthRequest(typ: Int, auth: Auth) extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufInt(typ))
     .concat(BufString(auth.scheme))
     .concat(BufArray(auth.data))
 }
 
-case class CheckWatchesRequest(
-  path: String,
-  typ: Int
-  ) extends Request {
+case class CheckVersionRequest(path: String, version: Int)
+  extends OpRequest {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufInt(version))
+}
+
+case class CheckWatchesRequest(path: String, typ: Int) extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(typ))
@@ -59,7 +65,7 @@ case class ConnectRequest(
   sessionTimeout: Duration = 2000.milliseconds,
   sessionId: Long = 0L,
   passwd: Array[Byte] = Array[Byte](16),
-  canBeRO: Boolean = false)
+  canBeRO: Boolean = true)
   extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufInt(protocolVersion))
@@ -73,9 +79,21 @@ case class ConnectRequest(
 case class CreateRequest(
   path: String,
   data: Array[Byte],
-  aclList: Array[ACL],
+  aclList: Seq[ACL],
   createMode: Int)
-  extends Request {
+  extends Request with OpRequest {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(path))
+    .concat(BufArray(data))
+    .concat(BufSeqACL(aclList))
+    .concat(BufInt(createMode))
+}
+
+case class Create2Request(
+  path: String,
+  data: Array[Byte],
+  aclList: Seq[ACL],
+  createMode: Int) extends Request with OpRequest {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
@@ -84,7 +102,7 @@ case class CreateRequest(
 }
 
 case class DeleteRequest(path: String, version: Int)
-  extends Request {
+  extends Request with OpRequest {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(version))
@@ -107,11 +125,6 @@ case class GetDataRequest(path: String, watch: Boolean)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufBool(watch))
-}
-
-case class GetMaxChildrenRequest(path: String)
-  extends Request {
-  def buf: Buf = BufString(path)
 }
 
 case class GetChildrenRequest(path: String, watch: Boolean)
@@ -162,19 +175,23 @@ case class SetDataRequest(
   path: String,
   data: Array[Byte],
   version: Int)
-  extends Request {
+  extends Request with OpRequest {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
     .concat(BufInt(version))
 }
 
+/*case class GetMaxChildrenRequest(path: String)
+  extends Request {
+  def buf: Buf = BufString(path)
+}
 case class SetMaxChildrenRequest(path: String, max: Int)
   extends Request {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(max))
-}
+}*/
 
 /* Only available during client reconnection to set watches */
 case class SetWatchesRequest(
@@ -195,7 +212,23 @@ case class SyncRequest(path: String)
   def buf: Buf = BufString(path)
 }
 
-case class TransactionRequest(transaction: Transaction)
+case class TransactionRequest(opList: Seq[OpRequest])
   extends Request {
-  def buf: Buf = transaction.buf
+  def buf: Buf =
+    opList.foldLeft(Buf.Empty)((buf, op) =>
+      op match {
+        case op: CreateRequest => buf.concat(MultiHeader(OpCode.CREATE, false, -1).buf)
+          .concat(op.buf)
+        case op: Create2Request =>
+          buf.concat(MultiHeader(OpCode.CREATE2, false, -1).buf)
+            .concat(op.buf)
+        case op: DeleteRequest => buf.concat(MultiHeader(OpCode.DELETE, false, -1).buf)
+          .concat(op.buf)
+        case op: SetDataRequest => buf.concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
+          .concat(op.buf)
+        case op: CheckVersionRequest => buf.concat(MultiHeader(OpCode.CHECK, false, -1).buf)
+          .concat(op.buf)
+        case _ => throw new ZookeeperException("Invalid type of op")
+      })
+      .concat(MultiHeader(-1, true, -1).buf)
 }

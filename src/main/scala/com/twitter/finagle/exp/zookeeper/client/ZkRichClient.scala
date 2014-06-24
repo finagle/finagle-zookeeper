@@ -1,7 +1,5 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.util.DefaultTimer
-import com.twitter.finagle.{CancelledRequestException, IndividualRequestTimeoutException}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
@@ -9,7 +7,9 @@ import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
-import com.twitter.finagle.exp.zookeeper.watch.{WatchManager, WatchType}
+import com.twitter.finagle.exp.zookeeper.watch.{Watch, WatchManager}
+import com.twitter.finagle.util.DefaultTimer
+import com.twitter.finagle.{CancelledRequestException, IndividualRequestTimeoutException}
 import com.twitter.logging.Logger
 import com.twitter.util.TimeConversions._
 import com.twitter.util._
@@ -241,18 +241,18 @@ class ZkClient(
       sessionManager.session.parseStateHeader(rep.header)
 
       rep.response match {
-        case Some(response: NodeWithWatch) =>
+        case Some(response: ExistsResponse) =>
           if (watch) {
-            val watch = watchManager.register(path, WatchType.exists)
-            val finalRep = NodeWithWatch(response.stat, Some(watch))
+            val watch = watchManager.register(path, Watch.Type.exists)
+            val finalRep = ExistsResponse(response.stat, Some(watch))
             Future(finalRep)
           } else {
             Future(response)
           }
         case None =>
           if (rep.header.err == -101 && watch) {
-            val watch = watchManager.register(path, WatchType.exists)
-            Future(NoNodeWatch(watch))
+            val watch = watchManager.register(path, Watch.Type.exists)
+            Future(ExistsResponse(None, Some(watch)))
           } else {
             Future.exception(ZookeeperException.create("Error while exists", rep.header.err))
           }
@@ -312,7 +312,7 @@ class ZkClient(
       if (rep.header.err == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
-          val watch = watchManager.register(path, WatchType.exists)
+          val watch = watchManager.register(path, Watch.Type.exists)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildrenResponse(childrenList, Some(watch))
           Future(finalRep)
@@ -349,7 +349,7 @@ class ZkClient(
       if (rep.header.err == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
-          val watch = watchManager.register(path, WatchType.exists)
+          val watch = watchManager.register(path, Watch.Type.exists)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
           Future(finalRep)
@@ -386,7 +386,7 @@ class ZkClient(
       if (rep.header.err == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.register(path, WatchType.exists)
+          val watch = watchManager.register(path, Watch.Type.exists)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else {
@@ -521,15 +521,14 @@ class ZkClient(
     }
   }
 
-  def transaction(opList: Array[OpRequest]): Future[TransactionResponse] = {
+  def transaction(opList: Seq[OpRequest]): Future[TransactionResponse] = {
     // todo readOnly check
     checkSession()
     Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>
-        val transaction = new Transaction(res)
         val req = ReqPacket(
           Some(RequestHeader(sessionManager.session.getXid, OpCode.MULTI)),
-          Some(new TransactionRequest(transaction)))
+          Some(new TransactionRequest(res)))
 
         connectionManager.connection.get.serve(req)
           .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,

@@ -29,7 +29,4 @@ class PathTest extends FunSuite {
       PathUtils.validatePath("zk")
     }
   }
-
-
-
 }

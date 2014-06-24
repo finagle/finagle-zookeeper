@@ -19,7 +19,7 @@ class WatchManager(chroot: String) {
 
   private[finagle] def register(path: String, watchType: Int): Promise[WatchEvent] = {
     watchType match {
-      case WatchType.data =>
+      case Watch.Type.data =>
         dataWatches.get(path) match {
           case Some(promise) => promise
           case None =>
@@ -28,7 +28,7 @@ class WatchManager(chroot: String) {
             p
         }
 
-      case WatchType.exists =>
+      case Watch.Type.exists =>
         existsWatches.get(path) match {
           case Some(promise) => promise
           case None =>
@@ -36,7 +36,7 @@ class WatchManager(chroot: String) {
             existsWatches += path -> p
             p
         }
-      case WatchType.child =>
+      case Watch.Type.child =>
         childWatches.get(path) match {
           case Some(promise) => promise
           case None =>
@@ -58,8 +58,8 @@ class WatchManager(chroot: String) {
       watchEvent.state,
       watchEvent.path.substring(chroot.length))
     event.typ match {
-      case eventType.NONE => // TODO
-      case eventType.NODE_CREATED =>
+      case Watch.EventType.NONE => // TODO
+      case Watch.EventType.NODE_CREATED =>
         dataWatches synchronized {
           dataWatches.get(event.path) match {
             case Some(promise) =>
@@ -78,7 +78,7 @@ class WatchManager(chroot: String) {
           }
         }
 
-      case eventType.NODE_DATA_CHANGED =>
+      case Watch.EventType.NODE_DATA_CHANGED =>
         dataWatches synchronized {
           dataWatches.get(event.path) match {
             case Some(promise) =>
@@ -97,7 +97,7 @@ class WatchManager(chroot: String) {
           }
         }
 
-      case eventType.NODE_DELETED =>
+      case Watch.EventType.NODE_DELETED =>
         dataWatches synchronized {
           dataWatches.get(event.path) match {
             case Some(promise) =>
@@ -124,7 +124,7 @@ class WatchManager(chroot: String) {
             case None =>
           }
         }
-      case eventType.NODE_CHILDREN_CHANGED =>
+      case Watch.EventType.NODE_CHILDREN_CHANGED =>
         childWatches synchronized {
           childWatches.get(event.path) match {
             case Some(promise) =>
@@ -137,10 +137,4 @@ class WatchManager(chroot: String) {
       case _ => throw new RuntimeException("This Watch event is not supported")
     }
   }
-}
-
-object WatchType {
-  val data = 1
-  val exists = 2
-  val child = 3
 }

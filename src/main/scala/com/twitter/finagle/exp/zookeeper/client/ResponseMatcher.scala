@@ -208,7 +208,8 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
             }
           case serverExc: ZookeeperException => Future.exception(exc1)
 
-          case _ => Future.exception(new RuntimeException("Unexpected exception during decoding"))
+          case exc: Throwable =>
+            Future.exception(new RuntimeException("Unexpected exception during decoding").initCause(exc))
         }
       }
     }
@@ -491,7 +492,6 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
               if (header.err == 0) {
                 TransactionResponse(rem) match {
                   case Return((body, rem2)) =>
-                    println("---> TRANSACTION")
                     Future(RepPacket(StateHeader(header), Some(body)))
                   case Throw(exception) => throw exception
                 }

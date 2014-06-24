@@ -71,6 +71,12 @@ object BufString {
 }
 
 object BufArray {
+  def toBytes(buf: Buf): Array[Byte] = {
+    val bytes = new Array[Byte](buf.length)
+    buf.write(bytes, 0)
+    bytes
+  }
+
   def apply(a: Array[Byte]): Buf = {
     val arrBuf = Buf.ByteArray(a)
     BufInt(arrBuf.length).concat(arrBuf)
@@ -78,9 +84,7 @@ object BufArray {
 
   def unapply(buf: Buf): Option[(Array[Byte], Buf)] = {
     val BufInt(len, rem) = buf
-    val arr = new Array[Byte](len)
-    rem.slice(0, len).write(arr, 0)
-    Some(arr, rem.slice(len, rem.length))
+    Some(toBytes(rem.slice(0, len)), rem.slice(len, rem.length))
   }
 }
 

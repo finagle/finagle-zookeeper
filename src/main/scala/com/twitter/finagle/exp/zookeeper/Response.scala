@@ -1,13 +1,15 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
+import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.io.Buf
-import com.twitter.util._
 import com.twitter.util.TimeConversions._
+import com.twitter.util._
 
-sealed trait Response
-sealed trait Decoder[T <: Response] {
+sealed trait ResponseElement
+sealed trait Response extends ResponseElement
+sealed trait OpResult extends ResponseElement
+sealed trait Decoder[T <: ResponseElement] {
   def unapply(buffer: Buf): Option[(T, Buf)]
   def apply(buffer: Buf): Try[(T, Buf)] = {
     unapply(buffer) match {
@@ -22,17 +24,22 @@ case class ConnectResponse(
   timeOut: Duration,
   sessionId: Long,
   passwd: Array[Byte],
-  isRO: Boolean
+  isRO: Boolean) extends Response
+
+case class CreateResponse(path: String) extends Response with OpResult
+case class Create2Response(path: String, stat: Stat) extends Response with OpResult
+
+case class ExistsResponse(
+  stat: Option[Stat], watch: Option[Future[WatchEvent]]
   ) extends Response
 
-case class CreateResponse(path: String) extends Response
-
-sealed trait ExistsResponse extends Response
-case class NodeWithWatch(stat: Stat, watch: Option[Future[WatchEvent]]) extends ExistsResponse
-case class NoNodeWatch(watch: Future[WatchEvent]) extends ExistsResponse
-
-case class ErrorResponse(err: Int) extends Response
-case class EmptyResponse() extends Response
+/**
+ * An error result from any kind of operation.  The point of error results
+ * is that they contain an error code which helps understand what happened.
+ * @see ZookeeperExceptions
+ */
+case class ErrorResponse(exception: ZookeeperException) extends OpResult
+case class EmptyResponse() extends Response with OpResult
 case class GetACLResponse(acl: Seq[ACL], stat: Stat) extends Response
 case class GetChildrenResponse(
   children: Seq[String],
@@ -51,9 +58,8 @@ case class GetDataResponse(
   watch: Option[Future[WatchEvent]])
   extends Response
 
-case class GetMaxChildrenResponse(max: Int) extends Response
 case class SetACLResponse(stat: Stat) extends Response
-case class SetDataResponse(stat: Stat) extends Response
+case class SetDataResponse(stat: Stat) extends Response with OpResult
 case class SyncResponse(path: String) extends Response
 
 case class ReplyHeader(
@@ -81,7 +87,15 @@ object ConnectResponse extends Decoder[ConnectResponse] {
     BufBool(isRO,
     rem
     ))))) = buf
-    Some(ConnectResponse(protocolVersion, timeOut.milliseconds, sessionId, passwd, Option(isRO).getOrElse(false)), rem)
+
+    Some(
+      ConnectResponse(
+        protocolVersion,
+        timeOut.milliseconds,
+        sessionId,
+        passwd,
+        Option(isRO).fold(false)(isro => isro)),
+      rem)
   }
 }
 
@@ -92,17 +106,25 @@ object CreateResponse extends Decoder[CreateResponse] {
   }
 }
 
+object Create2Response extends Decoder[Create2Response] {
+  def unapply(buf: Buf): Option[(Create2Response, Buf)] = {
+    val BufString(path, Stat(stat, rem)) = buf
+    Some(Create2Response(path, stat), rem)
+  }
+}
+
 object ErrorResponse extends Decoder[ErrorResponse] {
   def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
     val BufInt(err, rem) = buf
-    Some(ErrorResponse(err), rem)
+    Some(ErrorResponse(
+      ZookeeperException.create("Exception during the transaction:", err)), rem)
   }
 }
 
 object ExistsResponse extends Decoder[ExistsResponse] {
   def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = {
     val Stat(stat, rem) = buf
-    Some(NodeWithWatch(stat, None), rem)
+    Some(ExistsResponse(Some(stat), None), rem)
   }
 }
 
@@ -134,12 +156,14 @@ object GetDataResponse extends Decoder[GetDataResponse] {
   }
 }
 
+/*case class GetMaxChildrenResponse(max: Int) extends Response
+
 object GetMaxChildrenResponse extends Decoder[GetMaxChildrenResponse] {
   def unapply(buf: Buf): Option[(GetMaxChildrenResponse, Buf)] = {
     val BufInt(max, rem) = buf
     Some(GetMaxChildrenResponse(max), rem)
   }
-}
+}*/
 
 object ReplyHeader extends Decoder[ReplyHeader] {
   def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
@@ -171,11 +195,8 @@ object SyncResponse extends Decoder[SyncResponse] {
 
 object TransactionResponse extends Decoder[TransactionResponse] {
   def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
-
-    // Fixme need to give a partial response in case of failure
-    val Transaction(trans, rem) = buf
-    (trans, rem) match {
-      case res: (TransactionResponse, Buf) => Some(res)
+    Transaction.decode(Seq.empty[OpResult], buf) match {
+      case (opList: Seq[OpResult], buf: Buf) => Some((TransactionResponse(opList), buf))
       case _ => None
     }
   }

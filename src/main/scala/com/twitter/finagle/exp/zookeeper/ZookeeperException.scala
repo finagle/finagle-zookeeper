@@ -37,6 +37,8 @@ case class ReconfigInProgressException(msg: String) extends ZookeeperException(m
   * SystemErrorException
   */
 case class ApiErrorException(msg: String) extends ZookeeperException(msg)
+// No problem exception, used in Transaction
+case class OkException(msg: String) extends ZookeeperException(msg)
 /** Node does not exist */
 case class NoNodeException(msg: String) extends ZookeeperException(msg)
 /** Not authenticated */
@@ -81,7 +83,7 @@ object ZookeeperException {
   def create(code: Int): ZookeeperException = create("", code)
 
   def create(msg: String, code: Int): ZookeeperException = code match {
-    // case 0 => Ok opCode
+    case 0 => OkException(msg + " " + "Ok exception")
     case -1 => new SystemErrorException(msg + " " + "System error")
     case -2 => new RuntimeInconsistencyException(msg + " " + "Runtime inconsistency")
     case -3 => new DataInconsistencyException(msg + " " + "Data inconsistency")

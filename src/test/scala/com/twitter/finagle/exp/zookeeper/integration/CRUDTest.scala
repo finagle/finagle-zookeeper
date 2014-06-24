@@ -1,13 +1,13 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
-import org.scalatest.FunSuite
-import com.twitter.util.{Future, Await}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
-import com.twitter.finagle.exp.zookeeper.data.{ACL, Ids}
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
-import com.twitter.finagle.exp.zookeeper.{NodeWithWatch, NodeExistsException, NoNodeException}
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Ids}
+import com.twitter.finagle.exp.zookeeper.{ExistsResponse, NoNodeException, NodeExistsException}
+import com.twitter.util.{Await, Future}
+import org.junit.runner.RunWith
+import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class CRUDTest extends FunSuite with IntegrationConfig {
@@ -44,7 +44,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
     val rep = Await.result(res)
 
     rep match {
-      case rep: NodeWithWatch => assert(rep.stat.dataLength === "HELLO".getBytes.length)
+      case rep: ExistsResponse => assert(rep.stat.get.dataLength === "HELLO".getBytes.length)
       case _ => throw new RuntimeException("Test failed")
     }
 
@@ -66,7 +66,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     val ret = Await.result(res)
     ret._1 match {
-      case rep: NodeWithWatch => assert(rep.stat.dataLength === "HELLO".getBytes.length)
+      case rep: ExistsResponse => assert(rep.stat.get.dataLength === "HELLO".getBytes.length)
       case _ => throw new RuntimeException("Test failed")
     }
     assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
@@ -158,7 +158,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
     val ret = Await.result(futu)
 
     ret match {
-      case rep: NodeWithWatch => assert(rep.stat.numChildren === 0)
+      case rep: ExistsResponse => assert(rep.stat.get.numChildren === 0)
       case _ => throw new RuntimeException("Test failed")
     }
 

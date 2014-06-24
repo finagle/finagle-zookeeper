@@ -1,33 +1,12 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
+import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.io.Buf
-import com.twitter.util.{Throw, Return, Try}
+import com.twitter.util.{Return, Throw, Try}
 import scala.annotation.tailrec
-import com.twitter.finagle.exp.zookeeper.utils.PathUtils
-
-sealed trait OpResult
-sealed trait OpRequest {
-  def buf: Buf
-}
-
-trait ResultDecoder[U <: OpResult] {
-  def unapply(buffer: Buf): Option[(U, Buf)]
-  def apply(buffer: Buf): Try[(U, Buf)] = {
-    unapply(buffer) match {
-      case Some((rep, rem)) => Return((rep, rem))
-      case None => Throw(ZkDecodingException("Error while decoding"))
-    }
-  }
-}
-
-class Transaction(opList: Seq[OpRequest]) {
-  def buf: Buf =
-    opList.foldLeft(Buf.Empty)((buf, op) => buf.concat(op.buf))
-      .concat(MultiHeader(-1, true, -1).buf)
-}
 
 /**
  * A MultiHeader is used to describe an operation
@@ -35,192 +14,87 @@ class Transaction(opList: Seq[OpRequest]) {
  * @param state state
  * @param err error
  */
-case class MultiHeader(typ: Int, state: Boolean, err: Int)
-  extends OpRequest with OpResult {
+case class MultiHeader(typ: Int, state: Boolean, err: Int) {
   def buf: Buf = Buf.Empty
     .concat(BufInt(typ))
     .concat(BufBool(state))
     .concat(BufInt(err))
 }
 
-/**
- * A result from a create operation.  This kind of result allows the
- * path to be retrieved since the create might have been a sequential
- * create.
- */
-case class CreateResult(path: String) extends OpResult
-/**
- * An error result from any kind of operation.  The point of error results
- * is that they contain an error code which helps understand what happened.
- * @see ZookeeperExceptions
- */
-case class ErrorResult(errorCode: Int) extends OpResult
-/**
- * A result from a delete operation.  No special values are available.
- */
-class DeleteResult() extends OpResult
-/**
- * A result from a setData operation.  This kind of result provides access
- * to the Stat structure from the update.
- */
-case class SetDataResult(stat: Stat) extends OpResult
-/**
- * A result from a version check operation.  No special values are available.
- */
-class CheckResult() extends OpResult
-
-case class Create2Result(path: String, stat: Stat) extends OpResult
-
-case class CreateOp(
-  path: String,
-  data: Array[Byte],
-  aclList: Array[ACL],
-  createMode: Int)
-  extends OpRequest {
-  def buf: Buf = Buf.Empty
-    .concat(MultiHeader(OpCode.CREATE, false, -1).buf)
-    .concat(BufString(path))
-    .concat(BufArray(data))
-    .concat(BufSeqACL(aclList))
-    .concat(BufInt(createMode))
-}
-
-case class DeleteOp(path: String, version: Int)
-  extends OpRequest {
-  def buf: Buf = Buf.Empty
-    .concat(MultiHeader(OpCode.DELETE, false, -1).buf)
-    .concat(BufString(path))
-    .concat(BufInt(version))
-}
-
-case class SetDataOp(path: String, data: Array[Byte], version: Int)
-  extends OpRequest {
-  def buf: Buf = Buf.Empty
-    .concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
-    .concat(BufString(path))
-    .concat(BufArray(data))
-    .concat(BufInt(version))
-}
-
-case class CheckOp(path: String, version: Int)
-  extends OpRequest {
-  def buf: Buf = Buf.Empty
-    .concat(MultiHeader(OpCode.CHECK, false, -1).buf)
-    .concat(BufString(path))
-    .concat(BufInt(version))
-}
-
-
-object Transaction {
-  def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
-
-    Try(decode(buf, Seq.empty[OpResult])) match {
-      case Return(res) => Some((TransactionResponse(res._1), res._2))
-      case Throw(exc) => None
-    }
-  }
-
-  @tailrec
-  private[this] def decode(buf: Buf, results: Seq[OpResult]): (Seq[OpResult], Buf) = {
-    val MultiHeader(header, opBuf) = buf
-    if (header.state) (results, opBuf)
-    else {
-      val (res, rem) = header.typ match {
-        case OpCode.CREATE2 =>
-          val Create2Result(rep, rem) = opBuf
-          (Create2Result(rep.path, rep.stat), rem)
-
-        case OpCode.CREATE =>
-          val CreateResult(rep, rem) = opBuf
-          (CreateResult(rep.path), rem)
-
-        case OpCode.DELETE =>
-          (new DeleteResult, opBuf)
-
-        case OpCode.SET_DATA =>
-          val SetDataResult(rep, rem) = opBuf
-          (SetDataResult(rep.stat), rem)
-
-        case OpCode.CHECK =>
-          (new CheckResult, opBuf)
-
-        case OpCode.ERROR =>
-          val ErrorResponse(rep, rem) = opBuf
-          (ErrorResult(rep.err), rem)
-
-        case typ =>
-          throw new Exception("Invalid type %d in MultiResponse".format(typ))
-      }
-      decode(rem, results :+ res)
-    }
-  }
-
-  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = {
-    Try.collect(opList map {
-      case op: CreateOp =>
-        ACL.check(op.aclList)
-        val finalPath = PathUtils.prependChroot(op.path, chroot)
-        PathUtils.validatePath(finalPath, op.createMode)
-        Return(CreateOp(finalPath, op.data, op.aclList, op.createMode))
-      case op: DeleteOp =>
-        val finalPath = PathUtils.prependChroot(op.path, chroot)
-        PathUtils.validatePath(finalPath)
-        Return(DeleteOp(finalPath, op.version))
-      case op: SetDataOp =>
-        val finalPath = PathUtils.prependChroot(op.path, chroot)
-        PathUtils.validatePath(finalPath)
-        Return(SetDataOp(finalPath, op.data, op.version))
-      case op: CheckOp =>
-        val finalPath = PathUtils.prependChroot(op.path, chroot)
-        PathUtils.validatePath(finalPath)
-        Return(CheckOp(finalPath, op.version))
-      case multi: MultiHeader =>
-        Throw(new IllegalArgumentException("MultiHeader not an OpRequest"))
-    })
-  }
-
-  def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] = {
-    opList map {
-      case op: Create2Result =>
-        Create2Result(op.path.substring(chroot.length), op.stat)
-      case op: CreateResult =>
-        CreateResult(op.path.substring(chroot.length))
-      case op: OpResult => op
-    }
-  }
-}
-
-object MultiHeader extends ResultDecoder[MultiHeader] {
+object MultiHeader extends {
   def unapply(buf: Buf): Option[(MultiHeader, Buf)] = {
     val BufInt(typ, BufBool(done, BufInt(err, rem))) = buf
     Some(MultiHeader(typ, done, err), rem)
   }
 }
 
-object CreateResult extends ResultDecoder[CreateResult] {
-  def unapply(buf: Buf): Option[(CreateResult, Buf)] = {
-    val BufString(path, rem) = buf
-    Some(CreateResult(path), rem)
-  }
-}
+object Transaction {
+  @tailrec
+  private[finagle] def decode(results: Seq[OpResult], buf: Buf): (Seq[OpResult], Buf) = {
+    val MultiHeader(header, opBuf) = buf
+    if (header.state) (results, opBuf)
+    else {
+      val (res, rem) = header.typ match {
+        case OpCode.CREATE =>
+          val CreateResponse(rep, rem) = opBuf
+          (CreateResponse(rep.path), rem)
 
-object ErrorResult extends ResultDecoder[ErrorResult] {
-  def unapply(buf: Buf): Option[(ErrorResult, Buf)] = {
-    val BufInt(errorCode, rem) = buf
-    Some(ErrorResult(errorCode), rem)
-  }
-}
+        case OpCode.CREATE2 =>
+          val Create2Response(rep, rem) = opBuf
+          (Create2Response(rep.path, rep.stat), rem)
 
-object SetDataResult extends ResultDecoder[SetDataResult] {
-  def unapply(buf: Buf): Option[(SetDataResult, Buf)] = {
-    val Stat(stat, rem) = buf
-    Some(SetDataResult(stat), rem)
-  }
-}
+        case OpCode.DELETE =>
+          (EmptyResponse(), opBuf)
 
-object Create2Result extends ResultDecoder[Create2Result] {
-  def unapply(buf: Buf): Option[(Create2Result, Buf)] = {
-    val BufString(path, Stat(stat, rem)) = buf
-    Some(Create2Result(path, stat), rem)
+        case OpCode.SET_DATA =>
+          val SetDataResponse(rep, rem) = opBuf
+          (SetDataResponse(rep.stat), rem)
+
+        case OpCode.CHECK =>
+          (EmptyResponse(), opBuf)
+
+        case OpCode.ERROR =>
+          val ErrorResponse(rep, rem) = opBuf
+          (ErrorResponse(rep.exception), rem)
+
+        case typ =>
+          throw new Exception("Invalid type %d in MultiResponse".format(typ))
+      }
+      decode(results :+ res, rem)
+    }
+  }
+
+  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = {
+    Try.collect(opList map {
+      case op: CreateRequest =>
+        ACL.check(op.aclList)
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath, op.createMode)
+        Return(CreateRequest(finalPath, op.data, op.aclList, op.createMode))
+      case op: DeleteRequest =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        Return(DeleteRequest(finalPath, op.version))
+      case op: SetDataRequest =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        Return(SetDataRequest(finalPath, op.data, op.version))
+      case op: CheckVersionRequest =>
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath)
+        Return(CheckVersionRequest(finalPath, op.version))
+      case _ =>
+        Throw(new IllegalArgumentException("Element is not an Op"))
+    })
+  }
+
+  def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] = {
+    opList map {
+      case op: Create2Response =>
+        Create2Response(op.path.substring(chroot.length), op.stat)
+      case op: CreateResponse =>
+        CreateResponse(op.path.substring(chroot.length))
+      case op: OpResult => op
+    }
   }
 }

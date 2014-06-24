@@ -1,12 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
-import com.twitter.util.Await
-import com.twitter.finagle.exp.zookeeper.watch.{zkState, eventType}
 import com.twitter.finagle.exp.zookeeper.data.Ids
+import com.twitter.finagle.exp.zookeeper.watch.Watch
+import com.twitter.util.Await
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import com.twitter.finagle.exp.zookeeper.NodeWithWatch
 
 @RunWith(classOf[JUnitRunner])
 class WatchTest extends IntegrationConfig {
@@ -31,11 +30,11 @@ class WatchTest extends IntegrationConfig {
     } yield exist
 
 
-    val ret = Await.result(res).asInstanceOf[NodeWithWatch]
+    val ret = Await.result(res)
 
     ret.watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_DATA_CHANGED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.typ === Watch.EventType.NODE_DATA_CHANGED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
     Await.ready(ret.watch.get)
@@ -58,8 +57,8 @@ class WatchTest extends IntegrationConfig {
     val ret = Await.result(res)
 
     ret.watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_DATA_CHANGED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.typ === Watch.EventType.NODE_DATA_CHANGED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -83,8 +82,8 @@ class WatchTest extends IntegrationConfig {
     val ret = Await.result(res)
 
     ret.watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -108,8 +107,8 @@ class WatchTest extends IntegrationConfig {
     val ret = Await.result(res)
 
     ret.watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -137,15 +136,15 @@ class WatchTest extends IntegrationConfig {
 
     val (getChildrenRep, existsRep) = Await.result(res)
 
-    existsRep.asInstanceOf[NodeWithWatch].watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_DELETED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+    existsRep.watch.get onSuccess { rep =>
+      assert(rep.typ === Watch.EventType.NODE_DELETED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test/hello")
     }
 
     getChildrenRep.watch.get onSuccess { rep =>
-      assert(rep.typ === eventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === zkState.SYNC_CONNECTED)
+      assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
+      assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 

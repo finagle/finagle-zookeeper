@@ -72,7 +72,7 @@ class ConnectionTest extends FunSuite {
 
     val ret = Await.result(res)
     ret._1 match {
-      case rep: NodeWithWatch => assert(rep.stat.dataLength === "HELLO".getBytes.length)
+      case rep: ExistsResponse => assert(rep.stat.get.dataLength === "HELLO".getBytes.length)
       case _ => throw new RuntimeException("Test failed")
     }
     assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)

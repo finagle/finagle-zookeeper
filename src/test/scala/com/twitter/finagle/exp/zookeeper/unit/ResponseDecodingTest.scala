@@ -1,780 +1,246 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
-import org.scalatest.FunSuite
-import com.twitter.util.{Throw, Return, Try}
+import java.util
+
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
-import org.jboss.netty.buffer.ChannelBuffers._
-import scala.Some
+import com.twitter.finagle.exp.zookeeper.data.{Stat, Ids}
+import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.watch.Watch
+import com.twitter.io.Buf
+import com.twitter.util.TimeConversions._
+import org.scalatest.FunSuite
 
 class ResponseDecodingTest extends FunSuite {
-/*
-  class Helper {
-    val buffer = Buffer.getDynamicBuffer(16)
-    val writer = BufferWriter(buffer)
+  test("Decode a ReplyHeader") {
+    val replyHeader = ReplyHeader(1, 1L, 1)
+    val readBuffer = Buf.Empty
+      .concat(BufInt(1))
+      .concat(BufLong(1L))
+      .concat(BufInt(1))
+
+    val (decodedRep, _) = ReplyHeader
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
+
+    assert(decodedRep === replyHeader)
   }
 
   test("Decode a connect response") {
-    val h = new Helper
-    import h._
+    val connectResponse = ConnectResponse(
+      0, 3000.milliseconds, 123415646L, "password".getBytes, true)
 
-    writer.write(-1)
-    //Protocol version
-    writer.write(0)
-    //Negotiated time out
-    writer.write(2000)
-    //Session id
-    writer.write(1L)
-    //Password
-    writer.write(Array[Byte](16))
-    //Can be read only (not supported by every server version)
-    writer.write(Some(true))
+    val readBuffer = Buf.Empty
+      .concat(BufInt(0))
+      .concat(BufInt(3000))
+      .concat(BufLong(123415646L))
+      .concat(BufArray("password".getBytes))
+      .concat(BufBool(true))
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
+    val (decodedRep, _) = ConnectResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    //Decode the raw response of connect response
-    val pureRep: Try[ConnectResponse] = ResponseDecoder.decode(rep, opCode.createSession).asInstanceOf[Try[ConnectResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.protocolVersion === 0)
-        assert(res.timeOut === 2000)
-        assert(res.sessionId === 1L)
-        assert(res.passwd === Array[Byte](16))
-        assert(res.canRO === Some(true))
-        true
-    })
+    assert(connectResponse.isRO == decodedRep.isRO)
+    assert(connectResponse.protocolVersion == decodedRep.protocolVersion)
+    assert(connectResponse.sessionId == decodedRep.sessionId)
+    assert(connectResponse.timeOut == decodedRep.timeOut)
+    assert(util.Arrays.equals(connectResponse.passwd, decodedRep.passwd))
   }
 
   test("Decode a create response") {
-    val h = new Helper
-    import h._
+    val createResponse = CreateResponse("/zookeeper/test")
 
-    //ReplyHeader
-    writer.write(-1)
-    //Header
-    //XID
-    writer.write(745)
-    //Zxid
-    writer.write(1L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufString("/zookeeper/test"))
 
-    //Body
-    //Path
-    writer.write("/zookeeper/test")
+    val (decodedRep, _) = CreateResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep: Try[CreateResponse] = ResponseDecoder.decode(rep, opCode.create).asInstanceOf[Try[CreateResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 1L)
-        assert(res.header.err === 0)
-        assert(res.body.get.path === "/zookeeper/test")
-        true
-    })
+    assert(decodedRep === createResponse)
   }
-
-  test("Decode a delete response") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.err === 0)
-        assert(res.xid === 745)
-        assert(res.zxid === 152)
-        true
-    })
-  }
-
-  test("Decode an error response (from a delete response)") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(-101)
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-
-    val pureRep = ResponseDecoder.decode(rep, opCode.delete).asInstanceOf[Try[ReplyHeader]]
-
-    assert(pureRep match {
-      case Throw(ex) =>
-        assert(ex.isInstanceOf[ZookeeperException])
-        true
-    })
-  }
-
-
 
   test("Decode a watch event") {
-    val h = new Helper
+    val watchEvent = WatchEvent(
+      Watch.EventType.NODE_CREATED, Watch.State.SYNC_CONNECTED, "/zookeeper/test")
 
-    import h._
+    val readBuffer = Buf.Empty
+      .concat(BufInt(Watch.EventType.NODE_CREATED))
+      .concat(BufInt(Watch.State.SYNC_CONNECTED))
+      .concat(BufString("/zookeeper/test"))
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val (decodedRep, _) = WatchEvent
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Body
-    //Type
-    writer.write(1)
-    //state
-    writer.write(3)
-    //Path
-    writer.write("/zookeeper/test")
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val event = WatcherEvent.decode(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    assert(event.header.xid === 745)
-    assert(event.header.zxid === 152)
-    assert(event.header.err === 0)
-    assert(event.body.get.typ === 1)
-    assert(event.body.get.state === 3)
-    assert(event.body.get.path === "/zookeeper/test")
+    assert(decodedRep === watchEvent)
   }
 
-  test("Decode a disconnect response") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.closeSession).asInstanceOf[Try[ReplyHeader]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.err === 0)
-        assert(res.xid === 745)
-        assert(res.zxid === 152)
-        true
-    })
-  }
-
-  test("Decode a ping response") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.ping).asInstanceOf[Try[ReplyHeader]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.err === 0)
-        assert(res.xid === 745)
-        assert(res.zxid === 152)
-        true
-    })
-  }
 
   test("Decode an exists response") {
-    val h = new Helper
-    import h._
+    val existsRep = ExistsResponse(Some(
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L)),
+      None)
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
+    val (decodedRep, _) = ExistsResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.exists).asInstanceOf[Try[ExistsResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(decodedRep === existsRep)
   }
 
   test("Decode a getAcl response") {
-    val h = new Helper
-    import h._
+    val getAclRep = GetACLResponse(Ids.OPEN_ACL_UNSAFE, Stat(
+      0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //ACL
-    val aclList = Array.fill(1)(new ACL(31, new ID("world", "anyone")))
-    writer.write(aclList)
+    val (decodedRep, _) = GetACLResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
-
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.getACL).asInstanceOf[Try[GetACLResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.acl(0).perms === 31)
-        assert(res.body.get.acl(0).id.id === "anyone")
-        assert(res.body.get.acl(0).id.scheme === "world")
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(decodedRep === getAclRep)
   }
 
   test("Decode a getChildren response") {
-    val h = new Helper
-    import h._
+    val getChildrenRep = GetChildrenResponse(
+      Seq("/zookeeper/test", "zookeeper/hello"), None)
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufSeqString(Seq("/zookeeper/test", "zookeeper/hello")))
 
-    //Body
-    //Children
-    val children = Array[String]("/zookeeper/test", "/zookeeper/hello", "zookeeper/real")
-    writer.write(children)
+    val (decodedRep, _) = GetChildrenResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.getChildren).asInstanceOf[Try[GetChildrenResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.children(0) === children(0))
-        assert(res.body.get.children(1) === children(1))
-        assert(res.body.get.children(2) === children(2))
-        true
-    })
+    assert(decodedRep === getChildrenRep)
   }
 
   test("Decode a getChildren2 response") {
-    val h = new Helper
-    import h._
+    val getChildren2Rep = GetChildren2Response(
+      Seq("/zookeeper/test", "zookeeper/hello"),
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L),
+      None)
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufSeqString(Seq("/zookeeper/test", "zookeeper/hello")))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //Children
-    val children = Array[String]("/zookeeper/test", "/zookeeper/hello", "zookeeper/real")
-    writer.write(children)
+    val (decodedRep, _) = GetChildren2Response
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
-
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.getChildren2).asInstanceOf[Try[GetChildren2Response]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.children(0) === children(0))
-        assert(res.body.get.children(1) === children(1))
-        assert(res.body.get.children(2) === children(2))
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(decodedRep === getChildren2Rep)
   }
 
   test("Decode a getData response") {
-    val h = new Helper
-    import h._
+    val getDataRep = GetDataResponse(
+      "change".getBytes,
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L),
+      None)
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufArray("change".getBytes))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //Data
-    writer.write(Array[Byte](1561e10.toByte))
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
+    val (decodedRep, _) = GetDataResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.getData).asInstanceOf[Try[GetDataResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.data === Array[Byte](1561e10.toByte))
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(util.Arrays.equals(decodedRep.data, getDataRep.data))
+    assert(decodedRep.stat === getDataRep.stat)
   }
 
   test("Decode a setAcl response") {
-    val h = new Helper
-    import h._
+    val setAclResponse = SetACLResponse(
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
+    val (decodedRep, _) = SetACLResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.setACL).asInstanceOf[Try[SetACLResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(decodedRep === setAclResponse)
   }
 
   test("Decode a setData response") {
-    val h = new Helper
-    import h._
+    val setDataRep = SetDataResponse(
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
 
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
+    val readBuffer = Buf.Empty
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
+      .concat(BufInt(1))
+      .concat(BufInt(1))
+      .concat(BufLong(0L))
 
-    //Body
-    //Stat
-    //czxid
-    writer.write(1L)
-    //mzxid
-    writer.write(2L)
-    //ctime
-    writer.write(3L)
-    //mtime
-    writer.write(4L)
-    //version
-    writer.write(1)
-    //cversion
-    writer.write(2)
-    //aversion
-    writer.write(3)
-    //ephemeralOwner
-    writer.write(5L)
-    //dataLength
-    writer.write(1455689)
-    //numChildren
-    writer.write(0)
-    //pzxid
-    writer.write(1225L)
+    val (decodedRep, _) = SetDataResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
 
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.setData).asInstanceOf[Try[SetDataResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.stat.czxid === 1L)
-        assert(res.body.get.stat.mzxid === 2L)
-        assert(res.body.get.stat.ctime === 3L)
-        assert(res.body.get.stat.mtime === 4L)
-        assert(res.body.get.stat.version === 1)
-        assert(res.body.get.stat.cversion === 2)
-        assert(res.body.get.stat.aversion === 3)
-        assert(res.body.get.stat.ephemeralOwner === 5L)
-        assert(res.body.get.stat.dataLength === 1455689)
-        assert(res.body.get.stat.numChildren === 0)
-        assert(res.body.get.stat.pzxid === 1225L)
-        true
-    })
+    assert(decodedRep === setDataRep)
   }
-
-  test("Decode a setWatches response") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
-
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.setWatches).asInstanceOf[Try[ReplyHeader]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.xid === 745)
-        assert(res.zxid === 152L)
-        assert(res.err === 0)
-        true
-    })
-  }
-
-  test("Decode a sync response") {
-    val h = new Helper
-    import h._
-
-    //ReplyHeader
-    writer.write(-1)
-    //XID
-    writer.write(745)
-    //ZXID
-    writer.write(152L)
-    //Err
-    writer.write(0)
-
-    //Body
-    //Path
-    writer.write("/zookeeper/test/real/world/case/here/for/real")
-
-    //Write the packet size at index 0 and rewind
-    val bb = writer.underlying.toByteBuffer
-    bb.putInt(bb.capacity() - 4)
-    bb.rewind()
-
-    //This is the type of response received at decoding
-    val rep = BufferedResponse(Buffer.fromChannelBuffer(wrappedBuffer(bb)))
-    val pureRep = ResponseDecoder.decode(rep, opCode.sync).asInstanceOf[Try[SyncResponse]]
-
-    assert(pureRep match {
-      case Return(res) =>
-        assert(res.header.xid === 745)
-        assert(res.header.zxid === 152L)
-        assert(res.header.err === 0)
-        assert(res.body.get.path === "/zookeeper/test/real/world/case/here/for/real")
-        true
-    })
-  }*/
 }
