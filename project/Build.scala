@@ -32,12 +32,13 @@ object finaglezk extends Build {
   lazy val buildSettings = Seq(
     organization := "com.twitter.finagle",
     version := FinVersion,
-    crossScalaVersions := Seq("2.9.2", "2.10.0"),
+    crossScalaVersions := Seq("2.9.2", "2.10.4"),
     logLevel := Level.Debug
   )
 
-  lazy val root = Project(id = "finagle-zk",
+  lazy val root = Project(
+    id = "finagle-zookeeper",
     base = file("."),
-    settings = Defaults.itSettings ++ baseSettings ++ buildSettings ++ publishSettings)
-    .configs(IntegrationTest)
+    settings = Defaults.itSettings ++ baseSettings ++ buildSettings ++ publishSettings
+  ).configs(IntegrationTest)
 }
