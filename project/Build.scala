@@ -21,6 +21,14 @@ object finaglezk extends Build {
     )
   )
 
+  val publishSettings : Seq[sbt.Project.Setting[_]] = Seq(
+    publishTo := Some("newzly releases" at "http://maven.newzly.com/repository/internal"),
+    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+    publishMavenStyle := true,
+    publishArtifact in Test := false,
+    pomIncludeRepository := { _ => true }
+  )
+
   lazy val buildSettings = Seq(
     organization := "com.twitter.finagle",
     version := FinVersion,
@@ -30,6 +38,6 @@ object finaglezk extends Build {
 
   lazy val root = Project(id = "finagle-zk",
     base = file("."),
-    settings = Defaults.itSettings ++ baseSettings ++ buildSettings)
+    settings = Defaults.itSettings ++ baseSettings ++ buildSettings ++ publishSettings)
     .configs(IntegrationTest)
 }
