@@ -5,45 +5,62 @@ import com.twitter.util.Promise
 import scala.collection.mutable
 
 /**
- * WatchManager may be used to manage watcher events, keep a Set of current watches.
+ * WatchManager is used to manage watches by keeping in memory the map
+ * of active watches.
+ * @param chroot default user chroot
  */
-
-class WatchManager(chroot: String) {
-  private val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
-  private val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
-  private val childWatches: mutable.HashMap[String, Promise[WatchEvent]] = mutable.HashMap()
+private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
+  val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+    mutable.HashMap()
+  val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+    mutable.HashMap()
+  val childWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+    mutable.HashMap()
 
   def getDataWatches = this.synchronized(dataWatches)
   def getExistsWatches = this.synchronized(existsWatches)
   def getChildWatches = this.synchronized(childWatches)
 
-  private[finagle] def register(path: String, watchType: Int): Promise[WatchEvent] = {
-    watchType match {
-      case Watch.Type.data =>
-        dataWatches.get(path) match {
-          case Some(promise) => promise
-          case None =>
-            val p = Promise[WatchEvent]()
-            dataWatches += path -> p
-            p
-        }
+  private[this] def addWatch(
+    map: mutable.HashMap[String, Promise[WatchEvent]],
+    path: String): Promise[WatchEvent] = {
 
-      case Watch.Type.exists =>
-        existsWatches.get(path) match {
-          case Some(promise) => promise
-          case None =>
-            val p = Promise[WatchEvent]()
-            existsWatches += path -> p
-            p
-        }
-      case Watch.Type.child =>
-        childWatches.get(path) match {
-          case Some(promise) => promise
-          case None =>
-            val p = Promise[WatchEvent]()
-            childWatches += path -> p
-            p
-        }
+    map synchronized {
+      map.getOrElse(path, {
+        val p = Promise[WatchEvent]()
+        map += path -> p
+        p
+      })
+    }
+  }
+
+  def clearWatches() {
+    this.synchronized {
+      dataWatches.clear()
+      existsWatches.clear()
+      childWatches.clear()
+    }
+  }
+
+  private[this] def findWatch(
+    map: mutable.HashMap[String, Promise[WatchEvent]],
+    event: WatchEvent) {
+
+    map synchronized {
+      map.get(event.path) match {
+        case Some(promise) =>
+          promise.setValue(event)
+          map -= event.path
+        case None =>
+      }
+    }
+  }
+
+  def register(path: String, watchType: Int): Promise[WatchEvent] = {
+    watchType match {
+      case Watch.Type.data => addWatch(dataWatches, path)
+      case Watch.Type.exists => addWatch(existsWatches, path)
+      case Watch.Type.child => addWatch(childWatches, path)
     }
   }
 
@@ -52,89 +69,31 @@ class WatchManager(chroot: String) {
    * @param watchEvent the watch event that was received
    * @return
    */
-  private[finagle] def process(watchEvent: WatchEvent) = {
+  def process(watchEvent: WatchEvent) {
     val event = WatchEvent(
       watchEvent.typ,
       watchEvent.state,
       watchEvent.path.substring(chroot.length))
+
     event.typ match {
-      case Watch.EventType.NONE => // TODO
-      case Watch.EventType.NODE_CREATED =>
-        dataWatches synchronized {
-          dataWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              dataWatches -= event.path
-            case None =>
-          }
-        }
+      case Watch.EventType.NONE =>
+        if (event.state != Watch.State.SYNC_CONNECTED)
+          if (!autoWatchReset) clearWatches()
 
-        existsWatches synchronized {
-          existsWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              existsWatches -= event.path
-            case None =>
-          }
-        }
-
-      case Watch.EventType.NODE_DATA_CHANGED =>
-        dataWatches synchronized {
-          dataWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              dataWatches -= event.path
-            case None =>
-          }
-        }
-
-        existsWatches synchronized {
-          existsWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              existsWatches -= event.path
-            case None =>
-          }
-        }
+      case Watch.EventType.NODE_CREATED | Watch.EventType.NODE_DATA_CHANGED =>
+        findWatch(dataWatches, event)
+        findWatch(existsWatches, event)
 
       case Watch.EventType.NODE_DELETED =>
-        dataWatches synchronized {
-          dataWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              dataWatches -= event.path
-            case None =>
-          }
-        }
+        findWatch(dataWatches, event)
+        findWatch(existsWatches, event)
+        findWatch(childWatches, event)
 
-        existsWatches synchronized {
-          existsWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              existsWatches -= event.path
-            case None =>
-          }
-        }
-
-        childWatches synchronized {
-          childWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              childWatches -= event.path
-            case None =>
-          }
-        }
       case Watch.EventType.NODE_CHILDREN_CHANGED =>
-        childWatches synchronized {
-          childWatches.get(event.path) match {
-            case Some(promise) =>
-              promise.setValue(event)
-              childWatches -= event.path
-            case None =>
-          }
-        }
-      // fixme handle exception in a Try
-      case _ => throw new RuntimeException("This Watch event is not supported")
+        findWatch(childWatches, event)
+
+      case _ => throw new RuntimeException(
+        "Unsupported Watch.EventType came during WatchedEvent processing")
     }
   }
 }

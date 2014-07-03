@@ -1,6 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.watch
 
-object Watch {
+private[finagle] object Watch {
   object EventType {
     val NONE = -1
     val NODE_CREATED = 1
@@ -52,8 +52,10 @@ object Watch {
      */
     val CONNECTED_READ_ONLY = 5
     /**
-     * SaslAuthenticated: used to notify clients that they are SASL-authenticated,
-     * so that they can perform Zookeeper actions with their SASL-authorized permissions.
+     * SaslAuthenticated:
+     * used to notify clients that they are SASL-authenticated,
+     * so that they can perform Zookeeper actions with their
+     * SASL-authorized permissions.
      */
     val SASL_AUTHENTICATED = 6
     /** The serving cluster has expired this session. The ZooKeeper
@@ -71,6 +73,8 @@ object Watch {
       case 5 => "Connected read only"
       case 6 => "SASL authenticated"
       case -112 => "expired"
+      case _ => throw new IllegalArgumentException(
+        "Match error: not supported watch state code")
     }
   }
 }

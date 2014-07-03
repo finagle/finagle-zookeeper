@@ -1,183 +1,212 @@
 package com.twitter.finagle.exp.zookeeper.session
 
-import com.twitter.conversions.time._
-import com.twitter.finagle.exp.zookeeper.{WatchEvent, StateHeader, ZookeeperException}
-import com.twitter.finagle.exp.zookeeper.session.Session.States
+import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.client.ZkClient
+import com.twitter.finagle.exp.zookeeper.session.Session._
 import com.twitter.finagle.util.DefaultTimer
-import com.twitter.util.{Duration, TimerTask}
-import java.util.concurrent.atomic.AtomicBoolean
+import com.twitter.util.{Duration, Future, TimerTask}
+import java.util
+import java.util.concurrent.atomic.{AtomicReference, AtomicLong, AtomicInteger, AtomicBoolean}
+import com.twitter.util.TimeConversions._
+
 
 /**
- * Represents a ZooKeeper Session
+ * A Session contains ZooKeeper Session Ids and is in charge of sending
+ * ping requests depending on negotiated session timeout
  * @param sessionID ZooKeeper session ID
- * @param sessionPwd ZooKeeper session password
- * @param sessTimeout requested session timeout
- * @param negoTimeout negotiated session timeout
+ * @param sessionPassword ZooKeeper session password
+ * @param sessionTimeout requested session timeout
+ * @param negotiateTimeout negotiated session timeout
+ * @param isRO if the session is currently read only
  */
 class Session(
   sessionID: Long = 0L,
-  sessionPwd: Array[Byte] = Array[Byte](16),
-  sessTimeout: Duration = 3000.milliseconds,
-  negoTimeout: Duration = 3000.milliseconds,
-  canReadOnly: Boolean = false
+  sessionPassword: Array[Byte] = Array[Byte](16),
+  sessionTimeout: Duration = Duration.Bottom,
+  var negotiateTimeout: Duration = Duration.Bottom,
+  var isRO: AtomicBoolean = new AtomicBoolean(false),
+  var pinger: Option[PingSender] = None
   ) {
-  /**
-   * Session variables
-   * sessionId - current session Id
-   * sessionPassword - current session password
-   * sessionTimeout - negotiated session timeout
-   * xid - current request Id
-   * lastZxid - last ZooKeeper Transaction Id
-   */
-  var isReadOnly = false
-  val sessionId: Long = sessionID
-  val sessionPassword: Array[Byte] = sessionPwd
-  val sessionTimeout: Duration = sessTimeout
-  var negotiatedTimeout: Duration = negoTimeout
-  // Ping at 1/3 of timeout, connect to a new host if no response at 2/3 of timeout
-  var pingTimeout: Duration = negotiatedTimeout * 1 / 3
-  var readTimeout: Duration = negotiatedTimeout * 2 / 3
-  @volatile private[this] var xid = 2
-  @volatile var lastZxid: Long = 0L
-  @volatile var state: States.ConnectionState = States.NOT_CONNECTED
 
-  private[finagle] val isFirstConnect = new AtomicBoolean(true)
+  private[finagle]
+  var currentState = new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)
   private[finagle] val isClosingSession = new AtomicBoolean(false)
-  private[finagle] val pingScheduler = new PingScheduler
+  private[finagle] var hasFakeSessionId = new AtomicBoolean(true)
+  private[finagle] val lastZxid = new AtomicLong(0L)
+  private[this] val xid = new AtomicInteger(2)
+
+  def isReadOnly = this.isRO
+  def id: Long = sessionID
+  def password: Array[Byte] = sessionPassword
+  /**
+   * Ping every 1/3 of timeout, connect to a new host
+   * if no response at (lastRequestTime) + 2/3 of timeout
+   */
+  private[this] def pingTimeout: Duration = negotiateTimeout * 1 / 3
+  def diseredTimeout: Duration = sessionTimeout
+  def negotiatedTimeout: Duration = negotiateTimeout
+  def state: States.ConnectionState = currentState.get()
+
+  /**
+   * Determines if we can use init or reinit
+   * @return true or exception
+   */
+  private[finagle] def canConnect: Boolean = currentState.get() match {
+    case States.NOT_CONNECTED |
+         States.CLOSED |
+         States.SESSION_EXPIRED |
+         States.CONNECTION_LOSS => true
+    case _ => false
+  }
+
+  /**
+   * Determines if we can close the session
+   * @return true or exception
+   */
+  private[finagle] def canClose: Boolean = currentState.get() match {
+    case States.CONNECTING |
+         States.ASSOCIATING |
+         States.CLOSED |
+         States.NOT_CONNECTED => false
+    case _ => true
+  }
+
+  /**
+   * Called after the close session response decoding
+   */
+  private[finagle] def close() {
+    isClosingSession.set(false)
+    currentState.set(States.CLOSED)
+  }
 
   /**
    * To get the next xid
    * @return the next unique XID
    */
-  def getXid: Int = {
-    this.synchronized {
-      xid += 1
-      xid - 1
-    }
+  private[finagle] def nextXid: Int = xid.getAndIncrement
+
+  /**
+   * Use init just after session creation
+   */
+  private[finagle] def init() {
+    if (pinger.isDefined && !PingScheduler.isRunning) {
+      xid.set(2)
+      lastZxid.set(0L)
+      startPing()
+      isClosingSession.set(false)
+      if (isRO.get()) currentState.set(States.CONNECTED_READONLY)
+      else {
+        currentState.set(States.CONNECTED)
+        hasFakeSessionId.set(false)
+      }
+    } else throw new RuntimeException(
+      "Pinger is not initiated or PingScheduler is already running in Session")
   }
 
   /**
-   * This is how we start to send ping every x milliseconds
-   * @param f a request writer taking a PingRequest as argument
-   */
-  private[finagle] def startPing(f: => Unit) = pingScheduler(pingTimeout)(f)
-  /**
-   * Classic way to determine the real interval between two pings
-   * @return effective period to send ping
-   */
-
-  /**
-   * Connect session management :
-   */
-  def canConnect(): Boolean = {
-    if (state == States.NOT_CONNECTED ||
-      state == States.CLOSED ||
-      state == States.SESSION_EXPIRED ||
-      state == States.CONNECTION_LOSS) true
-    else {
-      throw new ZookeeperException("Connection exception: Session is already established")
-    }
-  }
-
-  def canClose(): Boolean = {
-    if (state != States.CONNECTING &&
-      state != States.ASSOCIATING &&
-      state != States.CLOSED &&
-      state != States.NOT_CONNECTED) true
-    else {
-      throw new ZookeeperException("Connection exception: Session is not established")
-    }
-  }
-
-  /**
-   * Close session management :
-   * -- prepareClose
    * Called before the close session request is written
-   *
-   * -- close
-   * Called after the close session response decoding
    */
-  def prepareClose() {
-    pingScheduler.currentTask.get.cancel()
+  private[finagle] def prepareClose() {
+    stopPing()
     isClosingSession.set(true)
   }
-  def close() { state = States.CLOSED }
 
   /**
-   * Here we are parsing the header's error field
-   * and changing the connection state if required
-   * then the ZXID is updated.
-   * @param header a request header•
+   * Reinitialize session with a connect response and a function sending ping
+   * @param connectResponse a connect response
+   * @param pingSender a function sending ping and receiving response
    */
-  def parseStateHeader(header: StateHeader) {
-    header.err match {
-      case 0 => state = States.CONNECTED // TODO not if readonly manage this
-      case -4 => state = States.CONNECTION_LOSS
-      case -112 => state = States.SESSION_EXPIRED
-      case -118 => state = States.SESSION_MOVED
-      case -666 =>
-        // -666 is the code for first connect
-        if (state == States.CONNECTING) {
-          isFirstConnect.set(false)
-          state = States.CONNECTED
-        }
-      case _ =>
+  private[finagle] def reinit(
+    connectResponse: ConnectResponse,
+    pingSender: PingSender) {
+    assert(connectResponse.sessionId == sessionID)
+    assert(util.Arrays.equals(connectResponse.passwd, password))
+
+    stopPing()
+    isClosingSession.set(false)
+    isRO.set(connectResponse.isRO)
+    if (isRO.get()) currentState.set(States.CONNECTED_READONLY)
+    else {
+      currentState.set(States.CONNECTED)
+      hasFakeSessionId.set(false)
     }
-    lastZxid = header.zxid
+    this.pinger = Some(pingSender)
+    negotiateTimeout = connectResponse.timeOut
+    startPing()
+    xid.set(2)
+    ZkClient.logger.info(
+      "Reconnected to session with ID: %d".format(connectResponse.sessionId))
   }
 
   /**
-   * Here we are parsing the watchEvent's state field
-   * and changing the connection state if required
-   * @param event a request header
+   * Reset session variables to prepare for reconnection
+   * @return Future.Done
    */
-  def parseWatchEvent(event: WatchEvent) {
-    event.state match {
-      case 0 => state = States.NOT_CONNECTED
-      case 3 => state = States.CONNECTED
-      case -112 => state = States.SESSION_EXPIRED
-      case 4 => state = States.AUTH_FAILED
-      case 5 =>
-        isReadOnly = true
-        state = States.CONNECTED_READONLY
-      case 6 => state = States.SASL_AUTHENTICATED
-      case _ =>
+  private[finagle] def reset(): Future[Unit] = {
+    stopPing()
+    currentState.set(States.NOT_CONNECTED)
+    isClosingSession.set(false)
+    isRO.set(false)
+    xid.set(2)
+    this.pinger = None
+    Future.Done
+  }
+
+  private[finagle] def stop() {
+    stopPing()
+  }
+
+  /**
+   * This is how we send ping every x milliseconds
+   */
+  private[this]
+  def startPing(): Unit = PingScheduler(pingTimeout)(pinger.get())
+  private[this]
+  def stopPing(): Unit = PingScheduler.stop()
+
+
+  /**
+   * PingScheduler is used to send Ping Request to the server
+   * every x milliseconds, if the connection is alive. If we issue
+   * a connection loss then the current task is cancelled and a new one
+   * is created after the reconnection succeeded.
+   */
+  private[finagle] object PingScheduler {
+
+    /**
+     * currentTask - the last scheduled timer's task
+     */
+    var currentTask: Option[TimerTask] = None
+
+    def apply(period: Duration)(f: => Unit) {
+      currentTask = Some(DefaultTimer.twitter.schedule(period)(f))
     }
-  }
-}
 
-/**
- * PingScheduler is used to send Ping Request to the server
- * every x milliseconds, if the connection is alive. If we issue
- * a connection loss then the current task is cancelled and a new one
- * is created after the reconnection succeeded.
- */
-class PingScheduler {
-  /**
-   * Local variables
-   * timer - default Twitter timer ( never stop it! )
-   * currentTask - the last scheduled timer's task
-   */
-  val timer = DefaultTimer
-  var currentTask: Option[TimerTask] = None
+    def isRunning: Boolean = { currentTask.isDefined }
 
-  def apply(period: Duration)(f: => Unit) {
-    currentTask = Some(timer.twitter.schedule(period)(f))
-  }
+    def stop() {
+      if (currentTask.isDefined) currentTask.get.cancel()
+      currentTask = None
+    }
 
-  def updateTimer(period: Duration)(f: => Unit) = {
-    currentTask.get.cancel()
-    apply(period)(f)
+    def updateTimer(period: Duration)(f: => Unit) = {
+      stop()
+      apply(period)(f)
+    }
   }
 }
 
 object Session {
+  type PingSender = () => Future[Unit]
+  class SessionAlreadyEstablished(msg: String) extends RuntimeException(msg)
+  class NoSessionEstablished(msg: String) extends RuntimeException(msg)
   /**
    * States describes every possible states of the connection
    */
   object States extends Enumeration {
     type ConnectionState = Value
-    val CONNECTING, ASSOCIATING, CONNECTED, CONNECTED_READONLY, CLOSED, AUTH_FAILED, NOT_CONNECTED = Value
-    val CONNECTION_LOSS, SESSION_EXPIRED, SESSION_MOVED, SASL_AUTHENTICATED = Value
+    val CONNECTING, ASSOCIATING, CONNECTED, CONNECTED_READONLY,
+    CLOSED, AUTH_FAILED, NOT_CONNECTED, CONNECTION_LOSS, SESSION_EXPIRED,
+    SESSION_MOVED, SASL_AUTHENTICATED = Value
   }
 }

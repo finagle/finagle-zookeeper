@@ -5,29 +5,67 @@ import com.twitter.finagle.{Service, ServiceFactory}
 import com.twitter.util.{Duration, Future, Time}
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * Connection manages a ServiceFactory, in charge of serving requests to server
+ * @param serviceFactory current connection to server
+ */
 class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
-  @volatile private[this] var service: Future[Service[ReqPacket, RepPacket]] = serviceFactory.apply()
   val isValid = new AtomicBoolean(true)
+  private[this] val service: Future[Service[ReqPacket, RepPacket]] =
+    serviceFactory.apply()
+
   /**
-   * Is set to true when a connection to a r/w server is established for the
-   * first time; never changed afterwards.
-   * <p>
-   * Is used to handle situations when client without sessionId connects to a
-   * read-only server. Such client receives "fake" sessionId from read-only
-   * server, but this sessionId is invalid for other servers. So when such
-   * client finds a r/w server, it sends 0 instead of fake sessionId during
-   * connection handshake and establishes new, valid session.
-   * <p>
-   * If this field is false (which implies we haven't seen r/w server before)
-   * then non-zero sessionId is fake, otherwise it is valid.
+   * Close current service and ServiceFactory
+   * @return Future.Done
    */
-  @volatile var seenRwServerBefore: Boolean = false
-  //val ZooKeeperSaslClient zooKeeperSaslClient
-
-  def close(): Future[Unit] = serviceFactory.close()
-  def close(time: Time): Future[Unit] = serviceFactory.close(time)
-  def close(duration: Duration): Future[Unit] = serviceFactory.close(duration)
-
-  def newService() { service = serviceFactory.apply() }
+  def close(): Future[Unit] = {
+    service flatMap { svc =>
+      isValid.set(false)
+      if (svc.isAvailable && serviceFactory.isAvailable) {
+        svc.close() before serviceFactory.close()
+      } else if (svc.isAvailable && !serviceFactory.isAvailable) {
+        svc.close()
+      } else if (!svc.isAvailable && serviceFactory.isAvailable) {
+        serviceFactory.close()
+      } else {
+        Future.Done
+      }
+    }
+  }
+  def close(time: Time): Future[Unit] = {
+    service flatMap { svc =>
+      isValid.set(false)
+      if (svc.isAvailable && serviceFactory.isAvailable) {
+        svc.close(time) before serviceFactory.close(time)
+      } else if (svc.isAvailable && !serviceFactory.isAvailable) {
+        svc.close(time)
+      } else if (!svc.isAvailable && serviceFactory.isAvailable) {
+        serviceFactory.close(time)
+      } else {
+        Future.Done
+      }
+    }
+  }
+  def close(duration: Duration): Future[Unit] = {
+    service flatMap { svc =>
+      isValid.set(false)
+      if (svc.isAvailable && serviceFactory.isAvailable) {
+        svc.close(duration) before serviceFactory.close(duration)
+      } else if (svc.isAvailable && !serviceFactory.isAvailable) {
+        svc.close(duration)
+      } else if (!svc.isAvailable && serviceFactory.isAvailable) {
+        serviceFactory.close(duration)
+      } else {
+        Future.Done
+      }
+    }
+  }
+  def isServiceFactoryAvailable: Boolean = serviceFactory.isAvailable
+  def isServiceAvailable: Future[Boolean] = service flatMap
+    (svc => Future(svc.isAvailable))
   def serve(req: ReqPacket): Future[RepPacket] = service flatMap (_(req))
+}
+
+private[finagle] object Connection {
+  class NoConnectionAvailable(msg: String) extends RuntimeException(msg)
 }

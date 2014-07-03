@@ -40,7 +40,14 @@ class ConnectionTest extends FunSuite {
 
       val conReq = ReqPacket(
         None,
-        Some(new ConnectRequest(0, 0L, 5000.milliseconds, canBeRO = true)))
+        Some(new ConnectRequest(
+          0,
+          0L,
+          5000.milliseconds,
+          0L,
+          Array[Byte](16),
+          canBeRO = true)))
+
       val closeReq = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
 
       val rep = serve(BufInt(conReq.buf.length).concat(conReq.buf)) before {
@@ -52,7 +59,6 @@ class ConnectionTest extends FunSuite {
     }
     catch {
       case exc: ChannelWriteException =>
-        println("exception")
         throw exc
     }
   }

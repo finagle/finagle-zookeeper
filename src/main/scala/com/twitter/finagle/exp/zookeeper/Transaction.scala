@@ -14,14 +14,15 @@ import scala.annotation.tailrec
  * @param state state
  * @param err error
  */
-case class MultiHeader(typ: Int, state: Boolean, err: Int) {
+private[finagle] case class MultiHeader(typ: Int, state: Boolean, err: Int)
+  extends ReqHeader with RepHeader {
   def buf: Buf = Buf.Empty
     .concat(BufInt(typ))
     .concat(BufBool(state))
     .concat(BufInt(err))
 }
 
-object MultiHeader extends {
+private[finagle] object MultiHeader extends {
   def unapply(buf: Buf): Option[(MultiHeader, Buf)] = {
     val BufInt(typ, BufBool(done, BufInt(err, rem))) = buf
     Some(MultiHeader(typ, done, err), rem)
@@ -30,7 +31,11 @@ object MultiHeader extends {
 
 object Transaction {
   @tailrec
-  private[finagle] def decode(results: Seq[OpResult], buf: Buf): (Seq[OpResult], Buf) = {
+  private[finagle] def decode(
+    results: Seq[OpResult],
+    buf: Buf
+    ): (Seq[OpResult], Buf) = {
+
     val MultiHeader(header, opBuf) = buf
     if (header.state) (results, opBuf)
     else {
@@ -43,52 +48,64 @@ object Transaction {
           val Create2Response(rep, rem) = opBuf
           (Create2Response(rep.path, rep.stat), rem)
 
-        case OpCode.DELETE =>
-          (EmptyResponse(), opBuf)
+        case OpCode.DELETE => (new EmptyResponse, opBuf)
 
         case OpCode.SET_DATA =>
           val SetDataResponse(rep, rem) = opBuf
           (SetDataResponse(rep.stat), rem)
 
-        case OpCode.CHECK =>
-          (EmptyResponse(), opBuf)
+        case OpCode.CHECK => (new EmptyResponse, opBuf)
 
         case OpCode.ERROR =>
           val ErrorResponse(rep, rem) = opBuf
           (ErrorResponse(rep.exception), rem)
 
-        case typ =>
-          throw new Exception("Invalid type %d in MultiResponse".format(typ))
+        case _ => throw new IllegalArgumentException(
+          "Unsupported type of operation result while decoding Transaction")
       }
       decode(results :+ res, rem)
     }
   }
 
-  def prepareAndCheck(opList: Seq[OpRequest], chroot: String): Try[Seq[OpRequest]] = {
+  def prepareAndCheck(
+    opList: Seq[OpRequest],
+    chroot: String
+    ): Try[Seq[OpRequest]] = {
+
     Try.collect(opList map {
       case op: CreateRequest =>
         ACL.check(op.aclList)
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath, op.createMode)
         Return(CreateRequest(finalPath, op.data, op.aclList, op.createMode))
+
+      case op: Create2Request =>
+        ACL.check(op.aclList)
+        val finalPath = PathUtils.prependChroot(op.path, chroot)
+        PathUtils.validatePath(finalPath, op.createMode)
+        Return(Create2Request(finalPath, op.data, op.aclList, op.createMode))
+
       case op: DeleteRequest =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
         Return(DeleteRequest(finalPath, op.version))
+
       case op: SetDataRequest =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
         Return(SetDataRequest(finalPath, op.data, op.version))
+
       case op: CheckVersionRequest =>
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
         Return(CheckVersionRequest(finalPath, op.version))
+
       case _ =>
         Throw(new IllegalArgumentException("Element is not an Op"))
     })
   }
 
-  def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] = {
+  def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] =
     opList map {
       case op: Create2Response =>
         Create2Response(op.path.substring(chroot.length), op.stat)
@@ -96,5 +113,4 @@ object Transaction {
         CreateResponse(op.path.substring(chroot.length))
       case op: OpResult => op
     }
-  }
 }

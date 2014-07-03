@@ -1,10 +1,10 @@
 package com.twitter.finagle.exp.zookeeper
 
+import com.twitter.finagle.{Client, Name, ServiceFactory}
 import com.twitter.finagle.client.{Bridge, DefaultClient}
 import com.twitter.finagle.dispatch.PipeliningDispatcher
 import com.twitter.finagle.exp.zookeeper.client.{ZkClient, ZkDispatcher}
 import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport}
-import com.twitter.finagle.{Client, Name, ServiceFactory}
 import com.twitter.io.Buf
 
 /**
@@ -16,21 +16,14 @@ import com.twitter.io.Buf
  *
  * -- ZkTransport
  * We need to frame Rep here, that's why we use ZkTransport
- * which is responsible of queueing every incoming responses
- * and reading new ones from the transport if queue is empty.
+ * which is responsible framing Buf and converting to ChannelBuffer.
+ * It is also reading the request by copying the corresponding buffer in a Buf.
  */
 object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
   name = "zookeeper",
   pool = { _ => identity },
   endpointer = Bridge[Buf, Buf, ReqPacket, RepPacket](
     NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
-
-object SimpleClient extends DefaultClient[Buf, Buf](
-  name = "isroClient",
-  endpointer = Bridge[Buf, Buf, Buf, Buf](
-    NettyTrans(_, _) map { new BufTransport(_) },
-    newDispatcher = new PipeliningDispatcher(_)
-  ))
 
 object ZooKeeper extends Client[ReqPacket, RepPacket] {
   def newClient(name: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
@@ -40,9 +33,21 @@ object ZooKeeper extends Client[ReqPacket, RepPacket] {
     new ZkClient(hostList = hostsList)
 }
 
-object BufClient extends Client[Buf, Buf] {
+/**
+ * Simple client is used to send isro request ( not framed request )
+ * and also to send connect and close requests to old servers ( version < 3.4.0 )
+ * ( read-only mode not supported )
+ * This is basically a Buf client, sending Buf and receiving Buf
+ */
+private[finagle] object SimpleClient extends DefaultClient[Buf, Buf](
+  name = "isroClient",
+  endpointer = Bridge[Buf, Buf, Buf, Buf](
+    NettyTrans(_, _) map { new BufTransport(_) },
+    newDispatcher = new PipeliningDispatcher(_)))
+
+private[finagle] object BufClient extends Client[Buf, Buf] {
   override def newClient(dest: Name, label: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest, label)
-  private[finagle] def newSimpleClient(dest: String): ServiceFactory[Buf, Buf] =
+  def newSimpleClient(dest: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest)
 }

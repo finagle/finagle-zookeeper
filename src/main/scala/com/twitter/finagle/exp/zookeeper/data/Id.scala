@@ -1,17 +1,21 @@
 package com.twitter.finagle.exp.zookeeper.data
 
 import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
-import com.twitter.finagle.exp.zookeeper.transport.BufString
+import com.twitter.finagle.exp.zookeeper.transport.{BufArray, BufString}
 import com.twitter.io.Buf
 
-case class Id(scheme: String, data: String){
+case class Id(scheme: String, data: String) extends Data {
   def buf: Buf = Buf.Empty
     .concat(BufString(scheme))
     .concat(BufString(data))
 }
-case class Auth(scheme: String, data: Array[Byte])
+case class Auth(scheme: String, data: Array[Byte]) extends Data {
+  def buf: Buf = Buf.Empty
+    .concat(BufString(scheme))
+    .concat(BufArray(data))
+}
 
-object Id {
+private[finagle] object Id extends DataDecoder[Id] {
   def unapply(buf: Buf): Option[(Id, Buf)] = {
     val BufString(scheme, BufString(id, rem)) = buf
     Some(Id(scheme, id), rem)

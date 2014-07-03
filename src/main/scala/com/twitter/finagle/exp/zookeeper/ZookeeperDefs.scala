@@ -1,9 +1,6 @@
 package com.twitter.finagle.exp.zookeeper
 
 object ZookeeperDefs {
-
-  val CONFIG_NODE = "/zookeeper/config"
-
   /* Defines the creation mode of a znode*/
   object CreateMode {
     val PERSISTENT = 0
@@ -13,7 +10,7 @@ object ZookeeperDefs {
   }
 
   /* XID to identify the request type */
-  object OpCode {
+  private[finagle] object OpCode {
     val NOTIFICATION = 0
     val CREATE = 1
     val DELETE = 2

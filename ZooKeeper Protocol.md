@@ -1,7 +1,7 @@
 # ZooKeeper protocol documentation
 ## Connection
 TODO
-### Reconnection after connection lost
+### Reconnection after connection loss
 TODO
 ### Reconnection after session expired
 TODO

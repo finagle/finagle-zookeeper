@@ -4,40 +4,38 @@ import com.twitter.finagle.netty3.ChannelBufferBuf
 import com.twitter.finagle.transport.Transport
 import com.twitter.io.Buf
 import com.twitter.util.{Future, Time}
+import java.io.IOException
 import java.net.SocketAddress
 import org.jboss.netty.buffer.{ChannelBuffers, ChannelBuffer}
 
-class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
+/**
+ * ZkTransport:
+ * - on writing : frame outgoing Buf, convert to ChannelBuffer and
+ * write on given next Transport.
+ * - on reading : read packet size, and copy corresponding buffer into Buf
+ * @param trans ChannelBuffer Transport
+ */
+private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
   extends Transport[Buf, Buf] {
 
-  @volatile private[this] var buf = Buf.Empty
-  def remoteAddress: SocketAddress = trans.remoteAddress
-  def localAddress: SocketAddress = trans.localAddress
-  def isOpen: Boolean = trans.isOpen
-  val onClose: Future[Throwable] = trans.onClose
+  @volatile var buf = Buf.Empty
   def close(deadline: Time): Future[Unit] = trans.close(deadline)
+  def isOpen: Boolean = trans.isOpen
+  def localAddress: SocketAddress = trans.localAddress
+  val maxBuffer: Int = 4096 * 1024
+  val onClose: Future[Throwable] = trans.onClose
+  def remoteAddress: SocketAddress = trans.remoteAddress
 
-  def write(req: Buf): Future[Unit] = {
-    val framedReq = BufInt(req.length).concat(req)
-    val bytes = new Array[Byte](framedReq.length)
-    framedReq.write(bytes, 0)
-    trans.write(ChannelBuffers.wrappedBuffer(bytes))
-  }
-
-  /**
-   * We are using this dedicated transport because we want to read
-   * incoming buffers one at a time. Every time read is called,
-   * we check if the queue is not empty, if not we give the front frame,
-   * if it's empty we read every frame until there is nothing more to read.
-   */
   def read(): Future[Buf] =
-    read(4) flatMap { case BufInt(len, _) => read(len) }
+    read(4) flatMap {
+      case BufInt(len, _) if len < 0 || len >= maxBuffer =>
+        // Emptying buffer before throwing
+        buf = Buf.Empty
+        Future.exception(new IOException("Packet len" + len + " is out of range!"))
+      case BufInt(len, _) => read(len)
+    }
 
-  /*if (len < 0 || len >= ClientCnxn.packetLen) {
-    throw new IOException("Packet len" + len + " is out of range!");
-  }*/
-
-  private[this] def read(len: Int): Future[Buf] =
+  def read(len: Int): Future[Buf] =
     if (buf.length < len) {
       trans.read flatMap { chanBuf =>
         buf = buf.concat(ChannelBufferBuf(chanBuf))
@@ -48,25 +46,38 @@ class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
       buf = buf.slice(len, buf.length)
       Future.value(out)
     }
+
+  def write(req: Buf): Future[Unit] = {
+    val framedReq = BufInt(req.length).concat(req)
+    val bytes = new Array[Byte](framedReq.length)
+    framedReq.write(bytes, 0)
+    trans.write(ChannelBuffers.wrappedBuffer(bytes))
+  }
 }
 
-class BufTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
+/**
+ * BufTransport:
+ * - on writing : convert to ChannelBuffer and write on given next Transport.
+ * - on reading : copy ChannelBuffer to Buf
+ * @param trans ChannelBuffer Transport
+ */
+private[finagle] class BufTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
   extends Transport[Buf, Buf] {
 
-  def remoteAddress: SocketAddress = trans.remoteAddress
-  def localAddress: SocketAddress = trans.localAddress
-  def isOpen: Boolean = trans.isOpen
-  val onClose: Future[Throwable] = trans.onClose
   def close(deadline: Time): Future[Unit] = trans.close(deadline)
+  def isOpen: Boolean = trans.isOpen
+  def localAddress: SocketAddress = trans.localAddress
+  val onClose: Future[Throwable] = trans.onClose
+  def remoteAddress: SocketAddress = trans.remoteAddress
+
+  def read(): Future[Buf] =
+    trans.read flatMap { chanBuf =>
+      Future(ChannelBufferBuf(chanBuf))
+    }
 
   def write(req: Buf): Future[Unit] = {
     val bytes = new Array[Byte](req.length)
     req.write(bytes, 0)
     trans.write(ChannelBuffers.wrappedBuffer(bytes))
   }
-
-  def read(): Future[Buf] =
-    trans.read flatMap { chanBuf =>
-      Future(ChannelBufferBuf(chanBuf))
-    }
 }

@@ -27,9 +27,8 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     Thread.sleep(500)
 
-    val disconnect = client.get.closeSession()
+    val disconnect = client.get.closeSession() before client.get.closeService()
     Await.ready(disconnect)
-    Await.ready(client.get.closeService())
   }
 
   test("Node creation and exists") {
@@ -214,7 +213,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
       _ <- client.get.create("/zookeeper/persistentNode/sequentialNode-", "SEQ".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT_SEQUENTIAL)
     } yield None
 
-    Await.ready(res)
+    Await.result(res)
 
     disconnect()
     Await.result(client.get.closeService())
@@ -244,18 +243,14 @@ class CRUDTest extends FunSuite with IntegrationConfig {
 
     val ret = for {
       children <- client.get.getChildren("/zookeeper/persistentNode", watch = false)
-    } yield children
+      fetches <- Future.collect(
+        children.children map { child =>
+          client.get.delete("/zookeeper/persistentNode/" + child, -1)
+        })
+      delete <- client.get.delete("/zookeeper/persistentNode", -1)
+    } yield delete
 
-
-    val f = ret.flatMap { response =>
-      response.children foreach (child => client.get.delete("/zookeeper/persistentNode/" + child, -1))
-      Future(response)
-    }
-
-    Await.ready(f)
-    val deleteNode = client.get.delete("/zookeeper/persistentNode", -1)
-    Await.result(deleteNode)
-
+    Await.result(ret)
     disconnect()
     Await.result(client.get.closeService())
   }

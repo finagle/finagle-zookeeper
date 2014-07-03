@@ -1,8 +1,8 @@
 package com.twitter.finagle.exp.zookeeper.transport
 
-import org.jboss.netty.channel._
-import org.jboss.netty.buffer.ChannelBuffer
 import com.twitter.finagle.netty3.Netty3Transporter
+import org.jboss.netty.buffer.ChannelBuffer
+import org.jboss.netty.channel._
 
 /**
  * A Netty3 pipeline that is responsible for framing network

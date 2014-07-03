@@ -28,7 +28,7 @@ case class Stat(
   ephemeralOwner: Long,
   dataLength: Int,
   numChildren: Int,
-  pzxid: Long){
+  pzxid: Long) extends Data {
   def buf: Buf = Buf.Empty
     .concat(BufLong(czxid))
     .concat(BufLong(mzxid))
@@ -43,7 +43,7 @@ case class Stat(
     .concat(BufLong(pzxid))
 }
 
-object Stat {
+private[finagle] object Stat extends DataDecoder[Stat] {
   def unapply(buf: Buf): Option[(Stat, Buf)] = {
     val BufLong(czxid,
     BufLong(mzxid,
@@ -58,6 +58,20 @@ object Stat {
     BufLong(pzxid,
     rem
     ))))))))))) = buf
-    Some(Stat(czxid, mzxid, ctime, mtime, version, cversion, aversion, ephemeralOwner, dataLength, numChildren, pzxid), rem)
+
+    Some(
+      Stat(
+        czxid,
+        mzxid,
+        ctime,
+        mtime,
+        version,
+        cversion,
+        aversion,
+        ephemeralOwner,
+        dataLength,
+        numChildren,
+        pzxid),
+      rem)
   }
 }

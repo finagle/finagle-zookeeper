@@ -3,16 +3,16 @@ package com.twitter.finagle.exp.zookeeper.data
 import com.twitter.finagle.exp.zookeeper.transport.BufInt
 import com.twitter.io.Buf
 
-case class ACL(perms: Int, id: Id) {
+case class ACL(perms: Int, id: Id) extends Data {
   def buf: Buf = Buf.Empty
     .concat(BufInt(perms))
     .concat(id.buf)
 }
 
-object ACL {
-  val statMinimumSize = 68
+object ACL extends DataDecoder[ACL] {
 
-  def apply(perm: Int, scheme: String, id: String): ACL = new ACL(perm, new Id(scheme, id))
+  def apply(perm: Int, scheme: String, id: String): ACL =
+    new ACL(perm, new Id(scheme, id))
   def apply(perm: Int, id: String) = parseACL(id + perm)(0)
 
   def unapply(buf: Buf): Option[(ACL, Buf)] = {
@@ -24,18 +24,25 @@ object ACL {
    * Check an ACL list
    * @param aclList the ACL list to check
    */
-  def check(aclList: Seq[ACL]) {
+  def check(aclList: Seq[ACL]): Unit = {
     aclList.map { acl =>
       acl.id.scheme match {
         case "world" => if (acl.id.data.toUpperCase != "ANYONE")
-          throw new IllegalArgumentException("ACL malformed exception (suggested: ((world:anyone), perms)")
+          throw new IllegalArgumentException(
+            "ACL malformed exception (suggested: ((world:anyone), perms)")
+
         case "auth" => if (acl.id.data != "")
-          throw new IllegalArgumentException("ACL: Auth malformed exception (suggested: ((auth:), perms)")
+          throw new IllegalArgumentException(
+            "ACL: Auth malformed exception (suggested: ((auth:), perms)")
+
         case "digest" =>
-          if (acl.id.data.split(':').length != 2) throw new IllegalArgumentException("ACL: digest malformed exception")
-        case "ip" =>
-          ipToBytes(acl.id.data)
-        case _ => throw new IllegalArgumentException("ACL scheme not supported")
+          if (acl.id.data.split(':').length != 2)
+            throw new IllegalArgumentException(
+              "ACL: digest malformed exception")
+
+        case "ip" => ipToBytes(acl.id.data)
+        case _ => throw new IllegalArgumentException(
+          "ACL scheme not supported")
       }
     }
   }
@@ -45,13 +52,14 @@ object ACL {
    * @param addr the IP address
    * @return
    */
-  private def ipToBytes(addr: String): Array[Byte] = {
+  private[finagle] def ipToBytes(addr: String): Array[Byte] = {
     // TODO implement for ipv6
 
     def ipv4ToBytes(addr: String): Array[Byte] = {
       val parts = addr.split('.')
       if (parts.length != 4) {
-        throw new IllegalArgumentException("ACL: ip malformed exception (4 points required)")
+        throw new IllegalArgumentException(
+          "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
       }
       val b = new Array[Byte](4)
 
@@ -61,10 +69,12 @@ object ACL {
           if (v >= 0 && v <= 255) {
             b(i) = v.toByte
           }
-          else throw new IllegalArgumentException("ACL: ip malformed exception")
+          else throw new IllegalArgumentException(
+            "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
         }
         catch {
-          case exc:Exception => throw new IllegalArgumentException("ACL: ip malformed exception")
+          case exc: Exception => throw new IllegalArgumentException(
+            "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
         }
       }
       b
@@ -87,17 +97,24 @@ object ACL {
       val firstColon = aclTab(i).indexOf(":")
       val lastColon = aclTab(i).lastIndexOf(":")
       if (firstColon == -1 || lastColon == -1 || firstColon == lastColon)
-        throw new IllegalArgumentException("does not have the form scheme:id:perm")
+        throw new IllegalArgumentException(
+          "does not have the form scheme:id:perm")
 
       val permStr = aclTab(i).substring(lastColon + 1).trim
       val schemeStr = aclTab(i).substring(0, firstColon).trim
       val dataStr = aclTab(i).substring(firstColon + 1, lastColon).trim
 
       if (permStr.isEmpty || schemeStr.isEmpty)
-        throw new IllegalArgumentException("does not have the form scheme:id:perm")
-      if (!permStr.filter(char => !Set('r', 'w', 'c', 'd', 'a').contains(char)).isEmpty)
-        throw new IllegalArgumentException("does not have the form scheme:id:perm")
-      val newACL = new ACL(Perms.permFromString(permStr), new Id(schemeStr, dataStr))
+        throw new IllegalArgumentException(
+          "does not have the form scheme:id:perm")
+      if (!permStr.filter(char => !Set('r', 'w', 'c', 'd', 'a')
+        .contains(char))
+        .isEmpty)
+        throw new IllegalArgumentException(
+          "does not have the form scheme:id:perm")
+      val newACL = new ACL(
+        Perms.permFromString(permStr),
+        new Id(schemeStr, dataStr))
 
       aclList(i) = newACL
     }
@@ -130,7 +147,8 @@ object ACL {
         case 'c' => perm = perm | Perms.CREATE
         case 'd' => perm = perm | Perms.DELETE
         case 'a' => perm = perm | Perms.ADMIN
-        case _ => throw new IllegalArgumentException("this character is not supported for perms")
+        case _ => throw new IllegalArgumentException(
+          "this character is not supported for perms")
       }
       perm
     }

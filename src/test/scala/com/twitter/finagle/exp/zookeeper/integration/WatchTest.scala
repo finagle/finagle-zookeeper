@@ -22,22 +22,20 @@ class WatchTest extends IntegrationConfig {
     newClient()
     connect()
 
-
     val res = for {
       _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
       exist <- client.get.exists("/zookeeper/test", watch = true)
-      _ <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
-    } yield exist
+      setdata <- client.get.setData("/zookeeper/test", "CHANGE IS GOOD1".getBytes, -1)
+    } yield (exist, setdata)
 
+    val (exists, setData) = Await.result(res)
+    Await.result(exists.watch.get)
 
-    val ret = Await.result(res)
-
-    ret.watch.get onSuccess { rep =>
+    exists.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_DATA_CHANGED)
       assert(rep.state === Watch.State.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
-    Await.ready(ret.watch.get)
 
     disconnect()
     Await.ready(client.get.closeService())
@@ -135,6 +133,8 @@ class WatchTest extends IntegrationConfig {
 
 
     val (getChildrenRep, existsRep) = Await.result(res)
+    Await.result(getChildrenRep.watch.get)
+    Await.result(existsRep.watch.get)
 
     existsRep.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_DELETED)

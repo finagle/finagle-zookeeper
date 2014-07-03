@@ -70,5 +70,4 @@ object PathUtils {
     else {
       if (path == "/") chroot else chroot + path
     }
-
 }

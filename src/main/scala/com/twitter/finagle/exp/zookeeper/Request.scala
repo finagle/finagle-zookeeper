@@ -8,65 +8,59 @@ import com.twitter.finagle.exp.zookeeper.transport._
 import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 import com.twitter.io.Buf
 import com.twitter.util.Duration
-import com.twitter.util.TimeConversions._
 
-/**
- * Same as the Response type, a Request can be composed by a header or
- * by body + header.
- *
- * However ConnectRequest is an exception, it is only composed of a body.
- */
-
-sealed trait Request {
-  def buf: Buf
+sealed trait GlobalRequest {def buf: Buf }
+private[finagle] trait ReqHeader extends GlobalRequest
+sealed trait OpRequest extends GlobalRequest
+sealed trait Request extends GlobalRequest {
+  val opCode: Option[Int]
 }
 
-sealed trait OpRequest {
-  def buf: Buf
-}
+private[finagle]
+case class AuthRequest(typ: Int = 0, auth: Auth) extends Request {
 
-case class RequestHeader(xid: Int, opCode: Int) {
-  def buf: Buf = Buf.Empty
-    .concat(BufInt(xid))
-    .concat(BufInt(opCode))
-}
-
-case class AuthRequest(typ: Int, auth: Auth) extends Request {
+  override val opCode: Option[Int] = Some(OpCode.AUTH)
   def buf: Buf = Buf.Empty
     .concat(BufInt(typ))
-    .concat(BufString(auth.scheme))
-    .concat(BufArray(auth.data))
+    .concat(auth.buf)
 }
 
-case class CheckVersionRequest(path: String, version: Int)
-  extends OpRequest {
+private[finagle]
+case class CheckVersionRequest(path: String, version: Int) extends OpRequest {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(version))
 }
 
+private[finagle]
 case class CheckWatchesRequest(path: String, typ: Int) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.CHECK_WATCHES)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(typ))
 }
 
-case class ConfigureRequest(
-  connectionManager: Option[ConnectionManager],
-  sessionManagr: Option[SessionManager],
-  watchManagr: Option[WatchManager]
+private[finagle] case class ConfigureRequest(
+  connectionManager: ConnectionManager,
+  sessionManagr: SessionManager,
+  watchManagr: WatchManager
   ) extends Request {
+
+  override val opCode: Option[Int] = None
   def buf: Buf = Buf.Empty
 }
 
-case class ConnectRequest(
-  protocolVersion: Int = 0,
-  lastZxidSeen: Long = 0L,
-  sessionTimeout: Duration = 2000.milliseconds,
-  sessionId: Long = 0L,
-  passwd: Array[Byte] = Array[Byte](16),
-  canBeRO: Boolean = true)
-  extends Request {
+private[finagle] case class ConnectRequest(
+  protocolVersion: Int,
+  lastZxidSeen: Long,
+  sessionTimeout: Duration,
+  sessionId: Long,
+  passwd: Array[Byte],
+  canBeRO: Boolean
+  ) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.CREATE_SESSION)
   def buf: Buf = Buf.Empty
     .concat(BufInt(protocolVersion))
     .concat(BufLong(lastZxidSeen))
@@ -76,12 +70,14 @@ case class ConnectRequest(
     .concat(BufBool(canBeRO))
 }
 
-case class CreateRequest(
+private[finagle] case class CreateRequest(
   path: String,
   data: Array[Byte],
   aclList: Seq[ACL],
-  createMode: Int)
-  extends Request with OpRequest {
+  createMode: Int
+  ) extends Request with OpRequest {
+
+  override val opCode: Option[Int] = Some(OpCode.CREATE)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
@@ -89,11 +85,14 @@ case class CreateRequest(
     .concat(BufInt(createMode))
 }
 
-case class Create2Request(
+private[finagle] case class Create2Request(
   path: String,
   data: Array[Byte],
   aclList: Seq[ACL],
-  createMode: Int) extends Request with OpRequest {
+  createMode: Int
+  ) extends Request with OpRequest {
+
+  override val opCode: Option[Int] = Some(OpCode.CREATE2)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
@@ -101,52 +100,65 @@ case class Create2Request(
     .concat(BufInt(createMode))
 }
 
-case class DeleteRequest(path: String, version: Int)
+private[finagle] case class DeleteRequest(path: String, version: Int)
   extends Request with OpRequest {
+
+  override val opCode: Option[Int] = Some(OpCode.DELETE)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(version))
 }
 
-case class ExistsRequest(path: String, watch: Boolean)
-  extends Request {
+private[finagle]
+case class ExistsRequest(path: String, watch: Boolean) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.EXISTS)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufBool(watch))
 }
 
-case class GetACLRequest(path: String)
-  extends Request {
+private[finagle] case class GetACLRequest(path: String) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.GET_ACL)
   def buf: Buf = BufString(path)
 }
 
-case class GetDataRequest(path: String, watch: Boolean)
-  extends Request {
+private[finagle]
+case class GetDataRequest(path: String, watch: Boolean) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.GET_DATA)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufBool(watch))
 }
 
-case class GetChildrenRequest(path: String, watch: Boolean)
-  extends Request {
+private[finagle]
+case class GetChildrenRequest(path: String, watch: Boolean) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.GET_CHILDREN)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufBool(watch))
 }
 
-case class GetChildren2Request(path: String, watch: Boolean)
-  extends Request {
+private[finagle]
+case class GetChildren2Request(path: String, watch: Boolean) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.GET_CHILDREN2)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufBool(watch))
 }
 
-case class ReconfigRequest(
+private[finagle] case class ReconfigRequest(
   joiningServers: String,
   leavingServers: String,
   newMembers: String,
   curConfigId: Long
   ) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.RECONFIG)
   def buf: Buf = Buf.Empty
     .concat(BufString(joiningServers))
     .concat(BufString(leavingServers))
@@ -154,52 +166,57 @@ case class ReconfigRequest(
     .concat(BufLong(curConfigId))
 }
 
-case class RemoveWatchesRequest(
+private[finagle] case class RemoveWatchesRequest(
   path: String,
   typ: Int
   ) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.REMOVE_WATCHES)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufInt(typ))
 }
 
+private[finagle]
+case class RequestHeader(xid: Int, opCode: Int) extends RepHeader {
+  def buf: Buf = Buf.Empty
+    .concat(BufInt(xid))
+    .concat(BufInt(opCode))
+}
+
+private[finagle]
 case class SetACLRequest(path: String, acl: Array[ACL], version: Int)
   extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.SET_ACL)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufSeqACL(acl))
     .concat(BufInt(version))
 }
 
-case class SetDataRequest(
+private[finagle] case class SetDataRequest(
   path: String,
   data: Array[Byte],
-  version: Int)
-  extends Request with OpRequest {
+  version: Int
+  ) extends Request with OpRequest {
+
+  override val opCode: Option[Int] = Some(OpCode.SET_DATA)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
     .concat(BufInt(version))
 }
 
-/*case class GetMaxChildrenRequest(path: String)
-  extends Request {
-  def buf: Buf = BufString(path)
-}
-case class SetMaxChildrenRequest(path: String, max: Int)
-  extends Request {
-  def buf: Buf = Buf.Empty
-    .concat(BufString(path))
-    .concat(BufInt(max))
-}*/
-
-/* Only available during client reconnection to set watches */
-case class SetWatchesRequest(
+/* Only available during client reconnection to set back watches */
+private[finagle] case class SetWatchesRequest(
   relativeZxid: Long,
   dataWatches: Seq[String],
   existWatches: Seq[String],
-  childWatches: Seq[String])
-  extends Request {
+  childWatches: Seq[String]
+  ) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.SET_WATCHES)
   def buf: Buf = Buf.Empty
     .concat(BufLong(relativeZxid))
     .concat(BufSeqString(dataWatches))
@@ -207,28 +224,44 @@ case class SetWatchesRequest(
     .concat(BufSeqString(childWatches))
 }
 
-case class SyncRequest(path: String)
-  extends Request {
+private[finagle] case class SyncRequest(path: String) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.SYNC)
   def buf: Buf = BufString(path)
 }
 
-case class TransactionRequest(opList: Seq[OpRequest])
-  extends Request {
+private[finagle]
+case class TransactionRequest(opList: Seq[OpRequest]) extends Request {
+
+  override val opCode: Option[Int] = Some(OpCode.MULTI)
   def buf: Buf =
     opList.foldLeft(Buf.Empty)((buf, op) =>
       op match {
-        case op: CreateRequest => buf.concat(MultiHeader(OpCode.CREATE, false, -1).buf)
-          .concat(op.buf)
+        case op: CreateRequest =>
+          buf.concat(MultiHeader(OpCode.CREATE, false, -1).buf)
+            .concat(op.buf)
         case op: Create2Request =>
           buf.concat(MultiHeader(OpCode.CREATE2, false, -1).buf)
             .concat(op.buf)
-        case op: DeleteRequest => buf.concat(MultiHeader(OpCode.DELETE, false, -1).buf)
-          .concat(op.buf)
-        case op: SetDataRequest => buf.concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
-          .concat(op.buf)
-        case op: CheckVersionRequest => buf.concat(MultiHeader(OpCode.CHECK, false, -1).buf)
-          .concat(op.buf)
+        case op: DeleteRequest =>
+          buf.concat(MultiHeader(OpCode.DELETE, false, -1).buf)
+            .concat(op.buf)
+        case op: SetDataRequest =>
+          buf.concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
+            .concat(op.buf)
+        case op: CheckVersionRequest =>
+          buf.concat(MultiHeader(OpCode.CHECK, false, -1).buf)
+            .concat(op.buf)
         case _ => throw new ZookeeperException("Invalid type of op")
       })
       .concat(MultiHeader(-1, true, -1).buf)
+}
+
+private[finagle] object Request {
+  def toReqPacket(req: Request, nextXid: => Int): ReqPacket = {
+    ReqPacket(
+      Some(RequestHeader(nextXid, req.opCode.get)),
+      Some(req)
+    )
+  }
 }

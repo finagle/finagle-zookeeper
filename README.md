@@ -4,19 +4,10 @@
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
-## Terminology
-* **Request** - object sent to a service to be serialize. Sometimes it can be a RequestHeader or (RequestHeader+Body)
-* **Response** - object containing the data received from a server. A response type is specific to a request type (ex: SetDataRequest -> GetDataRequest)
-
 ## Architecture
 ### Client
 - `Client` is based on Finagle 6 client model.
 
-
-### Transport
-- `Buffer` contains a ChannelBuffer, used to read and write
-- `BufferWriter` writes data by pattern matching over variables
-- `BufferReader` contains convenient methods to read typed variables
 
 ### Common
 - `Data` represents ACL, ID structures with associated serialization/deserialization definitions
@@ -27,20 +18,19 @@ finagle-zookeeper provides basic tools to communicate with a Zookeeper server as
 
 ## Commands
 
-Every request returns a *twitter.util.Future* (please use associated methods : *onSuccess*, *onFailure*)
+Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
+[Finagle documentation](https://twitter.github.io/scala_school/finagle.html#Future) and [Scaladoc](http://twitter.github.io/util/util-core/target/doc/main/api/com/twitter/util/Future.html))
 
 Here is the list of commands supported by version 0.1 :
 
 ## Test
-There is currently only one test, its purpose is to connect to a server, send a few requests and then disconnect. Feel free to edit it to your flavour.
+See src/test/scala
 
 ### Client creation
 ```
-  val client = ClientBuilder.newClient("127.0.0.1:2181", 1000)
+  val client = ZooKeeper.newRichClient("127.0.0.1:2181")
 ```
-- `127.0.0.1:2181` is a String representing the IP address of the Zookeeper server
-
-- `1000` is a Long representing the timeout (in milliseconds) that you want for this connection (the real timeout is sent by the server during connection)
+- `127.0.0.1:2181` is a String representing the IP address of the Zookeeper server with the port separated with colon
 
 ### Connection
 ```
@@ -61,14 +51,13 @@ client.disconnect
 ```
 
 ### First request
-Be sure that your client is ready before sending any request (Await.ready())
 For an unknown reason please use a for comprehension when sending multiple request at the same time, otherwise your requests won't be sequentialize :
 
 ```
 val res = for {
       acl <- client.getACL("/zookeeper")
       _ <- client.create("/zookeeper/test", "HELLO".getBytes, ACL.defaultACL, createMode.EPHEMERAL)
-      _ <- client.exists("/zookeeper/test", false)
+      _ <- client.exists("/zookeeper/test", true)
       _ <- client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
     } yield (acl)
 ```
@@ -85,7 +74,7 @@ val create = client.create("/zookeeper/testnode", "HELLO".getBytes, ACL.defaultA
 - `ACL.defaultACL` : Array[ACL] the ACL list
 - `createMode.EPHEMERAL` : Int the creation mode
 
-Return value `Option[CreateResponseBody]` `CreateResponseBody(path: String)`
+Return value `String` representing the path you have just created
 
 - `createMode.PERSISTENT` persistent mode
 - `createMode.EPHEMERAL` ephemeral mode
@@ -98,7 +87,7 @@ Return value `Option[CreateResponseBody]` `CreateResponseBody(path: String)`
 _ <- client.delete("/zookeeper/test", -1)
 ```
 - `/zookeeper/test` : String the node that you want to delete
-- `-1` : Int corresponding version of your data (-1 if you don't know)
+- `-1` : Int corresponding version of your data (-1 if you don't care)
 
 Return value `Option[ReplyHeader]` `ReplyHeader(xid: Int, zxid: Long,err: Int)`
 
@@ -107,7 +96,7 @@ Return value `Option[ReplyHeader]` `ReplyHeader(xid: Int, zxid: Long,err: Int)`
 _ <- client.exists("/zookeeper/test", false)
 ```
 - `/zookeeper/test` : String the node that you want to test
-- `false` : Boolean if you want to set a watch on this node (**not supported**)
+- `false` : Boolean if you want to set a watch on this node
 
 Return value `Option[ExistsResponseBody]` `ExistsResponseBody(stat: Stat)`
 
@@ -125,7 +114,7 @@ client.setACL("/zookeeper/test", ACL.defaultACL, -1)
 ```
 - `/zookeeper/test` : String the node that you want to set
 - `ACL.defaultACL` : Array[ACL] the ACL list
-- `-1` : Int corresponding version of your data (-1 if you don't know)
+- `-1` : Int corresponding version of your data (-1 if you don't care)
 
 Return value `Option[SetACLResponseBody]` `SetACLResponseBody(stat: Stat)`
 
@@ -134,7 +123,7 @@ Return value `Option[SetACLResponseBody]` `SetACLResponseBody(stat: Stat)`
 client.getChildren("/zookeeper", false)
 ```
 - `/zookeeper` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node (**not supported**)
+- `false` : Boolean if you want to set a watch on this node
 
 Return value `Option[GetChildrenResponseBody]` `GetChildrenResponseBody(children: Array[String])`
 
@@ -143,7 +132,7 @@ Return value `Option[GetChildrenResponseBody]` `GetChildrenResponseBody(children
 client.getChildren2("/zookeeper", false)
 ```
 - `/zookeeper` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node (**not supported**)
+- `false` : Boolean if you want to set a watch on this node
 
 Return value `Option[GetChildren2ResponseBody]` `GetChildren2ResponseBody(children: Array[String], stat:Stat)`
 
@@ -152,7 +141,7 @@ Return value `Option[GetChildren2ResponseBody]` `GetChildren2ResponseBody(childr
 client.getData("/zookeeper/test", false)
 ```
 - `/zookeeper/test` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node (**not supported**)
+- `false` : Boolean if you want to set a watch on this node
 
 Return value `Option[GetDataResponseBody]` `GetDataResponseBody(data: Array[Byte], stat: Stat)`
 
@@ -162,7 +151,7 @@ client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 ```
 - `/zookeeper/test` : String the node that you want to set
 - `"CHANGE".getBytes` : Array[Byte] data that you want to set on this node
-- `-1` : Int corresponding version of your data (-1 if you don't know)
+- `-1` : Int corresponding version of your data (-1 if you don't care)
 
 Return value `Option[SetDataResponseBody]` `SetDataResponseBody(stat: Stat)`
 

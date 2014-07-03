@@ -2,14 +2,12 @@ package com.twitter.finagle.exp.zookeeper.client
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.client.managers.{PreProcessService, ClientManager}
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
-import com.twitter.finagle.exp.zookeeper.session.Session.States
-import com.twitter.finagle.exp.zookeeper.session.SessionManager
+import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
 import com.twitter.finagle.exp.zookeeper.watch.{Watch, WatchManager}
-import com.twitter.finagle.util.DefaultTimer
-import com.twitter.finagle.{CancelledRequestException, IndividualRequestTimeoutException}
 import com.twitter.logging.Logger
 import com.twitter.util.TimeConversions._
 import com.twitter.util._
@@ -17,149 +15,83 @@ import com.twitter.util._
 class ZkClient(
   protected[this] val autoReconnect: Boolean = true,
   protected[this] val autoWatchReset: Boolean = true,
-  chRoot: Option[String] = None,
-  protected[this] val connectionTimeout: Duration = 1000.milliseconds,
-  protected[this] val maxConsecutiveRetries: Int = 10,
-  protected[this] val maxReconnectAttempts: Int = 5,
-  protected[this] val timeBetweenAttempts: Duration = 30.seconds,
-  protected[this] val timeBetweenRwSvrSrch: Duration = 1.minute,
-  protected[this] val timeBetweenPrevntvSrch: Option[Duration] = Some(10.minutes),
+  protected[this] val chroot: String = "",
+  protected[this] val sessionTimeout: Duration = 3000.milliseconds,
+  protected[this] val maxConsecutiveRetries: Option[Int] = Some(10),
+  protected[this] val maxReconnectAttempts: Option[Int] = Some(5),
+  protected[this] val timeBetweenAttempts: Option[Duration] = Some(30.seconds),
+  protected[this] val timeBetweenLinkCheck: Option[Duration] = Some(1000.milliseconds / 2),
+  protected[this] val timeBetweenRwSrch: Option[Duration] = Some(1.minute),
+  protected[this] val timeBetweenPrevSrch: Option[Duration] = Some(10.minutes),
   hostList: String,
-  protected[this] val readOnly: Boolean = false
-  ) extends Closable with Autolive {
+  protected[this] val canReadOnly: Boolean = false
+  ) extends Closable with ClientManager {
 
-  protected[this] val chroot = chRoot.getOrElse("")
-  // fixme server lookup should happen during connect request
-  protected[this] val connectionManager =
-    new ConnectionManager(timeBetweenPrevntvSrch, hostList)
-  protected[this] val sessionManager =
-    new SessionManager(autoReconnect, autoWatchReset, this)
-  protected[this] val watchManager: WatchManager = new WatchManager(chroot)
+  private[finagle] val connectionManager = new ConnectionManager(
+    hostList,
+    canReadOnly,
+    timeBetweenPrevSrch,
+    timeBetweenRwSrch)
+  private[finagle] val sessionManager = new SessionManager(canReadOnly)
+  private[finagle] val watchManager: WatchManager = new WatchManager(chroot, autoWatchReset)
+  private[finagle] val zkRequestService =
+    new PreProcessService(connectionManager, sessionManager, this)
   @volatile protected[this] var authInfo: Set[Auth] = Set()
 
-  def getSessionId: Long = sessionManager.session.sessionId
-  def getSessionPwd: Array[Byte] = sessionManager.session.sessionPassword
-  def getTimeout: Duration = sessionManager.session.sessionTimeout
-
-  def addAuth(auth: Auth): Future[Unit] = {
-    checkSession()
-    // TODO check auth ?
-    val req = ReqPacket(
-      Some(RequestHeader(-4, OpCode.AUTH)),
-      Some(new AuthRequest(0, auth)))
-    // todo readOnly check ?
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-      authInfo += auth
-      if (rep.header.err == 0) {
-        Future.Unit
-      } else {
-        Future.exception(ZookeeperException.create("Error while addAuth", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
-    }
-  }
-
-  def connect(timeOut: Duration = 2000.milliseconds): Future[ConnectResponse] = {
-    sessionManager.session.canConnect()
-    sessionManager.session.state = States.CONNECTING
-
-    val req = ReqPacket(
-      None,
-      Some(new ConnectRequest(0, 0L, timeOut, canBeRO = readOnly)))
-
-    connectionManager.initConnection() before preConfigureDispatcher() before
-      connectionManager.connection.get.serve(req)
-        .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-          new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-        .flatMap { rep =>
-        sessionManager.session.parseStateHeader(rep.header)
-        val finalRep = rep.response.get.asInstanceOf[ConnectResponse]
-        if (!finalRep.isRO) {
-          sessionManager.session.isReadOnly = false
-          sessionManager.hasConnectedRwServer = true
-        } else {
-          sessionManager.session.isReadOnly = true
-        }
-        sessionManager.initSession(finalRep, timeOut)
-        sessionManager.session.startPing(ping())
-
-        // Loop checking connection and session state
-        runLinkChecker()
-
-        /*println("---> CONNECT | timeout: " +
-          finalRep.timeOut + " | sessionManager.sessionID: " +
-          finalRep.sessionManager.sessionId + " | canRO: " +
-          finalRep.canRO.getOrElse(false))*/
-
-        configureDispatcher() before Future(finalRep)
-      } onFailure { exc =>
-      sessionManager.session.state = States.CLOSED
-      Future.exception(exc)
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
-    }
-  }
-
-  def close(deadline: Time): Future[Unit] = connectionManager.connection.get.close(deadline)
-  def closeService(): Future[Unit] = connectionManager.connection.get.close()
-  def closeSession(): Future[Unit] = {
-
-    checkSession() before prepareClose()
-
-    val req = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
-
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-      if (rep.header.err == 0) {
-        Future.Unit
-      } else {
-        Future.exception(ZookeeperException.create("Error while close", rep.header.err))
-      }
-    } onSuccess (_ => sessionManager.session.close()) rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
-    }
-  }
+  def session: Future[Session] = sessionManager.session
 
   /**
-   * We use this to preconfigure the dispatcher, gives connectionManager, WatchManager
+   * To set back auth right after reconnection
+   * @return Future.Done if request worked, or exception
+   */
+  private[finagle] def recoverAuth(): Future[Unit] = {
+    val fetches = authInfo.toSeq map { auth =>
+      val req = ReqPacket(
+        Some(RequestHeader(-4, OpCode.AUTH)),
+        Some(new AuthRequest(0, auth))
+      )
+      connectionManager.connection flatMap { connectn =>
+        connectn.serve(req) flatMap { rep =>
+          if (rep.err.get == 0) Future.Unit
+          else Future.exception(
+            ZookeeperException.create("Error while addAuth", rep.err.get))
+        }
+      }
+    }
+    Future.join(fetches)
+  }
+
+  def addAuth(auth: Auth): Future[Unit] = {
+    val req = new AuthRequest(0, auth)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        authInfo += auth
+        Future.Unit
+      } else Future.exception(
+        ZookeeperException.create("Error while addAuth", rep.err.get))
+    }
+  }
+
+  def connect(host: Option[String] = None): Future[Unit] = newSession(host)
+  def close(deadline: Time): Future[Unit] = stopJob() before connectionManager.close(deadline)
+  def closeService(): Future[Unit] = stopJob() before connectionManager.close()
+  def closeSession(): Future[Unit] = disconnect()
+
+  /**
+   * We use this to configure the dispatcher, gives connectionManager, WatchManager
    * and SessionManager
    * @return
    */
-  protected[this] def preConfigureDispatcher(): Future[Unit] = {
+  private[finagle] def configureDispatcher(): Future[Unit] = {
     val req = ReqPacket(None, Some(ConfigureRequest(
-      Some(connectionManager),
-      Some(sessionManager),
-      Some(watchManager)
+      connectionManager,
+      sessionManager,
+      watchManager
     )))
-    connectionManager.connection.get.serve(req).unit
-  }
-
-  /**
-   * We use this to finish dispatcher configuration, it says the dispatcher that
-   * it can initiate a new session
-   * @return
-   */
-  protected[this] def configureDispatcher(): Future[Unit] = {
-    val req = ReqPacket(None, Some(ConfigureRequest(
-      None,
-      None,
-      None
-    )))
-    connectionManager.connection.get.serve(req).unit
+    connectionManager.connection flatMap { connectn =>
+      connectn.serve(req).unit
+    }
   }
 
   def create(
@@ -167,149 +99,79 @@ class ZkClient(
     data: Array[Byte],
     acl: Array[ACL],
     createMode: Int): Future[String] = {
-    // todo readOnly check
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.CREATE)),
-      Some(CreateRequest(finalPath, data, acl, createMode)))
+    val req = CreateRequest(finalPath, data, acl, createMode)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
-        sessionManager.session.parseStateHeader(rep.header)
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val finalRep = rep.response.get.asInstanceOf[CreateResponse]
         Future(finalRep.path.substring(chroot.length))
-      } else {
-        Future.exception(ZookeeperException.create("Error while create", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+      } else Future.exception(
+        ZookeeperException.create("Error while create", rep.err.get))
     }
   }
 
   def delete(path: String, version: Int): Future[Unit] = {
-    // todo readOnly check
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.DELETE)),
-      Some(DeleteRequest(finalPath, version))
-    )
+    val req = DeleteRequest(finalPath, version)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
-        sessionManager.session.parseStateHeader(rep.header)
-        Future.Unit
-      } else {
-        Future.exception(ZookeeperException.create("Error while getACL", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) Future.Unit
+      else Future.exception(
+        ZookeeperException.create("Error while delete", rep.err.get))
     }
   }
 
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.EXISTS)),
-      Some(ExistsRequest(finalPath, watch)))
+    val req = ExistsRequest(finalPath, watch)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
+    zkRequestService(req) flatMap { rep =>
       rep.response match {
         case Some(response: ExistsResponse) =>
           if (watch) {
             val watch = watchManager.register(path, Watch.Type.exists)
             val finalRep = ExistsResponse(response.stat, Some(watch))
             Future(finalRep)
-          } else {
-            Future(response)
-          }
+          } else Future(response)
+
         case None =>
-          if (rep.header.err == -101 && watch) {
+          if (rep.err.get == -101 && watch) {
             val watch = watchManager.register(path, Watch.Type.exists)
             Future(ExistsResponse(None, Some(watch)))
-          } else {
-            Future.exception(ZookeeperException.create("Error while exists", rep.header.err))
-          }
+          } else Future.exception(
+            ZookeeperException.create("Error while exists", rep.err.get))
+
         case _ =>
-          Future.exception(ZookeeperException.create("Match exception while exists"))
+          Future.exception(ZookeeperException.create("Match error while exists"))
       }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
     }
   }
 
-
   def getACL(path: String): Future[GetACLResponse] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.GET_ACL)),
-      Some(GetACLRequest(finalPath)))
+    val req = GetACLRequest(finalPath)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0)
         Future(rep.response.get.asInstanceOf[GetACLResponse])
-      } else {
-        Future.exception(ZookeeperException.create("Error while getACL", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+      else Future.exception(
+        ZookeeperException.create("Error while getACL", rep.err.get))
     }
   }
 
   def getChildren(path: String, watch: Boolean = false): Future[GetChildrenResponse] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.GET_CHILDREN)),
-      Some(GetChildrenRequest(finalPath, watch)))
+    val req = GetChildrenRequest(finalPath, watch)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
           val watch = watchManager.register(path, Watch.Type.exists)
@@ -321,32 +183,18 @@ class ZkClient(
           val finalRep = GetChildrenResponse(childrenList, None)
           Future(finalRep)
         }
-      } else {
-        Future.exception(ZookeeperException.create("Error while getChildren", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+      } else Future.exception(
+        ZookeeperException.create("Error while getChildren", rep.err.get))
     }
   }
 
   def getChildren2(path: String, watch: Boolean = false): Future[GetChildren2Response] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.GET_CHILDREN2)),
-      Some(GetChildren2Request(finalPath, watch)))
+    val req = GetChildren2Request(finalPath, watch)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
           val watch = watchManager.register(path, Watch.Type.exists)
@@ -358,195 +206,143 @@ class ZkClient(
           val finalRep = GetChildren2Response(childrenList, res.stat, None)
           Future(finalRep)
         }
-      } else {
-        Future.exception(ZookeeperException.create("Error while getChildren2", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+      } else Future.exception(
+        ZookeeperException.create("Error while getChildren2", rep.err.get))
     }
   }
 
   def getData(path: String, watch: Boolean = false): Future[GetDataResponse] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.GET_DATA)),
-      Some(GetDataRequest(finalPath, watch)))
+    val req = GetDataRequest(finalPath, watch)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
           val watch = watchManager.register(path, Watch.Type.exists)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
-        } else {
-          Future(res)
-        }
-      } else {
-        Future.exception(ZookeeperException.create("Error while getData", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+        } else Future(res)
+      } else Future.exception(
+        ZookeeperException.create("Error while getData", rep.err.get))
     }
   }
 
-  // GetMaxChildren is implemented but not available in the java lib
-  /*def getMaxChildren(path: String, xid: Int): Future[Response] = {
-    /*PathUtils.validatePath(path, createMode)
-    val finalPath = PathUtils.prependChroot(path, null)*/
-    println("<--getMaxChildren: " + xid)
-
-    val header = RequestHeader(xid, ?)
-    val body = GetDataRequestBody(path, false) // false because watch's not supported
-
-    connectionManager.serve(new GetDataRequest(header, body))
-  }*/
-
   protected[this] def ping(): Future[Unit] = {
-
-    checkSession()
     val req = ReqPacket(Some(RequestHeader(-2, OpCode.PING)), None)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-      if (rep.header.err == 0) {
-        Future.Unit
-      } else {
-        Future.exception(ZookeeperException.create("Error while ping", rep.header.err))
+    connectionManager.connection flatMap { connectn =>
+      connectn.serve(req) flatMap { rep =>
+        if (rep.err.get == 0) Future.Unit
+        else Future.exception(
+          ZookeeperException.create("Error while ping", rep.err.get))
       }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
     }
   }
 
   def setACL(path: String, acl: Array[ACL], version: Int): Future[SetACLResponse] = {
-    // todo readOnly check
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     ACL.check(acl)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.SET_ACL)),
-      Some(SetACLRequest(finalPath, acl, version)))
+    val req = SetACLRequest(finalPath, acl, version)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[SetACLResponse]
         Future(res)
-      } else {
-        Future.exception(ZookeeperException.create("Error while setACL", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+      } else Future.exception(
+        ZookeeperException.create("Error while setACL", rep.err.get))
     }
   }
 
   def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
-    // todo readOnly check
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.SET_DATA)),
-      Some(SetDataRequest(finalPath, data, version)))
+    val req = SetDataRequest(finalPath, data, version)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-      if (rep.header.err == 0) {
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[SetDataResponse]
         Future(res)
-      } else {
-        Future.exception(ZookeeperException.create("Error while setData", rep.header.err))
+      } else Future.exception(
+        ZookeeperException.create("Error while setData", rep.err.get))
+    }
+  }
+
+  /**
+   * To set watches back right after reconnection
+   * @return Future.Done if request worked, or exception
+   */
+  private[finagle] def setWatches(): Future[Unit] = {
+    if (autoWatchReset) {
+      sessionManager.session flatMap { sess =>
+        val relativeZxid: Long = sess.lastZxid.get
+        val dataWatches: Seq[String] = watchManager.getDataWatches.keySet.map { path =>
+          prependChroot(path, chroot)
+        }.toSeq
+        val existsWatches: Seq[String] = watchManager.getExistsWatches.keySet.map { path =>
+          prependChroot(path, chroot)
+        }.toSeq
+        val childWatches: Seq[String] = watchManager.getChildWatches.keySet.map { path =>
+          prependChroot(path, chroot)
+        }.toSeq
+
+        if (dataWatches.nonEmpty || existsWatches.nonEmpty || childWatches.nonEmpty) {
+          val req = ReqPacket(
+            Some(RequestHeader(-8, OpCode.SET_WATCHES)),
+            Some(SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches))
+          )
+
+          connectionManager.connection flatMap { connectn =>
+            connectn.serve(req) flatMap { rep =>
+              if (rep.err.get == 0) Future.Done
+              else {
+                Future.exception(
+                  ZookeeperException.create("Error while setWatches", rep.err.get))
+                Future.Done
+              }
+            }
+          }
+        } else
+          Future.Done
       }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+    }
+    else {
+      watchManager.clearWatches()
+      Future.Done
     }
   }
 
   def sync(path: String): Future[SyncResponse] = {
-
-    checkSession()
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
-    val req = ReqPacket(
-      Some(RequestHeader(sessionManager.session.getXid, OpCode.SYNC)),
-      Some(SyncRequest(finalPath)))
+    val req = SyncRequest(finalPath)
 
-    connectionManager.connection.get.serve(req)
-      .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-        new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-      .flatMap { rep =>
-      sessionManager.session.parseStateHeader(rep.header)
-
-      if (rep.header.err == 0) {
-        val res = rep.response.get.asInstanceOf[SyncResponse]
-        val finalRep = SyncResponse(res.path.substring(chroot.length))
-        Future(finalRep)
-      } else {
-        Future.exception(ZookeeperException.create("Error while sync", rep.header.err))
-      }
-    } rescue {
-      case exc: IndividualRequestTimeoutException =>
-        sessionManager.session.state = States.CONNECTION_LOSS
-        checkSession() before Future.exception(new CancelledRequestException(exc))
+    zkRequestService(req) flatMap {
+      rep =>
+        if (rep.err.get == 0) {
+          val res = rep.response.get.asInstanceOf[SyncResponse]
+          val finalRep = SyncResponse(res.path.substring(chroot.length))
+          Future(finalRep)
+        } else Future.exception(
+          ZookeeperException.create("Error while sync", rep.err.get))
     }
   }
 
   def transaction(opList: Seq[OpRequest]): Future[TransactionResponse] = {
-    // todo readOnly check
-    checkSession()
     Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>
-        val req = ReqPacket(
-          Some(RequestHeader(sessionManager.session.getXid, OpCode.MULTI)),
-          Some(new TransactionRequest(res)))
+        val req = new TransactionRequest(res)
 
-        connectionManager.connection.get.serve(req)
-          .raiseWithin(DefaultTimer.twitter, sessionManager.session.readTimeout,
-            new IndividualRequestTimeoutException(sessionManager.session.readTimeout))
-          .flatMap { rep =>
-          sessionManager.session.parseStateHeader(rep.header)
-          // fixme return partial result
-          if (rep.header.err == 0) {
-            val res = rep.response.get.asInstanceOf[TransactionResponse]
-            val finalOpList = Transaction.formatPath(res.responseList, chroot)
-            Future(TransactionResponse(finalOpList))
-          } else {
-            Future.exception(ZookeeperException.create("Error while transaction", rep.header.err))
-          }
-        } rescue {
-          case exc: IndividualRequestTimeoutException =>
-            sessionManager.session.state = States.CONNECTION_LOSS
-            checkSession() before Future.exception(new CancelledRequestException(exc))
+        zkRequestService(req) flatMap {
+          rep =>
+            if (rep.err.get == 0) {
+              val res = rep.response.get.asInstanceOf[TransactionResponse]
+              val finalOpList = Transaction.formatPath(res.responseList, chroot)
+              Future(TransactionResponse(finalOpList))
+            } else Future.exception(
+              ZookeeperException.create("Error while transaction", rep.err.get))
         }
       case Throw(exc) => Future.exception(exc)
     }
@@ -554,10 +350,5 @@ class ZkClient(
 }
 
 object ZkClient {
-  private[this] val logger = Logger("Finagle-zookeeper")
-  def getLogger = logger
-
-  def apply(hostsList: String): ZkClient = {
-    new ZkClient(hostList = hostsList)
-  }
+  private[finagle] val logger = Logger("Finagle-zookeeper")
 }
