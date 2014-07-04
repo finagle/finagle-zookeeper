@@ -90,7 +90,8 @@ case class NotEmptyException(msg: String) extends ZookeeperException(msg)
 case class SessionExpiredException(msg: String) extends ZookeeperException(msg)
 
 /** Invalid callback specified */
-case class InvalidCallbackException(msg: String) extends ZookeeperException(msg)
+case class InvalidCallbackException(msg: String)
+  extends ZookeeperException(msg)
 
 /** Invalid ACL specified */
 case class InvalidAclException(msg: String) extends ZookeeperException(msg)
@@ -123,6 +124,12 @@ object ZookeeperException {
   def create(msg: String, cause: Throwable): Throwable =
     new ZookeeperException(msg).initCause(cause)
 
+  /**
+   * Should create a zookeeper exception from its error code
+   * @param msg a message about the exception
+   * @param code zookeeper's error code
+   * @return a ZooKeeperException
+   */
   def create(msg: String, code: Int): ZookeeperException = code match {
     case 0 => OkException(msg + " " + "Ok exception")
     case -1 => new SystemErrorException(msg + " " + "System error")

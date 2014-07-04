@@ -29,9 +29,17 @@ private[finagle] object MultiHeader extends {
   }
 }
 
-object Transaction {
+private[finagle] object Transaction {
+  /**
+   * Should decode a multi operation request (ie Transaction) by
+   * decomposing the buf until we find the "end multiheader" acting
+   * as a delimiter.
+   * @param results the OpResult sequence to use
+   * @param buf the Buf to read
+   * @return (Seq[OpResult], Buf)
+   */
   @tailrec
-  private[finagle] def decode(
+  def decode(
     results: Seq[OpResult],
     buf: Buf
     ): (Seq[OpResult], Buf) = {
@@ -67,6 +75,13 @@ object Transaction {
     }
   }
 
+  /**
+   * Should prepare a Transaction request by checking each operation :
+   * check ACL, prepend chroot and validate path.
+   * @param opList the operation list to prepare
+   * @param chroot the client's chroot
+   * @return configured operation list
+   */
   def prepareAndCheck(
     opList: Seq[OpRequest],
     chroot: String
@@ -105,6 +120,13 @@ object Transaction {
     })
   }
 
+  /**
+   * Should correctly format each operation response path by removing chroot
+   * from the returned path.
+   * @param opList the operation result to format
+   * @param chroot the client's chroot
+   * @return correctly formatted operation list
+   */
   def formatPath(opList: Seq[OpResult], chroot: String): Seq[OpResult] =
     opList map {
       case op: Create2Response =>

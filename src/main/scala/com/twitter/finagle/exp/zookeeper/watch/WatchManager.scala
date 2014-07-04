@@ -34,6 +34,9 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
     }
   }
 
+  /**
+   * Should clear all watches
+   */
   def clearWatches() {
     this.synchronized {
       dataWatches.clear()
@@ -42,7 +45,12 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
     }
   }
 
-  private[this] def findWatch(
+  /**
+   * Should find a watch and satisfy its promise with the event
+   * @param map the path -> watch map
+   * @param event a watched event
+   */
+  private[this] def findAndSatisfy(
     map: mutable.HashMap[String, Promise[WatchEvent]],
     event: WatchEvent) {
 
@@ -67,7 +75,7 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
   /**
    * We use this to process every watches events that comes in
    * @param watchEvent the watch event that was received
-   * @return
+   * @return Unit
    */
   def process(watchEvent: WatchEvent) {
     val event = WatchEvent(
@@ -81,16 +89,16 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
           if (!autoWatchReset) clearWatches()
 
       case Watch.EventType.NODE_CREATED | Watch.EventType.NODE_DATA_CHANGED =>
-        findWatch(dataWatches, event)
-        findWatch(existsWatches, event)
+        findAndSatisfy(dataWatches, event)
+        findAndSatisfy(existsWatches, event)
 
       case Watch.EventType.NODE_DELETED =>
-        findWatch(dataWatches, event)
-        findWatch(existsWatches, event)
-        findWatch(childWatches, event)
+        findAndSatisfy(dataWatches, event)
+        findAndSatisfy(existsWatches, event)
+        findAndSatisfy(childWatches, event)
 
       case Watch.EventType.NODE_CHILDREN_CHANGED =>
-        findWatch(childWatches, event)
+        findAndSatisfy(childWatches, event)
 
       case _ => throw new RuntimeException(
         "Unsupported Watch.EventType came during WatchedEvent processing")

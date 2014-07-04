@@ -6,11 +6,28 @@ import com.twitter.io.Buf
 import com.twitter.util._
 import com.twitter.util.TimeConversions._
 
-sealed trait GlobalResponse
-sealed trait Response extends GlobalResponse
-sealed trait OpResult extends GlobalResponse
-private[finagle] trait RepHeader extends GlobalResponse
-sealed trait GlobalResponseDecoder[T <: GlobalResponse] {
+/**
+ * Mother of all response, used to describe what a response can do.
+ */
+sealed trait GlobalRep
+/**
+ * Unique response, used to answer to a Request
+ */
+sealed trait Response extends GlobalRep
+/**
+ * OpResult is used to compose a Transaction response.
+ * A Transaction response can be composed by OpResult only.
+ */
+sealed trait OpResult extends GlobalRep
+/**
+ * Special case of Response, a Response header.
+ */
+private[finagle] trait RepHeader extends GlobalRep
+/**
+ * Describes what a response decoder must do
+ * @tparam T Response type
+ */
+sealed trait GlobalRepDecoder[T <: GlobalRep] {
   def unapply(buffer: Buf): Option[(T, Buf)]
   def apply(buffer: Buf): Try[(T, Buf)] = unapply(buffer) match {
     case Some((rep, rem)) => Return((rep, rem))
@@ -28,19 +45,15 @@ case class ConnectResponse(
 
 case class CreateResponse(path: String) extends Response with OpResult
 
-case class Create2Response(path: String, stat: Stat)
-  extends Response with OpResult
+case class Create2Response(
+  path: String,
+  stat: Stat) extends Response with OpResult
 
 case class ExistsResponse(
   stat: Option[Stat],
   watch: Option[Future[WatchEvent]]
   ) extends Response
 
-/**
- * An error result from any kind of operation.  The point of error results
- * is that they contain an error code which helps understand what happened.
- * @see ZookeeperExceptions
- */
 case class ErrorResponse(exception: ZookeeperException) extends OpResult
 
 class EmptyResponse extends Response with OpResult
@@ -81,7 +94,7 @@ case class WatchEvent(typ: Int, state: Int, path: String) extends Response
  * Decoders
  */
 private[finagle]
-object ConnectResponse extends GlobalResponseDecoder[ConnectResponse] {
+object ConnectResponse extends GlobalRepDecoder[ConnectResponse] {
   def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = {
     val BufInt(protocolVersion,
     BufInt(timeOut,
@@ -103,7 +116,7 @@ object ConnectResponse extends GlobalResponseDecoder[ConnectResponse] {
 }
 
 private[finagle]
-object CreateResponse extends GlobalResponseDecoder[CreateResponse] {
+object CreateResponse extends GlobalRepDecoder[CreateResponse] {
   def unapply(buf: Buf): Option[(CreateResponse, Buf)] = {
     val BufString(path, rem) = buf
     Some(CreateResponse(path), rem)
@@ -111,7 +124,7 @@ object CreateResponse extends GlobalResponseDecoder[CreateResponse] {
 }
 
 private[finagle]
-object Create2Response extends GlobalResponseDecoder[Create2Response] {
+object Create2Response extends GlobalRepDecoder[Create2Response] {
   def unapply(buf: Buf): Option[(Create2Response, Buf)] = {
     val BufString(path, Stat(stat, rem)) = buf
     Some(Create2Response(path, stat), rem)
@@ -119,7 +132,7 @@ object Create2Response extends GlobalResponseDecoder[Create2Response] {
 }
 
 private[finagle]
-object ErrorResponse extends GlobalResponseDecoder[ErrorResponse] {
+object ErrorResponse extends GlobalRepDecoder[ErrorResponse] {
   def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
     val BufInt(err, rem) = buf
     Some(ErrorResponse(
@@ -129,7 +142,7 @@ object ErrorResponse extends GlobalResponseDecoder[ErrorResponse] {
 }
 
 private[finagle]
-object ExistsResponse extends GlobalResponseDecoder[ExistsResponse] {
+object ExistsResponse extends GlobalRepDecoder[ExistsResponse] {
   def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = {
     val Stat(stat, rem) = buf
     Some(ExistsResponse(Some(stat), None), rem)
@@ -137,7 +150,7 @@ object ExistsResponse extends GlobalResponseDecoder[ExistsResponse] {
 }
 
 private[finagle]
-object GetACLResponse extends GlobalResponseDecoder[GetACLResponse] {
+object GetACLResponse extends GlobalRepDecoder[GetACLResponse] {
   def unapply(buf: Buf): Option[(GetACLResponse, Buf)] = {
     val BufSeqACL(acl, Stat(stat, _)) = buf
     Some(GetACLResponse(acl, stat), buf)
@@ -145,7 +158,7 @@ object GetACLResponse extends GlobalResponseDecoder[GetACLResponse] {
 }
 
 private[finagle]
-object GetChildrenResponse extends GlobalResponseDecoder[GetChildrenResponse] {
+object GetChildrenResponse extends GlobalRepDecoder[GetChildrenResponse] {
   def unapply(buf: Buf): Option[(GetChildrenResponse, Buf)] = {
     val BufSeqString(children, _) = buf
     Some(GetChildrenResponse(children, None), buf)
@@ -153,7 +166,7 @@ object GetChildrenResponse extends GlobalResponseDecoder[GetChildrenResponse] {
 }
 
 private[finagle]
-object GetChildren2Response extends GlobalResponseDecoder[GetChildren2Response] {
+object GetChildren2Response extends GlobalRepDecoder[GetChildren2Response] {
   def unapply(buf: Buf): Option[(GetChildren2Response, Buf)] = {
     val BufSeqString(children, Stat(stat, _)) = buf
     Some(GetChildren2Response(children, stat, None), buf)
@@ -161,7 +174,7 @@ object GetChildren2Response extends GlobalResponseDecoder[GetChildren2Response] 
 }
 
 private[finagle]
-object GetDataResponse extends GlobalResponseDecoder[GetDataResponse] {
+object GetDataResponse extends GlobalRepDecoder[GetDataResponse] {
   def unapply(buf: Buf): Option[(GetDataResponse, Buf)] = {
     val BufArray(data, Stat(stat, rem)) = buf
     Some(GetDataResponse(data, stat, None), rem)
@@ -169,7 +182,7 @@ object GetDataResponse extends GlobalResponseDecoder[GetDataResponse] {
 }
 
 private[finagle]
-object ReplyHeader extends GlobalResponseDecoder[ReplyHeader] {
+object ReplyHeader extends GlobalRepDecoder[ReplyHeader] {
   def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
     val BufInt(xid, BufLong(zxid, BufInt(err, rem))) = buf
     Some(ReplyHeader(xid, zxid, err), rem)
@@ -177,7 +190,7 @@ object ReplyHeader extends GlobalResponseDecoder[ReplyHeader] {
 }
 
 private[finagle]
-object SetACLResponse extends GlobalResponseDecoder[SetACLResponse] {
+object SetACLResponse extends GlobalRepDecoder[SetACLResponse] {
   def unapply(buf: Buf): Option[(SetACLResponse, Buf)] = {
     val Stat(stat, rem) = buf
     Some(SetACLResponse(stat), rem)
@@ -185,7 +198,7 @@ object SetACLResponse extends GlobalResponseDecoder[SetACLResponse] {
 }
 
 private[finagle]
-object SetDataResponse extends GlobalResponseDecoder[SetDataResponse] {
+object SetDataResponse extends GlobalRepDecoder[SetDataResponse] {
   def unapply(buf: Buf): Option[(SetDataResponse, Buf)] = {
     val Stat(stat, rem) = buf
     Some(SetDataResponse(stat), rem)
@@ -193,7 +206,7 @@ object SetDataResponse extends GlobalResponseDecoder[SetDataResponse] {
 }
 
 private[finagle]
-object SyncResponse extends GlobalResponseDecoder[SyncResponse] {
+object SyncResponse extends GlobalRepDecoder[SyncResponse] {
   def unapply(buf: Buf): Option[(SyncResponse, Buf)] = {
     val BufString(path, rem) = buf
     Some(SyncResponse(path), rem)
@@ -201,7 +214,7 @@ object SyncResponse extends GlobalResponseDecoder[SyncResponse] {
 }
 
 private[finagle]
-object TransactionResponse extends GlobalResponseDecoder[TransactionResponse] {
+object TransactionResponse extends GlobalRepDecoder[TransactionResponse] {
   def unapply(buf: Buf): Option[(TransactionResponse, Buf)] = {
     Transaction.decode(Seq.empty[OpResult], buf) match {
       case (opList: Seq[OpResult], buf: Buf) =>
@@ -212,7 +225,7 @@ object TransactionResponse extends GlobalResponseDecoder[TransactionResponse] {
 }
 
 private[finagle]
-object WatchEvent extends GlobalResponseDecoder[WatchEvent] {
+object WatchEvent extends GlobalRepDecoder[WatchEvent] {
   def unapply(buf: Buf): Option[(WatchEvent, Buf)] = {
     val BufInt(typ, BufInt(state, BufString(path, rem))) = buf
     Some(new WatchEvent(typ, state, path), rem)

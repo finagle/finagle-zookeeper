@@ -4,15 +4,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.session.Session.{PingSender, States}
-import com.twitter.finagle.exp.zookeeper.{ReplyHeader, ConnectRequest, ConnectResponse, WatchEvent}
-import com.twitter.util.{Promise, Duration, Future}
+import com.twitter.finagle.exp.zookeeper.{ConnectRequest, ConnectResponse, ReplyHeader, WatchEvent}
+import com.twitter.util.{Try, Duration, Future}
 
 /**
  * Session manager is used to manage sessions during client life
  */
 class SessionManager(canBeRo: Boolean) {
 
-  @volatile private[finagle] var session: Promise[Session] = Promise[Session]()
+  @volatile private[finagle] var session: Session = new Session()
 
   /**
    * Build a connect request to create a new session
@@ -36,36 +36,30 @@ class SessionManager(canBeRo: Boolean) {
    * to RW server)
    * @return a customized ConnectResponse
    */
-  def buildReconnectRequest(): Future[ConnectRequest] = {
-    session flatMap { sess =>
-      val sessionId = if (sess.hasFakeSessionId.get) 0
-      else sess.id
+  def buildReconnectRequest(): ConnectRequest = {
+    val sessionId = if (session.hasFakeSessionId.get) 0
+    else session.id
 
-      Future(ConnectRequest(
-        0,
-        sess.lastZxid.get(),
-        sess.diseredTimeout,
-        sessionId,
-        sess.password,
-        canBeRo
-      ))
-    }
+    ConnectRequest(
+      0,
+      session.lastZxid.get(),
+      session.diseredTimeout,
+      sessionId,
+      session.password,
+      canBeRo
+    )
   }
 
-  def canCloseSession: Future[Boolean] = session flatMap (sess => Future(sess.canClose))
-  def canCreateSession: Future[Boolean] =
-    if (session.isDefined)
-      session flatMap (sess => Future(sess.canConnect))
-    else Future(true)
-
-  def canReconnect: Future[Boolean] = session flatMap (sess => Future(sess.canConnect))
+  def canCloseSession: Boolean = session.canClose
+  def canCreateSession: Boolean = session.canConnect
+  def canReconnect: Boolean = session.canConnect
 
   /**
    * To close current session and clean session manager
    * @return
    */
-  def closeAndClean(): Future[Unit] = {
-    session flatMap (sess => Future(sess.close()))
+  def closeAndClean(): Unit = {
+    session.close()
   }
 
   /**
@@ -79,20 +73,20 @@ class SessionManager(canBeRo: Boolean) {
   def newSession(
     conRep: ConnectResponse,
     sessionTimeout: Duration,
-    pinger: PingSender): Future[Unit] = {
+    pinger: PingSender): Unit = {
     ZkClient.logger.info(
       "Connected to session with ID: %d".format(conRep.sessionId))
-    reset() before {
-      session.setValue(new Session(
-        conRep.sessionId,
-        conRep.passwd,
-        sessionTimeout,
-        conRep.timeOut,
-        new AtomicBoolean(conRep.isRO),
-        Some(pinger)))
 
-      session flatMap (sess => Future(sess.init()))
-    }
+    reset()
+    session = new Session(
+      conRep.sessionId,
+      conRep.passwd,
+      sessionTimeout,
+      conRep.timeOut,
+      new AtomicBoolean(conRep.isRO),
+      Some(pinger))
+
+    session.init()
   }
 
   /**
@@ -102,18 +96,15 @@ class SessionManager(canBeRo: Boolean) {
    * @param header request's header
    */
   def parseHeader(header: ReplyHeader) {
-    session flatMap { sess =>
-      header.err match {
-        case 0 => // Ok error code
-        case -4 => sess.currentState.set(States.CONNECTION_LOSS)
-        case -112 => sess.currentState.set(States.SESSION_EXPIRED)
-        case -115 => sess.currentState.set(States.AUTH_FAILED)
-        case -118 => sess.currentState.set(States.SESSION_MOVED)
-        case _ =>
-      }
-      if (header.zxid > 0) sess.lastZxid.set(header.zxid)
-      Future.Done
+    header.err match {
+      case 0 => // Ok error code
+      case -4 => session.currentState.set(States.CONNECTION_LOSS)
+      case -112 => session.currentState.set(States.SESSION_EXPIRED)
+      case -115 => session.currentState.set(States.AUTH_FAILED)
+      case -118 => session.currentState.set(States.SESSION_MOVED)
+      case _ =>
     }
+    if (header.zxid > 0) session.lastZxid.set(header.zxid)
   }
 
   /**
@@ -122,25 +113,22 @@ class SessionManager(canBeRo: Boolean) {
    * @param event a request header
    */
   def parseWatchEvent(event: WatchEvent) {
-    session flatMap { sess =>
-      event.state match {
-        case -112 =>
-          sess.stop()
-          sess.currentState.set(States.SESSION_EXPIRED)
-        case 0 =>
-          sess.stop()
-          sess.currentState.set(States.NOT_CONNECTED)
-        case 3 =>
-          sess.isRO.set(false)
-          sess.currentState.set(States.CONNECTED)
-        case 4 => sess.currentState.set(States.AUTH_FAILED)
-        case 5 =>
-          sess.isRO.set(true)
-          sess.currentState.set(States.CONNECTED_READONLY)
-        case 6 => sess.currentState.set(States.SASL_AUTHENTICATED)
-        case _ =>
-      }
-      Future.Done
+    event.state match {
+      case -112 =>
+        session.stop()
+        session.currentState.set(States.SESSION_EXPIRED)
+      case 0 =>
+        session.stop()
+        session.currentState.set(States.NOT_CONNECTED)
+      case 3 =>
+        session.isRO.set(false)
+        session.currentState.set(States.CONNECTED)
+      case 4 => session.currentState.set(States.AUTH_FAILED)
+      case 5 =>
+        session.isRO.set(true)
+        session.currentState.set(States.CONNECTED_READONLY)
+      case 6 => session.currentState.set(States.SASL_AUTHENTICATED)
+      case _ =>
     }
   }
 
@@ -152,15 +140,11 @@ class SessionManager(canBeRo: Boolean) {
    * @param pinger function to send ping request
    * @return Future.Done when session is configured
    */
-  def reconnect(
+  def reinit(
     conReq: ConnectResponse,
-    pinger: PingSender): Future[Unit] = {
-    session flatMap { sess =>
-      sess.reset() before {
-        sess.reinit(conReq, pinger)
-        Future.Done
-      }
-    }
+    pinger: PingSender): Try[Unit] = {
+    session.reset()
+    session.reinit(conReq, pinger)
   }
 
   /**
@@ -169,14 +153,8 @@ class SessionManager(canBeRo: Boolean) {
    * @return Future.Done when session resetting is finished
    */
   private[this] def reset(): Future[Unit] = {
-    if (session.isDefined) {
-      session flatMap { sess =>
-        sess.reset() before {
-          sess.hasFakeSessionId.set(true)
-          Future.Done
-        }
-      }
-    }
-    else Future.Done
+    session.reset()
+    session.hasFakeSessionId.set(true)
+    Future.Done
   }
 }

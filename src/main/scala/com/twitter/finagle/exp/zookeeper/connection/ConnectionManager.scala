@@ -17,7 +17,7 @@ class ConnectionManager(
   timeForRoMode: Option[Duration]
   ) {
 
-  @volatile var connection: Promise[Connection] = Promise[Connection]()
+  @volatile var connection: Option[Connection] = None
   val isInitiated = new AtomicBoolean(false)
   private[this] var activeHost: Option[String] = None
   private[finagle] val hostProvider = new HostProvider(dest, canBeRo, timeForPreventive, timeForRoMode)
@@ -42,52 +42,56 @@ class ConnectionManager(
    * search and stop rw server search.
    * @return a Future.Done or Exception
    */
-  def close(): Future[Unit] =
-    connection flatMap { connectn =>
+  def close(): Future[Unit] = {
+    if (connection.isDefined) {
       isInitiated.set(false)
-      connectn.close() before hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch() before {
-        connection = Promise[Connection]()
-        Future.Done
-      }
+      connection.get.close() before hostProvider.stopPreventiveSearch() before
+        hostProvider.stopRwServerSearch()
+    } else {
+      isInitiated.set(false)
+      hostProvider.stopPreventiveSearch() before
+        hostProvider.stopRwServerSearch()
     }
+  }
 
   /**
    * To close connection manager, the current connexion, stop preventive
    * search and stop rw server search.
    * @return a Future.Done or Exception
    */
-  def close(deadline: Time): Future[Unit] =
-    connection flatMap { connectn =>
+  def close(deadline: Time): Future[Unit] = {
+    if (connection.isDefined) {
       isInitiated.set(false)
-      connectn.close(deadline) before hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch() before {
-        connection = Promise[Connection]()
-        Future.Done
-      }
+      connection.get.close(deadline) before hostProvider.stopPreventiveSearch() before
+        hostProvider.stopRwServerSearch()
+    } else {
+      isInitiated.set(false)
+      hostProvider.stopPreventiveSearch() before
+        hostProvider.stopRwServerSearch()
     }
+  }
 
   /**
    * Should connect to a server with its address
    * @param server the server address
    * @return Future.Done
    */
-  private[this] def connect(server: String): Future[Unit] =
+  private[this] def connect(server: String): Future[Unit] = {
     if (connection.isDefined) {
-      connection flatMap (_.close())
+      connection.get.close()
       activeHost = Some(server)
-      connection = Promise[Connection]()
-      connection.setValue(
+      connection = Some(
         new Connection(ZooKeeperClient.newClient(server)))
       isInitiated.set(true)
       Future.Done
     } else {
       activeHost = Some(server)
-      connection.setValue(
+      connection = Some(
         new Connection(ZooKeeperClient.newClient(server)))
       isInitiated.set(true)
       Future.Done
     }
+  }
 
 
   /**
@@ -114,15 +118,12 @@ class ConnectionManager(
    * Should say if the current connection is valid or not
    * @return Future[Boolean]
    */
-  private[finagle] def hasAvailableConnection: Future[Boolean] =
-    if (connection.isDefined) {
-      connection flatMap { connectn =>
-        if (connectn.isServiceFactoryAvailable
-          && connectn.isValid.get())
-          connectn.isServiceAvailable
-        else Future(false)
-      }
-    } else Future(false)
+  private[finagle] def hasAvailableConnection: Future[Boolean] = {
+    if (connection.isDefined && connection.get.isServiceFactoryAvailable
+      && connection.get.isValid.get())
+      connection.get.isServiceAvailable
+    else Future(false)
+  }
 
 
   /**
@@ -132,7 +133,7 @@ class ConnectionManager(
   def initConnectionManager(): Future[Unit] =
     if (!isInitiated.get())
       hostProvider.findServer() flatMap { server =>
-        connection.setValue(new Connection(ZooKeeperClient.newClient(server)))
+        connection = Some(new Connection(ZooKeeperClient.newClient(server)))
         hostProvider.startPreventiveSearch()
         isInitiated.set(true)
         Future.Unit

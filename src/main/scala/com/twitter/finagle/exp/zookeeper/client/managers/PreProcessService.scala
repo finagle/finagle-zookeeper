@@ -26,24 +26,20 @@ class PreProcessService(
   private[this] var permit: Option[Permit] = None
 
   def apply(req: Request): Future[RepPacket] = {
-    isROCheck(req) transform {
+    isROCheck(req) match {
       case Return(unit) =>
         linkChecker.tryCheckLink()
         val p = new Promise[RepPacket]
 
         semaphore.acquire() onSuccess { permit =>
           val preparedReq = prepareRequest(req)
-          connectionManager.connection flatMap { cnctn =>
-            preparedReq flatMap { req =>
-              cnctn.serve(req) respond {
-                case Throw(exc) =>
-                  p.updateIfEmpty(Throw(exc))
-                  permit.release()
-                case Return(rep) =>
-                  p.setValue(rep)
-                  permit.release()
-              }
-            }
+          connectionManager.connection.get.serve(preparedReq) respond {
+            case Throw(exc) =>
+              p.updateIfEmpty(Throw(exc))
+              permit.release()
+            case Return(rep) =>
+              p.setValue(rep)
+              permit.release()
           }
         } onFailure { p.setException }
         p
@@ -76,11 +72,13 @@ class PreProcessService(
     } else Future.Done
   }
 
-  private[this] def prepareRequest(req: Request): Future[ReqPacket] = this.synchronized {
-    sessionManager.session flatMap { sess =>
-      Future(Request.toReqPacket(req, sess.nextXid))
-    }
-  }
+  /**
+   * Should prepare a request by adding xid and op code
+   * @param req the request to prepare
+   * @return a ReqPacket
+   */
+  private[this] def prepareRequest(req: Request): ReqPacket =
+    Request.toReqPacket(req, sessionManager.session.nextXid)
 
   /**
    * Should check if the request is a write operation and throw an
@@ -89,23 +87,17 @@ class PreProcessService(
    * @param req the request to test
    * @return
    */
-  private[this] def isROCheck(req: Request): Future[Unit] = {
-    val isro: Future[Boolean] = {
-      if (sessionManager.session.isDefined)
-        sessionManager.session flatMap (sess => Future(sess.isRO.get()))
-      else {
-        throw new RuntimeException("not DEFIENI")
-      }
-    }
+  private[this] def isROCheck(req: Request): Try[Unit] = {
+    val isro = sessionManager.session.isRO.get()
 
-    def testRO(): Future[Unit] = isro flatMap {
-      if (_) actOnRO()
-      else Future.Done
-    }
+    def testRO(): Try[Unit] =
+      if (isro) actOnRO()
+      else Return.Unit
 
-    def actOnRO(): Future[Unit] =
-      Future.exception(NotReadOnlyException(
+    def actOnRO(): Try[Unit] = {
+      Throw(NotReadOnlyException(
         "Server is in ReadOnly mode, write requests are not allowed"))
+    }
 
     req match {
       case req: CreateRequest => testRO()
@@ -114,7 +106,7 @@ class PreProcessService(
       case req: SetDataRequest => testRO()
       case req: SyncRequest => testRO()
       case req: TransactionRequest => testRO()
-      case req: Request => Future.Done
+      case req: Request => Return.Unit
     }
   }
 }

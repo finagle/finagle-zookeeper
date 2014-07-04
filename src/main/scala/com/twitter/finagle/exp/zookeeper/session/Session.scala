@@ -4,7 +4,7 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.session.Session._
 import com.twitter.finagle.util.DefaultTimer
-import com.twitter.util.{Duration, Future, TimerTask}
+import com.twitter.util.{Try, Duration, Future, TimerTask}
 import java.util
 import java.util.concurrent.atomic.{AtomicReference, AtomicLong, AtomicInteger, AtomicBoolean}
 import com.twitter.util.TimeConversions._
@@ -22,8 +22,8 @@ import com.twitter.util.TimeConversions._
 class Session(
   sessionID: Long = 0L,
   sessionPassword: Array[Byte] = Array[Byte](16),
-  sessionTimeout: Duration = Duration.Bottom,
-  var negotiateTimeout: Duration = Duration.Bottom,
+  sessionTimeout: Duration = 0.milliseconds,
+  var negotiateTimeout: Duration = 0.milliseconds,
   var isRO: AtomicBoolean = new AtomicBoolean(false),
   var pinger: Option[PingSender] = None
   ) {
@@ -118,7 +118,7 @@ class Session(
    */
   private[finagle] def reinit(
     connectResponse: ConnectResponse,
-    pingSender: PingSender) {
+    pingSender: PingSender): Try[Unit] = Try {
     assert(connectResponse.sessionId == sessionID)
     assert(util.Arrays.equals(connectResponse.passwd, password))
 
@@ -142,14 +142,13 @@ class Session(
    * Reset session variables to prepare for reconnection
    * @return Future.Done
    */
-  private[finagle] def reset(): Future[Unit] = {
+  private[finagle] def reset(): Unit = {
     stopPing()
     currentState.set(States.NOT_CONNECTED)
     isClosingSession.set(false)
     isRO.set(false)
     xid.set(2)
     this.pinger = None
-    Future.Done
   }
 
   private[finagle] def stop() {

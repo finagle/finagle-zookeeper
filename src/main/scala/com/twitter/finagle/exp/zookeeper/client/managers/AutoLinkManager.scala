@@ -16,7 +16,7 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
    * every timeBetweenLinkCheck
    * @return Future.Done
    */
-  def startStateLoop(): Future[Unit] =
+  def startStateLoop(): Unit =
     if (autoReconnect) {
       require(timeBetweenAttempts.isDefined)
       require(timeBetweenLinkCheck.isDefined)
@@ -27,21 +27,17 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
         canCheckLink.set(true)
         if (!CheckLingScheduler.isRunning) {
           CheckLingScheduler(timeBetweenLinkCheck.get)(tryCheckLink())
-          Future.Done
         }
-        else Future.Done
       }
-    } else Future.Done
+    }
 
-  def stopStateLoop(): Future[Unit] = {
+  def stopStateLoop(): Unit = {
     canCheckLink.set(false)
     CheckLingScheduler.stop()
-    Future.Done
   }
 
-  private[finagle] def tryCheckLink: Future[Unit] =
+  private[finagle] def tryCheckLink(): Unit =
     if (canCheckLink.get()) checkLink()
-    else Future.Done
 
 
   /**
@@ -73,11 +69,10 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
    * @return Future.Done or exception
    */
   private[this] def checkConnection(): Future[Unit] =
-    connectionManager.connection flatMap { cnctn =>
-      if (!cnctn.isValid.get()) {
-        stopJob() before reconnectWithSession()
-      } else Future.Done
-    }
+    if (connectionManager.connection.isDefined &&
+      !connectionManager.connection.get.isValid.get()) {
+      stopJob() before reconnectWithSession()
+    } else Future.Done
 
   /**
    * This method is called to make sure the connection is still alive.
@@ -86,18 +81,16 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
    * It won't connect if the client has never connected
    */
   private[this] def checkSession(): Future[Unit] =
-    sessionManager.session flatMap {
-      _.state match {
-        case States.CONNECTION_LOSS | States.NOT_CONNECTED =>
-          stopJob() before reconnectWithSession()
+    sessionManager.session.state match {
+      case States.CONNECTION_LOSS | States.NOT_CONNECTED =>
+        stopJob() before reconnectWithSession()
 
-        case States.SESSION_MOVED => stopJob() before
-          Future.exception(SessionMovedException(
-            "Session has moved to another server"))
+      case States.SESSION_MOVED => stopJob() before
+        Future.exception(SessionMovedException(
+          "Session has moved to another server"))
 
-        case States.SESSION_EXPIRED => stopJob() before reconnectWithoutSession()
-        case _ => Future.Done
-      }
+      case States.SESSION_EXPIRED => stopJob() before reconnectWithoutSession()
+      case _ => Future.Done
     }
 
   /**

@@ -38,7 +38,7 @@ class ZkClient(
     new PreProcessService(connectionManager, sessionManager, this)
   @volatile protected[this] var authInfo: Set[Auth] = Set()
 
-  def session: Future[Session] = sessionManager.session
+  def session: Session = sessionManager.session
 
   /**
    * To set back auth right after reconnection
@@ -50,12 +50,10 @@ class ZkClient(
         Some(RequestHeader(-4, OpCode.AUTH)),
         Some(new AuthRequest(0, auth))
       )
-      connectionManager.connection flatMap { connectn =>
-        connectn.serve(req) flatMap { rep =>
-          if (rep.err.get == 0) Future.Unit
-          else Future.exception(
-            ZookeeperException.create("Error while addAuth", rep.err.get))
-        }
+      connectionManager.connection.get.serve(req) flatMap { rep =>
+        if (rep.err.get == 0) Future.Unit
+        else Future.exception(
+          ZookeeperException.create("Error while addAuth", rep.err.get))
       }
     }
     Future.join(fetches)
@@ -89,9 +87,7 @@ class ZkClient(
       sessionManager,
       watchManager
     )))
-    connectionManager.connection flatMap { connectn =>
-      connectn.serve(req).unit
-    }
+    connectionManager.connection.get.serve(req).unit
   }
 
   def create(
@@ -232,12 +228,10 @@ class ZkClient(
   protected[this] def ping(): Future[Unit] = {
     val req = ReqPacket(Some(RequestHeader(-2, OpCode.PING)), None)
 
-    connectionManager.connection flatMap { connectn =>
-      connectn.serve(req) flatMap { rep =>
-        if (rep.err.get == 0) Future.Unit
-        else Future.exception(
-          ZookeeperException.create("Error while ping", rep.err.get))
-      }
+    connectionManager.connection.get.serve(req) flatMap { rep =>
+      if (rep.err.get == 0) Future.Unit
+      else Future.exception(
+        ZookeeperException.create("Error while ping", rep.err.get))
     }
   }
 
@@ -276,39 +270,35 @@ class ZkClient(
    */
   private[finagle] def setWatches(): Future[Unit] = {
     if (autoWatchReset) {
-      sessionManager.session flatMap { sess =>
-        val relativeZxid: Long = sess.lastZxid.get
-        val dataWatches: Seq[String] = watchManager.getDataWatches.keySet.map { path =>
-          prependChroot(path, chroot)
-        }.toSeq
-        val existsWatches: Seq[String] = watchManager.getExistsWatches.keySet.map { path =>
-          prependChroot(path, chroot)
-        }.toSeq
-        val childWatches: Seq[String] = watchManager.getChildWatches.keySet.map { path =>
-          prependChroot(path, chroot)
-        }.toSeq
+      val relativeZxid: Long = sessionManager.session.lastZxid.get
+      val dataWatches: Seq[String] = watchManager.getDataWatches.keySet.map { path =>
+        prependChroot(path, chroot)
+      }.toSeq
+      val existsWatches: Seq[String] = watchManager.getExistsWatches.keySet.map { path =>
+        prependChroot(path, chroot)
+      }.toSeq
+      val childWatches: Seq[String] = watchManager.getChildWatches.keySet.map { path =>
+        prependChroot(path, chroot)
+      }.toSeq
 
-        if (dataWatches.nonEmpty || existsWatches.nonEmpty || childWatches.nonEmpty) {
-          val req = ReqPacket(
-            Some(RequestHeader(-8, OpCode.SET_WATCHES)),
-            Some(SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches))
-          )
+      if (dataWatches.nonEmpty || existsWatches.nonEmpty || childWatches.nonEmpty) {
+        val req = ReqPacket(
+          Some(RequestHeader(-8, OpCode.SET_WATCHES)),
+          Some(SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches))
+        )
 
-          connectionManager.connection flatMap { connectn =>
-            connectn.serve(req) flatMap { rep =>
-              if (rep.err.get == 0) Future.Done
-              else {
-                Future.exception(
-                  ZookeeperException.create("Error while setWatches", rep.err.get))
-                Future.Done
-              }
-            }
+        connectionManager.connection.get.serve(req) flatMap { rep =>
+          if (rep.err.get == 0) Future.Done
+          else {
+            // todo log error
+            Future.exception(
+              ZookeeperException.create("Error while setWatches", rep.err.get))
+            Future.Done
           }
-        } else
-          Future.Done
-      }
-    }
-    else {
+        }
+      } else
+        Future.Done
+    } else {
       watchManager.clearWatches()
       Future.Done
     }

@@ -132,9 +132,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
         synchronized {
           processedReq.enqueue((reqRecord, p))
           encoder.write(req) flatMap { unit =>
-            if (!isReading.getAndSet(true)) {
-              readLoop()
-            }
+            if (!isReading.getAndSet(true)) readLoop()
             p
           }
         }
@@ -344,13 +342,10 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
     // fail incoming requests
     hasDispatcherFailed.set(true)
     // Stop ping
-    sessionManager.get.session flatMap { sess =>
-      sess.stop()
-      sess.currentState.set(States.NOT_CONNECTED)
-      Future.Done
-    }
+    sessionManager.get.session.stop()
+    sessionManager.get.session.currentState.set(States.NOT_CONNECTED)
     // inform connection manager that the connection is no longer valid
-    connectionManager.get.connection flatMap (con => Future(con.isValid.set(false)))
+    connectionManager.get.connection.get.isValid.set(false)
     // fail pending requests
     failPendingRequests(exc)
   }

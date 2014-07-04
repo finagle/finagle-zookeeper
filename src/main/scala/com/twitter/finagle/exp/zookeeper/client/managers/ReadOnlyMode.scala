@@ -14,20 +14,16 @@ trait ReadOnlyMode {self: ZkClient with ClientManager =>
   private[this] def findAndConnectRwServer(): Future[Unit] = {
     connectionManager.hostProvider.startRwServerSearch() transform {
       case Return(server) =>
-        sessionManager.session flatMap { sess =>
-          if (sess.isRO.get() && canSearch.get()) {
-            if (sess.hasFakeSessionId.get)
-              reconnectWithoutSession(Some(server))
-            else reconnectWithSession(Some(server))
-          } else Future.Done
-        }
+        if (sessionManager.session.isRO.get() && canSearch.get()) {
+          if (sessionManager.session.hasFakeSessionId.get)
+            reconnectWithoutSession(Some(server))
+          else reconnectWithSession(Some(server))
+        } else Future.Done
 
       case Throw(exc) =>
-        sessionManager.session flatMap { sess =>
-          if (sess.isRO.get() && canSearch.get())
-            findAndConnectRwServer()
-          else Future.Done
-        }
+        if (sessionManager.session.isRO.get() && canSearch.get())
+          findAndConnectRwServer()
+        else Future.Done
     }
   }
 
