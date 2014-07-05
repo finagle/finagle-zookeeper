@@ -108,16 +108,16 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
           if (!autoWatchReset) clearWatches()
 
       case Watch.EventType.NODE_CREATED | Watch.EventType.NODE_DATA_CHANGED =>
-        findAndSatisfy(dataWatches, event)
-        findAndSatisfy(existsWatches, event)
+        findAndSatisfy(dataWatches, watchEvent)
+        findAndSatisfy(existsWatches, watchEvent)
 
       case Watch.EventType.NODE_DELETED =>
-        findAndSatisfy(dataWatches, event)
-        findAndSatisfy(existsWatches, event)
-        findAndSatisfy(childWatches, event)
+        findAndSatisfy(dataWatches, watchEvent)
+        findAndSatisfy(existsWatches, watchEvent)
+        findAndSatisfy(childWatches, watchEvent)
 
       case Watch.EventType.NODE_CHILDREN_CHANGED =>
-        findAndSatisfy(childWatches, event)
+        findAndSatisfy(childWatches, watchEvent)
 
       case _ => throw new RuntimeException(
         "Unsupported Watch.EventType came during WatchedEvent processing")

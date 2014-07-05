@@ -3,7 +3,7 @@ package com.twitter.finagle.exp.zookeeper.client
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
-import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
+import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, ConnectionManager}
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
@@ -294,6 +294,33 @@ class ZkClient(
   }
 
   /**
+   * Return the last committed configuration (as known to the server to which
+   * the client is connected) and the stat of the configuration.
+   *
+   * If the watch is true and the call is successful (no exception is
+   * thrown), a watch will be left on the configuration node. The watch
+   * will be triggered by a successful reconfig operation
+   *
+   * @param watch set a watch or not
+   * @return configuration node data
+   */
+  def getConfig(watch: Boolean = false): Future[GetDataResponse] = {
+    val req = GetDataRequest(ZookeeperDefs.CONFIG_NODE, watch)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        val res = rep.response.get.asInstanceOf[GetDataResponse]
+        if (watch) {
+          val watch = watchManager.register(ZookeeperDefs.CONFIG_NODE, Watch.Type.data)
+          val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
+          Future(finalRep)
+        } else Future(res)
+      } else Future.exception(
+        ZookeeperException.create("Error while getConfig", rep.err.get))
+    }
+  }
+
+  /**
    * Return the data and the stat of the node of the given path.
    *
    * If the watch is non-null and the call is successful (no exception is
@@ -328,13 +355,48 @@ class ZkClient(
    *
    * @return Future[Unit] or Exception
    */
-  protected[this] def ping(): Future[Unit] = {
+  private[finagle] def ping(): Future[Unit] = {
     val req = ReqPacket(Some(RequestHeader(-2, OpCode.PING)), None)
 
     connectionManager.connection.get.serve(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
         ZookeeperException.create("Error while ping", rep.err.get))
+    }
+  }
+
+  /**
+   * Reconfigure - add/remove servers. Return the new configuration
+   *
+   * @param joiningServers a comma separated list of servers being added
+   *                       (incremental reconfiguration)
+   * @param leavingServers a comma separated list of servers being removed
+   *                       (incremental reconfiguration)
+   * @param newMembers a comma separated list of new membership
+   *                   (non-incremental reconfiguration)
+   * @param fromConfig version of the current configuration (optional -
+   *                   causes reconfiguration to throw an exception if
+   *                   configuration is no longer current)
+   * @return configuration node data
+   */
+  def reconfig(
+    joiningServers: String,
+    leavingServers: String,
+    newMembers: String,
+    fromConfig: Long
+    ): Future[GetDataResponse] = {
+
+    HostUtilities.formatAndTest(joiningServers)
+    HostUtilities.formatAndTest(leavingServers)
+    HostUtilities.formatAndTest(newMembers)
+    val req = ReconfigRequest(joiningServers, leavingServers, newMembers, fromConfig)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        val res = rep.response.get.asInstanceOf[GetDataResponse]
+        Future(res)
+      } else Future.exception(
+        ZookeeperException.create("Error while reconfig", rep.err.get))
     }
   }
 

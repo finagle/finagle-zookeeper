@@ -157,7 +157,7 @@ class ConnectionManager(
    *         or an Exception
    */
   def removeAndFind(hostList: String): Future[String] = {
-    val hostSeq = hostProvider.formatHostList(hostList)
+    val hostSeq = HostUtilities.formatHostList(hostList)
     hostSeq map HostUtilities.testIpAddress
     if (currentHost.isDefined && hostSeq.contains(currentHost.get)) {
       val newList = hostProvider.serverList filterNot (hostList.contains(_))

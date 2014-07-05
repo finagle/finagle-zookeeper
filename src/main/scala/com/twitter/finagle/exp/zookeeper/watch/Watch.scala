@@ -7,6 +7,8 @@ private[finagle] object Watch {
     val NODE_DELETED = 2
     val NODE_DATA_CHANGED = 3
     val NODE_CHILDREN_CHANGED = 4
+    val DATA_WATCH_REMOVED = 5
+    val CHILD_WATCH_REMOVED = 6
 
     def getEvent(code: Int): String = code match {
       case -1 => "Node"
@@ -14,6 +16,8 @@ private[finagle] object Watch {
       case 2 => "Node deleted"
       case 3 => "Node data changed"
       case 4 => "Node children changed"
+      case 5 => "Data watch removed"
+      case 6 => "Child watch removed"
     }
   }
 

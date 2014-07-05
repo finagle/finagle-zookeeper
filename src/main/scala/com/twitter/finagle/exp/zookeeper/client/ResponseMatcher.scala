@@ -269,25 +269,29 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
       val (reqRecord, _) = req
       reqRecord.opCode match {
         case OpCode.AUTH => decodeHeader(reqRecord, buf)
+        case OpCode.CREATE => decodeResponse(reqRecord, buf, CreateResponse.apply)
+        case OpCode.CHECK_WATCHES => decodeHeader(reqRecord, buf)
         case OpCode.CREATE_SESSION =>
           ConnectResponse(buf) match {
             case Return((body, rem)) => Future(ResponsePacket(None, Some(body)))
             case Throw(exception) => throw exception
           }
-        case OpCode.PING => decodeHeader(reqRecord, buf)
         case OpCode.CLOSE_SESSION => decodeHeader(reqRecord, buf)
-        case OpCode.CREATE => decodeResponse(reqRecord, buf, CreateResponse.apply)
-        case OpCode.EXISTS => decodeResponse(reqRecord, buf, ExistsResponse.apply)
         case OpCode.DELETE => decodeHeader(reqRecord, buf)
-        case OpCode.SET_DATA => decodeResponse(reqRecord, buf, SetDataResponse.apply)
-        case OpCode.GET_DATA => decodeResponse(reqRecord, buf, GetDataResponse.apply)
-        case OpCode.SYNC => decodeResponse(reqRecord, buf, SyncResponse.apply)
-        case OpCode.SET_ACL => decodeResponse(reqRecord, buf, SetACLResponse.apply)
+        case OpCode.EXISTS => decodeResponse(reqRecord, buf, ExistsResponse.apply)
         case OpCode.GET_ACL => decodeResponse(reqRecord, buf, GetACLResponse.apply)
         case OpCode.GET_CHILDREN => decodeResponse(reqRecord, buf, GetChildrenResponse.apply)
         case OpCode.GET_CHILDREN2 => decodeResponse(reqRecord, buf, GetChildren2Response.apply)
-        case OpCode.SET_WATCHES => decodeHeader(reqRecord, buf)
+        case OpCode.GET_DATA => decodeResponse(reqRecord, buf, GetDataResponse.apply)
         case OpCode.MULTI => decodeResponse(reqRecord, buf, TransactionResponse.apply)
+        case OpCode.PING => decodeHeader(reqRecord, buf)
+        case OpCode.RECONFIG => decodeResponse(reqRecord, buf, GetDataResponse.apply)
+        case OpCode.REMOVE_WATCHES => decodeHeader(reqRecord, buf)
+        case OpCode.SASL => ???
+        case OpCode.SET_ACL => decodeResponse(reqRecord, buf, SetACLResponse.apply)
+        case OpCode.SET_DATA => decodeResponse(reqRecord, buf, SetDataResponse.apply)
+        case OpCode.SET_WATCHES => decodeHeader(reqRecord, buf)
+        case OpCode.SYNC => decodeResponse(reqRecord, buf, SyncResponse.apply)
 
         case _ => throw new RuntimeException("RequestRecord was not matched during response reading!")
       }

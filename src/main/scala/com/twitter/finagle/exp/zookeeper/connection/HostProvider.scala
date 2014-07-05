@@ -22,7 +22,7 @@ private[finagle] class HostProvider(
   type TestMethod = String => Future[String]
   val canSearchRwServer = new AtomicBoolean(false)
   var hasStoppedRwServerSearch = Promise[Unit]()
-  private[this] var hostList: Seq[String] = shuffleSeq(formatHostList(dest))
+  private[this] var hostList: Seq[String] = shuffleSeq(HostUtilities.formatHostList(dest))
   var seenRwServer: Option[String] = None
   var seenRoServer: Option[String] = None
 
@@ -35,23 +35,11 @@ private[finagle] class HostProvider(
    * @return Unit
    */
   def addHost(hostList: String): Unit = this.synchronized {
-    val newHosts = formatHostList(hostList).toSeq
+    val newHosts = HostUtilities.formatHostList(hostList).toSeq
     newHosts map HostUtilities.testIpAddress
     this.hostList ++= newHosts.diff(this.hostList)
     this.hostList = shuffleSeq(this.hostList)
   }
-
-  /**
-   * Format original server list by splitting on ',' character
-   * and adding in a Sequence.
-   *
-   * @param list original server list
-   * @return a Sequence containing hosts
-   */
-  private[finagle] def formatHostList(list: String): Seq[String] =
-    if (list.trim.isEmpty)
-      throw new IllegalArgumentException("Host list is empty")
-    else list.trim.split(",")
 
   /**
    * Should remove hosts from the host provider's list
@@ -60,7 +48,7 @@ private[finagle] class HostProvider(
    * @return Unit
    */
   def removeHost(hostList: String): Unit = this.synchronized {
-    val badHosts = formatHostList(hostList)
+    val badHosts = HostUtilities.formatHostList(hostList)
     badHosts map HostUtilities.testIpAddress
     this.hostList = this.hostList filterNot (badHosts.contains(_))
   }
@@ -395,6 +383,24 @@ private[finagle] class HostProvider(
 object HostUtilities {
   class NoServerFound(msg: String) extends RuntimeException(msg)
   class ServerNotAvailable(msg: String) extends RuntimeException(msg)
+
+
+  /**
+   * Format original server list by splitting on ',' character
+   * and adding in a Sequence.
+   *
+   * @param list original server list
+   * @return a Sequence containing hosts
+   */
+  def formatHostList(list: String): Seq[String] =
+    if (list.trim.isEmpty)
+      throw new IllegalArgumentException("Host list is empty")
+    else list.trim.split(",")
+
+  def formatAndTest(list: String) {
+    val seq = formatHostList(list)
+    seq map HostUtilities.testIpAddress
+  }
 
   def testIpAddress(address: String) {
     val addressAndPort = address.split(":")
