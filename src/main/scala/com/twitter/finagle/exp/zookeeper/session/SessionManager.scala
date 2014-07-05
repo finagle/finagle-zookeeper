@@ -134,15 +134,19 @@ class SessionManager(canBeRo: Boolean) {
         session.currentState.set(States.NOT_CONNECTED)
         ZkClient.logger.warning("Received NOT_CONNECTED event from server")
       case 3 =>
-        session.isRO.set(false)
-        session.hasFakeSessionId.set(false)
-        session.currentState.set(States.CONNECTED)
-        ZkClient.logger.info("Server is now in Read-Write mode")
+        session.isRO.compareAndSet(true, false)
+        session.hasFakeSessionId.compareAndSet(true, false)
+        if (session.currentState.get != States.CONNECTED) {
+          session.currentState.set(States.CONNECTED)
+          ZkClient.logger.info("Server is now in Read-Write mode")
+        }
       case 4 => session.currentState.set(States.AUTH_FAILED)
       case 5 =>
-        session.isRO.set(true)
-        session.currentState.set(States.CONNECTED_READONLY)
-        ZkClient.logger.info("Server is now in Read Only mode")
+        session.isRO.compareAndSet(false, true)
+        if (session.currentState.get != States.CONNECTED_READONLY) {
+          session.currentState.set(States.CONNECTED_READONLY)
+          ZkClient.logger.info("Server is now in Read Only mode")
+        }
       case 6 =>
         session.currentState.set(States.SASL_AUTHENTICATED)
         ZkClient.logger.info("SASL authentication confirmed by server")
