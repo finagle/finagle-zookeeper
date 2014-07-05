@@ -310,7 +310,7 @@ private[finagle] class HostProvider(
       svc => svc.close() before client.close()
     }
 
-    def serve(buf: Buf): Future[Unit] = service flatMap (_.apply(buf).unit)
+    def serve(buf: Buf): Future[Buf] = service flatMap (_.apply(buf))
 
     val connectRequest = ReqPacket(
       None,
@@ -330,13 +330,27 @@ private[finagle] class HostProvider(
 
     // sending a connect request and then a close request
     val rep = serve(
-      Buf.U32BE(connectRequest.buf.length).concat(connectRequest.buf)) before {
+      Buf.U32BE(connectRequest.buf.length).concat(connectRequest.buf)) flatMap { rep =>
       serve(Buf.U32BE(closeRequest.buf.length).concat(closeRequest.buf))
+      val Buf.U32BE(_, rem) = rep
+      ConnectResponse(rem) match {
+        case Return((body, rem2)) => Future(body)
+        case Throw(exc) => Future.exception(exc)
+      }
     }
 
     try {
       rep transform {
-        case Return(unit) => Future(host)
+        case Return(conRep: ConnectResponse) =>
+          if (conRep.isRO) {
+            seenRoServer = Some(host)
+            ZkClient.logger.info("Found Ro server at %s".format(host))
+          }
+          else {
+            seenRwServer = Some(host)
+            ZkClient.logger.info("Found Rw server at %s".format(host))
+          }
+          Future(host)
         case Throw(exc: Throwable) => Future.exception(
           CouldNotConnect("Could not connect to server : " + host)
             .initCause(exc))
