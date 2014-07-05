@@ -29,7 +29,6 @@ class ConnectionManager(
    * Should add new hosts to the server list
    *
    * @param hostList the hosts to add
-   * @return Future.Done or Exception
    */
   def addHosts(hostList: String): Unit = { hostProvider.addHost(hostList) }
 
@@ -79,7 +78,6 @@ class ConnectionManager(
    * Should connect to a server with its address.
    *
    * @param server the server address
-   * @return Unit
    */
   private[this] def connect(server: String): Unit = {
     if (connection.isDefined) connection.get.close()
@@ -155,7 +153,8 @@ class ConnectionManager(
    * connected to one of these hosts, it will find a new host and return it.
    *
    * @param hostList the hosts to remove from the current host list.
-   * @return Future[String] or Exception
+   * @return address of an available server not included in the given host list
+   *         or an Exception
    */
   def removeAndFind(hostList: String): Future[String] = {
     val hostSeq = hostProvider.formatHostList(hostList)

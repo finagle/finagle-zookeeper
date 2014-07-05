@@ -32,7 +32,7 @@ private[finagle] class HostProvider(
    * Should add the hosts from the list to the host provider's list.
    *
    * @param hostList hosts to be added
-   * @return Future.Done
+   * @return Unit
    */
   def addHost(hostList: String): Unit = this.synchronized {
     val newHosts = formatHostList(hostList).toSeq
@@ -57,8 +57,7 @@ private[finagle] class HostProvider(
    * Should remove hosts from the host provider's list
    *
    * @param hostList hosts to be removed
-   * @return Future.Done when hosts are removed and client connected
-   *         to a new endpoint
+   * @return Unit
    */
   def removeHost(hostList: String): Unit = this.synchronized {
     val badHosts = formatHostList(hostList)
@@ -82,7 +81,7 @@ private[finagle] class HostProvider(
   }
 
   /**
-   * Test if we can connect to this server
+   * Test if we can connect to this server.
    *
    * @param host the server to test
    * @return Future[Boolean]
@@ -97,6 +96,12 @@ private[finagle] class HostProvider(
     }
   }
 
+  /**
+   * Tests if a given server is available and finds a new one it's not.
+   *
+   * @param host a server to test
+   * @return address of available server
+   */
   def testOrFind(host: String): Future[String] =
     testHost(host) flatMap { available =>
       if (available) Future(host)
@@ -106,7 +111,7 @@ private[finagle] class HostProvider(
   /**
    * Find a server to connect to, if no server is found an exception is thrown
    *
-   * @return Future[String] or NoServerFound exception
+   * @return Future[String] or Exception
    */
   def findServer(serverList: Option[Seq[String]] = None): Future[String] = {
     // we make priority to seenRwServer over other servers
@@ -167,7 +172,7 @@ private[finagle] class HostProvider(
    * a new RW server every timeInterval until success
    *
    * @param timeInterval Duration between each search attempt
-   * @return Future[String]
+   * @return address of an available RW server
    */
   def findRwServer(timeInterval: Duration): Future[String] =
     scanHostList(shuffleSeq(hostList))(withIsroRequest) transform {
@@ -195,7 +200,7 @@ private[finagle] class HostProvider(
    *
    * @param hostList server host list
    * @param testMethod take server address and test
-   * @return the Future host address if found or an exception
+   * @return address of an available RW server
    */
   def scanHostList(hostList: Seq[String])(implicit testMethod: TestMethod)
   : Future[String] = hostList match {
@@ -252,7 +257,7 @@ private[finagle] class HostProvider(
    * either not support read only mode (server version < 3.4.0 ) or be down.
    *
    * @param host the server to test
-   * @return Future[String]
+   * @return the tested server address
    */
   def withIsroRequest(host: String): Future[String] = {
     // using BufClient to send unframed requests
@@ -293,7 +298,7 @@ private[finagle] class HostProvider(
    * is accepted).
    *
    * @param host the server to test
-   * @return Future[String]
+   * @return the tested server address
    */
   def withConnectRequest(host: String): Future[String] = {
     // we are using BufClient to reduce connection and

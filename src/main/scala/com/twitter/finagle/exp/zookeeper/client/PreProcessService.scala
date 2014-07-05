@@ -79,14 +79,12 @@ class PreProcessService(
    * Should unlock the service after lockServe() was called, it's done
    * simply by releasing the semaphore permit.
    *
-   * @return Future.Done
    */
-  private[finagle] def unlockServe(): Future[Unit] = this.synchronized {
+  private[finagle] def unlockServe(): Unit = this.synchronized {
     if (permit.isDefined) {
       permit.get.release()
       permit = None
-      Future.Done
-    } else Future.Done
+    }
   }
 
   /**

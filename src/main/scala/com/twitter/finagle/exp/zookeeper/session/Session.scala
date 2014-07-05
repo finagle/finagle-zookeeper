@@ -159,7 +159,7 @@ class Session(
   /**
    * Reset session variables to prepare for reconnection
    *
-   * @return Future.Done
+   * @return Unit
    */
   private[finagle] def reset() {
     stopPing()

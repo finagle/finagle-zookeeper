@@ -70,7 +70,7 @@ class SessionManager(canBeRo: Boolean) {
    * @param conRep connect Response
    * @param sessionTimeout connect request session timeout
    * @param pinger function to send ping request
-   * @return Future.Done when new session is configured
+   * @return Unit
    */
   def newSession(
     conRep: ConnectResponse,
@@ -157,7 +157,7 @@ class SessionManager(canBeRo: Boolean) {
    *
    * @param conReq connect response
    * @param pinger function to send ping request
-   * @return Future.Done when session is configured
+   * @return Try[Unit]
    */
   def reinit(
     conReq: ConnectResponse,
@@ -170,7 +170,7 @@ class SessionManager(canBeRo: Boolean) {
    * Use reset before reconnection to a server with a new session
    * it will clean up connection and manager.
    *
-   * @return Future.Done when session resetting is finished
+   * @return Unit
    */
   private[this] def reset() {
     session.reset()

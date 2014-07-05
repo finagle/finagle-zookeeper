@@ -43,32 +43,6 @@ class ZkClient(
   // todo implement create2, removeWatches, checkWatches, ReconfigRequest, check ?
 
   /**
-   * To set back auth right after reconnection
-   *
-   * @return Future.Done if request worked, or exception
-   */
-  private[finagle] def recoverAuth(): Future[Unit] = {
-    val fetches = authInfo.toSeq map { auth =>
-      val req = ReqPacket(
-        Some(RequestHeader(-4, OpCode.AUTH)),
-        Some(new AuthRequest(0, auth))
-      )
-      connectionManager.connection.get.serve(req) flatMap { rep =>
-        if (rep.err.get == 0) Future.Unit
-        else if (rep.err.get == -115) {
-          watchManager.process(
-            WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
-          Future.exception(
-            ZookeeperException.create("Error while addAuth", rep.err.get))
-        }
-        else Future.exception(
-          ZookeeperException.create("Error while addAuth", rep.err.get))
-      }
-    }
-    Future.join(fetches)
-  }
-
-  /**
    * Add the specified Auth(scheme:data) information to this connection.
    *
    * @param auth an Auth
@@ -365,6 +339,32 @@ class ZkClient(
   }
 
   /**
+   * To set back auth right after reconnection
+   *
+   * @return Future.Done if request worked, or exception
+   */
+  private[finagle] def recoverAuth(): Future[Unit] = {
+    val fetches = authInfo.toSeq map { auth =>
+      val req = ReqPacket(
+        Some(RequestHeader(-4, OpCode.AUTH)),
+        Some(new AuthRequest(0, auth))
+      )
+      connectionManager.connection.get.serve(req) flatMap { rep =>
+        if (rep.err.get == 0) Future.Unit
+        else if (rep.err.get == -115) {
+          watchManager.process(
+            WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
+          Future.exception(
+            ZookeeperException.create("Error while addAuth", rep.err.get))
+        }
+        else Future.exception(
+          ZookeeperException.create("Error while addAuth", rep.err.get))
+      }
+    }
+    Future.join(fetches)
+  }
+
+  /**
    * Set the ACL for the node of the given path if such a node exists and the
    * given version matches the version of the node. Return the stat of the
    * node.
@@ -406,7 +406,9 @@ class ZkClient(
    * @return Future[SetDataResponse] or Exception
    */
   def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
-    // todo check is data is larger than 1 MB before sending
+    require(data.size < 1048576,
+      "The maximum allowable size of the data array is 1 MB (1,048,576 bytes)")
+
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = SetDataRequest(finalPath, data, version)
@@ -447,10 +449,10 @@ class ZkClient(
         connectionManager.connection.get.serve(req) flatMap { rep =>
           if (rep.err.get == 0) Future.Done
           else {
-            // todo log error
-            Future.exception(
-              ZookeeperException.create("Error while setWatches", rep.err.get))
-            Future.Done
+            val exc = ZookeeperException.create(
+              "Error while setWatches", rep.err.get)
+            ZkClient.logger.error("Error after setting back watches: " + exc.getMessage)
+            Future.exception(exc)
           }
         }
       } else
@@ -489,6 +491,20 @@ class ZkClient(
    * On success, a list of results is returned.
    * On failure, an exception is raised which contains partial results and
    * error details.
+   * OpRequest:
+   * - CheckVersionRequest(path: String, version: Int)
+   * - CreateRequest( path: String,
+   *                  data: Array[Byte],
+   *                  aclList: Seq[ACL],
+   *                  createMode: Int )
+   * - Create2Request(  path: String,
+   *                    data: Array[Byte],
+   *                    aclList: Seq[ACL],
+   *                    createMode: Int )
+   * - DeleteRequest(path: String, version: Int)
+   * - SetDataRequest(  path: String,
+   *                    data: Array[Byte],
+   *                    version: Int )
    *
    * @param opList a Sequence composed of OpRequest
    * @return Future[TransactionResponse] or Exception

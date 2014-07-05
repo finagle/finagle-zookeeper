@@ -18,7 +18,6 @@ with ReadOnlyManager {slf: ZkClient =>
    * Should take decisions depending on canBeRO, isRO and if timeBetweenRwSrch
    * is defined.
    *
-   * @return Future.Done
    */
   private[this] def actIfRO(): Unit = {
     if (sessionManager.session.isReadOnly.get()
@@ -68,18 +67,20 @@ with ReadOnlyManager {slf: ZkClient =>
               Return(sessionManager.newSession(conRep, sessionTimeout, ping))
           }
           configureNewSession() before startJob()
-        } else {
+        }
+        else {
           sessionManager.reinit(conRep, ping) match {
             case Return(unit) =>
               startStateLoop()
-              zkRequestService.unlockServe()
+              Future(zkRequestService.unlockServe())
             case Throw(exc) =>
               sessionManager
                 .newSession(conRep, sessionTimeout, ping)
               configureNewSession() before startJob()
           }
         }
-      } else actOnReconnectWithoutSession(host, tries)(conRep)
+      }
+      else actOnReconnectWithoutSession(host, tries)(conRep)
     }
   }
 
@@ -324,7 +325,7 @@ with ReadOnlyManager {slf: ZkClient =>
     startStateLoop()
     actIfRO()
     connectionManager.hostProvider.startPreventiveSearch()
-    zkRequestService.unlockServe()
+    Future(zkRequestService.unlockServe())
   }
 
   /**

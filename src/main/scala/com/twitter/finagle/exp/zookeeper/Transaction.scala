@@ -109,6 +109,9 @@ private[finagle] object Transaction {
         Return(DeleteRequest(finalPath, op.version))
 
       case op: SetDataRequest =>
+        require(op.data.size < 1048576,
+          "The maximum allowable size of " +
+            "the data array is 1 MB (1,048,576 bytes)")
         val finalPath = PathUtils.prependChroot(op.path, chroot)
         PathUtils.validatePath(finalPath)
         Return(SetDataRequest(finalPath, op.data, op.version))

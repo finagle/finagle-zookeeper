@@ -49,7 +49,7 @@ object ACL extends DataDecoder[ACL] {
   /**
    * Check IP address
    * @param addr the IP address
-   * @return
+   * @return Array[Byte] or Exception
    */
   private[finagle] def ipToBytes(addr: String): Array[Byte] = {
     // TODO implement for ipv6
@@ -85,9 +85,9 @@ object ACL extends DataDecoder[ACL] {
   /**
    * ACL list from a String
    * @param str a String composed by scheme:id:perm separated by commas
-   * @return an Array[ACL]
+   * @return a Seq[ACL]
    */
-  def parseACL(str: String): Array[ACL] = {
+  def parseACL(str: String): Seq[ACL] = {
     val aclTab = str.split(",").map(acl => acl.trim)
     val aclList: Array[ACL] = new Array[ACL](aclTab.length)
 

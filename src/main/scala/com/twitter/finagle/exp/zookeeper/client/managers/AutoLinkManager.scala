@@ -14,7 +14,6 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    * Start the loop which will check connection and session
    * every timeBetweenLinkCheck
    *
-   * @return Future.Done
    */
   def startStateLoop(): Unit =
     if (autoReconnect) {
