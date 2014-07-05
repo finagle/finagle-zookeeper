@@ -244,7 +244,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.exists)
+          val watch = watchManager.register(path, Watch.Type.child)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildrenResponse(childrenList, Some(watch))
           Future(finalRep)
@@ -279,7 +279,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.exists)
+          val watch = watchManager.register(path, Watch.Type.child)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
           Future(finalRep)
@@ -314,7 +314,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.exists)
+          val watch = watchManager.register(path, Watch.Type.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else Future(res)
