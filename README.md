@@ -8,14 +8,6 @@ finagle-zookeeper provides basic tools to communicate with a Zookeeper server as
 ### Client
 - `Client` is based on Finagle 6 client model.
 
-
-### Common
-- `Data` represents ACL, ID structures with associated serialization/deserialization definitions
-- `Request` contains every request with serialization definitions
-- `Response` contains every response with deserialization definitions
-- `ZooKeeper` contains DefaultClient definition (Bridge, dispatcher)
-- `ZookeeperDefinitions` contains zookeeper code definitions
-
 ## Commands
 
 Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
