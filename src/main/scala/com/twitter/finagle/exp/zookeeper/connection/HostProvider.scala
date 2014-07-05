@@ -2,8 +2,8 @@ package com.twitter.finagle.exp.zookeeper.connection
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.data.ACL
-import com.twitter.finagle.exp.zookeeper.transport.BufInt
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.io.Buf
 import com.twitter.io.Buf.ByteArray
@@ -30,6 +30,7 @@ private[finagle] class HostProvider(
 
   /**
    * Should add the hosts from the list to the host provider's list.
+   *
    * @param hostList hosts to be added
    * @return Future.Done
    */
@@ -43,7 +44,8 @@ private[finagle] class HostProvider(
   /**
    * Format original server list by splitting on ',' character
    * and adding in a Sequence.
-   * @param list originial server list
+   *
+   * @param list original server list
    * @return a Sequence containing hosts
    */
   private[finagle] def formatHostList(list: String): Seq[String] =
@@ -53,17 +55,21 @@ private[finagle] class HostProvider(
 
   /**
    * Should remove hosts from the host provider's list
+   *
    * @param hostList hosts to be removed
-   * @return Future.Done when hosts are removed and client connected to a new endpoint
+   * @return Future.Done when hosts are removed and client connected
+   *         to a new endpoint
    */
   def removeHost(hostList: String): Unit = this.synchronized {
     val badHosts = formatHostList(hostList)
+    badHosts map HostUtilities.testIpAddress
     this.hostList = this.hostList filterNot (badHosts.contains(_))
   }
 
   /**
    * A simple way to shuffle host list, thus we can dispatch clients
    * on several hosts.
+   *
    * @param seq sequence to shuffle
    * @tparam T sequence type
    * @return the freshly shuffled sequence
@@ -77,6 +83,7 @@ private[finagle] class HostProvider(
 
   /**
    * Test if we can connect to this server
+   *
    * @param host the server to test
    * @return Future[Boolean]
    */
@@ -98,15 +105,21 @@ private[finagle] class HostProvider(
 
   /**
    * Find a server to connect to, if no server is found an exception is thrown
+   *
    * @return Future[String] or NoServerFound exception
    */
   def findServer(serverList: Option[Seq[String]] = None): Future[String] = {
     // we make priority to seenRwServer over other servers
     val finalHostList = {
-      if (serverList.isDefined) shuffleSeq(serverList.get)
+      if (serverList.isDefined) {
+        serverList.get map HostUtilities.testIpAddress
+        shuffleSeq(serverList.get)
+      }
       else {
         if (seenRwServer.isDefined)
-          seenRwServer.get +: shuffleSeq(hostList.filter(_ == seenRwServer.get))
+          seenRwServer.get +:
+            shuffleSeq(hostList.filter(_ == seenRwServer.get))
+
         else shuffleSeq(hostList)
       }
     }
@@ -123,9 +136,8 @@ private[finagle] class HostProvider(
             case None => Future.exception(
               NoServerFound("No server available for connection"))
           }
-        } else
-          Future.exception(
-            NoServerFound("No RW server available for connection"))
+        } else Future.exception(
+          NoServerFound("No RW server available for connection"))
 
       // isro is maybe request not supported or not allowed
       // will search by connecting to server directly
@@ -143,9 +155,8 @@ private[finagle] class HostProvider(
   }
 
   def stopRwServerSearch(): Future[Unit] = {
-    if(!canSearchRwServer.get())
-      Future.Done
-    else{
+    if (!canSearchRwServer.get()) Future.Done
+    else {
       canSearchRwServer.set(false)
       hasStoppedRwServerSearch
     }
@@ -154,6 +165,7 @@ private[finagle] class HostProvider(
   /**
    * If we are currently connected to a RO mode server, it will try to search
    * a new RW server every timeInterval until success
+   *
    * @param timeInterval Duration between each search attempt
    * @return Future[String]
    */
@@ -180,6 +192,7 @@ private[finagle] class HostProvider(
   /**
    * Should go through a host list to find a server using a defined
    * searchMethod.
+   *
    * @param hostList server host list
    * @param testMethod take server address and test
    * @return the Future host address if found or an exception
@@ -203,6 +216,7 @@ private[finagle] class HostProvider(
   /**
    * Will try to test each host and classify them depending
    * on results.
+   *
    * @return Future.Done when the action is completed
    */
   def preventiveRwServerSearch(): Future[Unit] =
@@ -218,8 +232,10 @@ private[finagle] class HostProvider(
    * Should schedule a preventive search task if not already defined
    */
   def startPreventiveSearch(): Unit = this.synchronized {
-    if (timeBetweenPreventiveSearch.isDefined && !PreventiveSearchScheduler.isRunning)
-      PreventiveSearchScheduler.apply(timeBetweenPreventiveSearch.get)(preventiveRwServerSearch())
+    if (timeBetweenPreventiveSearch.isDefined
+      && !PreventiveSearchScheduler.isRunning)
+      PreventiveSearchScheduler
+        .apply(timeBetweenPreventiveSearch.get)(preventiveRwServerSearch())
   }
 
   /**
@@ -231,9 +247,10 @@ private[finagle] class HostProvider(
 
   /**
    * Sends a "isro" request to the server. If the server responds "rw" then
-   * it's a Read-Write mode server, if the response is "ro" then the server is in
-   * Read-Only mode. If the request does not succeed the server could either
-   * not support read only mode (server version < 3.4.0 ) or be down.
+   * it's a Read-Write mode server, if the response is "ro" then the server
+   * is in Read-Only mode. If the request does not succeed the server could
+   * either not support read only mode (server version < 3.4.0 ) or be down.
+   *
    * @param host the server to test
    * @return Future[String]
    */
@@ -251,16 +268,17 @@ private[finagle] class HostProvider(
         // this is a RW mode server ( connected to majority )
         if (str == "rw") {
           seenRwServer = Some(host)
+          ZkClient.logger.info("Found Rw server at %s".format(host))
           Future(host)
         }
         // this is a RO mode server ( not connected to quorum )
         else if (str == "ro") {
           seenRoServer = Some(host)
+          ZkClient.logger.info("Found Ro server at %s".format(host))
           Future.exception(NoRwServerFound("This is a RO mode server"))
         }
-        else
-          Future.exception(
-            NoRwServerFound("No server found with isro request"))
+        else Future.exception(
+          NoRwServerFound("No server found with isro request"))
 
       // isro request not supported by server (server version < 3.4.0)
       case Throw(exc) =>
@@ -273,6 +291,7 @@ private[finagle] class HostProvider(
   /**
    * Sends a connect request followed by close request (if the first one
    * is accepted).
+   *
    * @param host the server to test
    * @return Future[String]
    */
@@ -306,8 +325,8 @@ private[finagle] class HostProvider(
 
     // sending a connect request and then a close request
     val rep = serve(
-      BufInt(connectRequest.buf.length).concat(connectRequest.buf)) before {
-      serve(BufInt(closeRequest.buf.length).concat(closeRequest.buf))
+      Buf.U32BE(connectRequest.buf.length).concat(connectRequest.buf)) before {
+      serve(Buf.U32BE(closeRequest.buf.length).concat(closeRequest.buf))
     }
 
     try {

@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Connection manages a ServiceFactory, in charge of serving requests to server
+ *
  * @param serviceFactory current connection to server
  */
 class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
@@ -16,6 +17,7 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
 
   /**
    * Close current service and ServiceFactory
+   *
    * @return Future.Done
    */
   def close(): Future[Unit] = {

@@ -13,6 +13,7 @@ import com.twitter.util.TimeConversions._
 /**
  * A Session contains ZooKeeper Session Ids and is in charge of sending
  * ping requests depending on negotiated session timeout
+ *
  * @param sessionID ZooKeeper session ID
  * @param sessionPassword ZooKeeper session password
  * @param sessionTimeout requested session timeout
@@ -25,7 +26,7 @@ class Session(
   sessionTimeout: Duration = 0.milliseconds,
   var negotiateTimeout: Duration = 0.milliseconds,
   var isRO: AtomicBoolean = new AtomicBoolean(false),
-  var pinger: Option[PingSender] = None
+  var pingSender: Option[PingSender] = None
   ) {
 
   private[finagle]
@@ -36,19 +37,26 @@ class Session(
   private[this] val xid = new AtomicInteger(2)
 
   def isReadOnly = this.isRO
+
   def id: Long = sessionID
+
   def password: Array[Byte] = sessionPassword
+
   /**
    * Ping every 1/3 of timeout, connect to a new host
    * if no response at (lastRequestTime) + 2/3 of timeout
    */
   private[this] def pingTimeout: Duration = negotiateTimeout * 1 / 3
+
   def diseredTimeout: Duration = sessionTimeout
+
   def negotiatedTimeout: Duration = negotiateTimeout
+
   def state: States.ConnectionState = currentState.get()
 
   /**
    * Determines if we can use init or reinit
+   *
    * @return true or exception
    */
   private[finagle] def canConnect: Boolean = currentState.get() match {
@@ -61,6 +69,7 @@ class Session(
 
   /**
    * Determines if we can close the session
+   *
    * @return true or exception
    */
   private[finagle] def canClose: Boolean = currentState.get() match {
@@ -89,14 +98,18 @@ class Session(
    * Use init just after session creation
    */
   private[finagle] def init() {
-    if (pinger.isDefined && !PingScheduler.isRunning) {
+    if (pingSender.isDefined && !PingScheduler.isRunning) {
       xid.set(2)
       lastZxid.set(0L)
       startPing()
       isClosingSession.set(false)
-      if (isRO.get()) currentState.set(States.CONNECTED_READONLY)
+      if (isRO.get()) {
+        currentState.set(States.CONNECTED_READONLY)
+        ZkClient.logger.info("Server is in Read Only mode")
+      }
       else {
         currentState.set(States.CONNECTED)
+        ZkClient.logger.info("Server is in Read-Write mode")
         hasFakeSessionId.set(false)
       }
     } else throw new RuntimeException(
@@ -113,6 +126,7 @@ class Session(
 
   /**
    * Reinitialize session with a connect response and a function sending ping
+   *
    * @param connectResponse a connect response
    * @param pingSender a function sending ping and receiving response
    */
@@ -125,12 +139,16 @@ class Session(
     stopPing()
     isClosingSession.set(false)
     isRO.set(connectResponse.isRO)
-    if (isRO.get()) currentState.set(States.CONNECTED_READONLY)
+    if (isRO.get()) {
+      currentState.set(States.CONNECTED_READONLY)
+      ZkClient.logger.info("Server is in Read Only mode")
+    }
     else {
       currentState.set(States.CONNECTED)
+      ZkClient.logger.info("Server is in Read-Write mode")
       hasFakeSessionId.set(false)
     }
-    this.pinger = Some(pingSender)
+    this.pingSender = Some(pingSender)
     negotiateTimeout = connectResponse.timeOut
     startPing()
     xid.set(2)
@@ -140,15 +158,16 @@ class Session(
 
   /**
    * Reset session variables to prepare for reconnection
+   *
    * @return Future.Done
    */
-  private[finagle] def reset(): Unit = {
+  private[finagle] def reset() {
     stopPing()
     currentState.set(States.NOT_CONNECTED)
     isClosingSession.set(false)
     isRO.set(false)
     xid.set(2)
-    this.pinger = None
+    this.pingSender = None
   }
 
   private[finagle] def stop() {
@@ -159,7 +178,8 @@ class Session(
    * This is how we send ping every x milliseconds
    */
   private[this]
-  def startPing(): Unit = PingScheduler(pingTimeout)(pinger.get())
+  def startPing(): Unit = PingScheduler(pingTimeout)(pingSender.get())
+
   private[this]
   def stopPing(): Unit = PingScheduler.stop()
 
@@ -181,7 +201,9 @@ class Session(
       currentTask = Some(DefaultTimer.twitter.schedule(period)(f))
     }
 
-    def isRunning: Boolean = { currentTask.isDefined }
+    def isRunning: Boolean = {
+      currentTask.isDefined
+    }
 
     def stop() {
       if (currentTask.isDefined) currentTask.get.cancel()
@@ -193,12 +215,16 @@ class Session(
       apply(period)(f)
     }
   }
+
 }
 
 object Session {
   type PingSender = () => Future[Unit]
+
   class SessionAlreadyEstablished(msg: String) extends RuntimeException(msg)
+
   class NoSessionEstablished(msg: String) extends RuntimeException(msg)
+
   /**
    * States describes every possible states of the connection
    */

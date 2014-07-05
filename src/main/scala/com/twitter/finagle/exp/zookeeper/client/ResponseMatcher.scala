@@ -1,11 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.client
 
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
-import com.twitter.finagle.exp.zookeeper.watch.{Watch, WatchManager}
+import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.{CancelledRequestException, ChannelException, WriteException}
 import com.twitter.io.Buf
@@ -37,6 +37,11 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
   private[this] val encoder = new Writer(trans)
   private[this] val decoder = new Reader(trans)
 
+  /**
+   * Reads a Buf from the transport and decodes it.
+   *
+   * @return Future.Done when reading and decoding is done
+   */
   def read(): Future[Unit] = {
     val fullRep = if (!hasDispatcherFailed.get) {
       trans.read() transform {
@@ -90,9 +95,15 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
     }
   }
 
+  /**
+   * Reads from the transport until the session is closed or the connection
+   * is invalid.
+   *
+   * @return Future.Done when reading is stopped
+   */
   def readLoop(): Future[Unit] = {
     if (sessionManager.isDefined &&
-      //!sessionManager.get.session.isClosingSession.get &&
+      !sessionManager.get.session.isClosingSession.get &&
       !hasDispatcherFailed.get) read() before readLoop()
     else {
       isReading.set(false)
@@ -104,6 +115,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
    * We make decisions depending on request type,
    * a request record of the Packet is added to the queue, then the packet is
    * finally written to the transport.
+   *
    * @param req the request to send
    * @return a Future[Unit] when the request is finally written
    */
@@ -142,6 +154,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
 
   /**
    * Checks an association between a request and a ReplyHeader
+   *
    * @param reqRecord expected request details
    * @param repHeader freshly decoded ReplyHeader
    */
@@ -159,6 +172,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
      * is waiting for a response or not.
      * In case there is a request, it will try to decode with readFromRequest,
      * if an exception is thrown then it will try again with readFromHeader.
+     *
      * @param pendingRequest expected request description
      * @param buffer current buffer
      * @return
@@ -200,6 +214,12 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
       }
     }
 
+    /**
+     * Decodes a watch event from a Buf
+     *
+     * @param buf a Buf to decode
+     * @return a Try of Future[ResponsePacket]
+     */
     def readNotification(buf: Buf): Try[Future[ResponsePacket]] = Try {
       val (header, rem) = ReplyHeader(buf) match {
         case Return((header@ReplyHeader(_, _, 0), buf2)) => (header, buf2)
@@ -235,12 +255,12 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
      * correct way to decode. The header is decoded first, the resulting
      * header is checked with checkAssociation to make sure both xids
      * are equal.
-     * The body is decoded next and sent with the header in a Future
-     *
+     * The body is decoded next and sent with the header in a Future.
      * If any exception is thrown then the readFromHeader will be called.
+     *
      * @param req expected request
      * @param buf current buffer reader
-     * @return possibly the (header, response) or an exception
+     * @return a Try of Future[ResponsePacket]
      */
     def readFromRequest(
       req: (RequestRecord, Promise[RepPacket]),
@@ -248,23 +268,12 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
 
       val (reqRecord, _) = req
       reqRecord.opCode match {
-        case OpCode.AUTH =>
-          ReplyHeader(buf) match {
-            case Return((header, rem)) =>
-              checkAssociation(reqRecord, header)
-              // if Auth failed we need to clear watches
-              if (header.err == -115) watchManager.get.process(
-                WatchEvent(Watch.EventType.NONE, Watch.State.AUTH_FAILED, ""))
-              Future(ResponsePacket(Some(header), None))
-            case Throw(exc) => throw exc
-          }
-
+        case OpCode.AUTH => decodeHeader(reqRecord, buf)
         case OpCode.CREATE_SESSION =>
           ConnectResponse(buf) match {
             case Return((body, rem)) => Future(ResponsePacket(None, Some(body)))
             case Throw(exception) => throw exception
           }
-
         case OpCode.PING => decodeHeader(reqRecord, buf)
         case OpCode.CLOSE_SESSION => decodeHeader(reqRecord, buf)
         case OpCode.CREATE => decodeResponse(reqRecord, buf, CreateResponse.apply)
@@ -284,6 +293,13 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
       }
     }
 
+    /**
+     * Decodes a ReplyHeader from a Buf.
+     *
+     * @param reqRecord a Request Record
+     * @param buf a Buf to decode
+     * @return Future[ResponsePacket]
+     */
     def decodeHeader(
       reqRecord: RequestRecord,
       buf: Buf): Future[ResponsePacket] =
@@ -295,33 +311,47 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
         case Throw(exception) => throw exception
       }
 
+    /**
+     * Decodes a response with a Buf using a response decoder.
+     *
+     * @param reqRecord a request record
+     * @param buf the Buf to decode
+     * @param responseDecoder a response decoder
+     * @tparam T the response's type
+     * @return a Future[ResponsePacket]
+     */
     def decodeResponse[T <: Response](
       reqRecord: RequestRecord,
       buf: Buf,
-      bodyDecoder: Buf => Try[(T, Buf)]): Future[ResponsePacket] =
+      responseDecoder: Buf => Try[(T, Buf)]
+      ): Future[ResponsePacket] =
 
       ReplyHeader(buf) match {
         case Return((header, rem)) =>
-          try {
-            checkAssociation(reqRecord, header)
-          } catch {
+          try checkAssociation(reqRecord, header)
+          catch {
             case ex: ZkDispatchingException => throw ex
           }
 
-          if (header.err == 0) {
-            bodyDecoder(rem) match {
+          if (header.err == 0)
+            responseDecoder(rem) match {
               case Return((body, rem2)) =>
                 Future(ResponsePacket(Some(header), Some(body)))
               case Throw(exception) => throw exception
             }
-          } else Future(ResponsePacket(Some(header), None))
+          else Future(ResponsePacket(Some(header), None))
 
         case Throw(exception) => throw exception
       }
   }
 
+  /**
+   * Should be used to write a ReqPacket on the transport.
+   *
+   * @param trans the transport to write the request
+   */
   class Writer(trans: Transport[Buf, Buf]) {
-    def write[Req <: Request](packet: ReqPacket): Future[Unit] =
+    def write(packet: ReqPacket): Future[Unit] =
       if (!hasDispatcherFailed.get()) {
         trans.write(packet.buf) transform {
           case Return(res) => Future(res)
@@ -338,6 +368,11 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
       } else Future.exception(new CancelledRequestException)
   }
 
+  /**
+   * Fails the dispatcher, stops sending ping, invalids the connection.
+   *
+   * @param exc the failure cause
+   */
   def failDispatcher(exc: Throwable) {
     // fail incoming requests
     hasDispatcherFailed.set(true)
@@ -347,10 +382,15 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
     // inform connection manager that the connection is no longer valid
     connectionManager.get.connection.get.isValid.set(false)
     // fail pending requests
-    failPendingRequests(exc)
+    failPendingResponses(exc)
   }
 
-  def failPendingRequests(exc: Throwable) {
+  /**
+   * Fails all pending responses with an exception.
+   *
+   * @param exc the failure cause
+   */
+  def failPendingResponses(exc: Throwable) {
     processedReq.dequeueAll(_ => true).map {
       record =>
         record._2.setException(new CancelledRequestException(exc))

@@ -4,9 +4,11 @@ import com.twitter.finagle.exp.zookeeper.WatchEvent
 import com.twitter.util.Promise
 import scala.collection.mutable
 
+// todo improve watch
 /**
  * WatchManager is used to manage watches by keeping in memory the map
  * of active watches.
+ *
  * @param chroot default user chroot
  */
 private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
@@ -21,6 +23,13 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
   def getExistsWatches = this.synchronized(existsWatches)
   def getChildWatches = this.synchronized(childWatches)
 
+  /**
+   * Should register a new watch in the corresponding map
+   *
+   * @param map HashMap[String, Promise[WatchEvent]
+   * @param path watch's path
+   * @return a new Promise[WatchEvent]
+   */
   private[this] def addWatch(
     map: mutable.HashMap[String, Promise[WatchEvent]],
     path: String): Promise[WatchEvent] = {
@@ -37,6 +46,7 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
   /**
    * Should clear all watches
    */
+  // fixme interrompre les watches au lieu de les supprimer
   def clearWatches() {
     this.synchronized {
       dataWatches.clear()
@@ -47,6 +57,7 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
 
   /**
    * Should find a watch and satisfy its promise with the event
+   *
    * @param map the path -> watch map
    * @param event a watched event
    */
@@ -64,6 +75,13 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
     }
   }
 
+  /**
+   * Should register a new watch
+   *
+   * @param path the node path
+   * @param watchType watch type
+   * @return Promise[WatchEvent]
+   */
   def register(path: String, watchType: Int): Promise[WatchEvent] = {
     watchType match {
       case Watch.Type.data => addWatch(dataWatches, path)
@@ -74,6 +92,7 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
 
   /**
    * We use this to process every watches events that comes in
+   *
    * @param watchEvent the watch event that was received
    * @return Unit
    */
@@ -85,7 +104,7 @@ private[finagle] class WatchManager(chroot: String, autoWatchReset: Boolean) {
 
     event.typ match {
       case Watch.EventType.NONE =>
-        if (event.state != Watch.State.SYNC_CONNECTED)
+        if (event.state != Watch.EventState.SYNC_CONNECTED)
           if (!autoWatchReset) clearWatches()
 
       case Watch.EventType.NODE_CREATED | Watch.EventType.NODE_DATA_CHANGED =>

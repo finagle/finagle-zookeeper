@@ -14,9 +14,9 @@ class ResponseDecodingTest extends FunSuite {
   test("Decode a ReplyHeader") {
     val replyHeader = ReplyHeader(1, 1L, 1)
     val readBuffer = Buf.Empty
-      .concat(BufInt(1))
-      .concat(BufLong(1L))
-      .concat(BufInt(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(1L))
+      .concat(Buf.U32BE(1))
 
     val (decodedRep, _) = ReplyHeader
       .unapply(readBuffer)
@@ -30,9 +30,9 @@ class ResponseDecodingTest extends FunSuite {
       0, 3000.milliseconds, 123415646L, "password".getBytes, true)
 
     val readBuffer = Buf.Empty
-      .concat(BufInt(0))
-      .concat(BufInt(3000))
-      .concat(BufLong(123415646L))
+      .concat(Buf.U32BE(0))
+      .concat(Buf.U32BE(3000))
+      .concat(Buf.U64BE(123415646L))
       .concat(BufArray("password".getBytes))
       .concat(BufBool(true))
 
@@ -62,11 +62,11 @@ class ResponseDecodingTest extends FunSuite {
 
   test("Decode a watch event") {
     val watchEvent = WatchEvent(
-      Watch.EventType.NODE_CREATED, Watch.State.SYNC_CONNECTED, "/zookeeper/test")
+      Watch.EventType.NODE_CREATED, Watch.EventState.SYNC_CONNECTED, "/zookeeper/test")
 
     val readBuffer = Buf.Empty
-      .concat(BufInt(Watch.EventType.NODE_CREATED))
-      .concat(BufInt(Watch.State.SYNC_CONNECTED))
+      .concat(Buf.U32BE(Watch.EventType.NODE_CREATED))
+      .concat(Buf.U32BE(Watch.EventState.SYNC_CONNECTED))
       .concat(BufString("/zookeeper/test"))
 
     val (decodedRep, _) = WatchEvent
@@ -83,17 +83,17 @@ class ResponseDecodingTest extends FunSuite {
       None)
 
     val readBuffer = Buf.Empty
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = ExistsResponse
       .unapply(readBuffer)
@@ -108,17 +108,17 @@ class ResponseDecodingTest extends FunSuite {
 
     val readBuffer = Buf.Empty
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = GetACLResponse
       .unapply(readBuffer)
@@ -149,17 +149,17 @@ class ResponseDecodingTest extends FunSuite {
 
     val readBuffer = Buf.Empty
       .concat(BufSeqString(Seq("/zookeeper/test", "zookeeper/hello")))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = GetChildren2Response
       .unapply(readBuffer)
@@ -176,17 +176,17 @@ class ResponseDecodingTest extends FunSuite {
 
     val readBuffer = Buf.Empty
       .concat(BufArray("change".getBytes))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = GetDataResponse
       .unapply(readBuffer)
@@ -201,17 +201,17 @@ class ResponseDecodingTest extends FunSuite {
       Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
 
     val readBuffer = Buf.Empty
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = SetACLResponse
       .unapply(readBuffer)
@@ -225,17 +225,17 @@ class ResponseDecodingTest extends FunSuite {
       Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
 
     val readBuffer = Buf.Empty
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
-      .concat(BufInt(1))
-      .concat(BufInt(1))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
 
     val (decodedRep, _) = SetDataResponse
       .unapply(readBuffer)

@@ -4,7 +4,6 @@ import com.twitter.finagle.ChannelWriteException
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.{CreateMode, OpCode}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.data.Ids
-import com.twitter.finagle.exp.zookeeper.transport.BufInt
 import com.twitter.io.Buf
 import com.twitter.io.Buf.ByteArray
 import com.twitter.util.{Await, Future}
@@ -50,8 +49,8 @@ class ConnectionTest extends FunSuite {
 
       val closeReq = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
 
-      val rep = serve(BufInt(conReq.buf.length).concat(conReq.buf)) before {
-        serve(BufInt(closeReq.buf.length).concat(closeReq.buf))
+      val rep = serve(Buf.U32BE(conReq.buf.length).concat(conReq.buf)) before {
+        serve(Buf.U32BE(closeReq.buf.length).concat(closeReq.buf))
       }
 
       Await.result(rep)

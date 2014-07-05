@@ -1,25 +1,26 @@
 package com.twitter.finagle.exp.zookeeper.client.managers
 
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager.{CantReconnect, ConnectionFailed}
 import com.twitter.finagle.exp.zookeeper.connection.Connection.NoConnectionAvailable
 import com.twitter.finagle.exp.zookeeper.session.Session.{NoSessionEstablished, SessionAlreadyEstablished, States}
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.util.{Future, Return, Throw}
 import com.twitter.util.TimeConversions._
 
-trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
-
+trait ClientManager extends AutoLinkManager
+with ReadOnlyManager {slf: ZkClient =>
 
   type ConnectResponseBehaviour = ConnectResponse => Future[Unit]
 
   /**
    * Should take decisions depending on canBeRO, isRO and if timeBetweenRwSrch
    * is defined.
+   *
    * @return Future.Done
    */
-  def actIfRO(): Unit = {
+  private[this] def actIfRO(): Unit = {
     if (sessionManager.session.isReadOnly.get()
       && timeBetweenRwSrch.isDefined) {
       startRwSearch()
@@ -29,10 +30,11 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   /**
    * It should make decisions depending on the connect response and
    * session status
+   *
    * @param conRep the connect response
-   * @return Future.Done
+   * @return Future.Done or Exception
    */
-  def actOnConnect(conRep: ConnectResponse): Future[Unit] = {
+  private[this] def actOnConnect(conRep: ConnectResponse): Future[Unit] = {
     if (conRep.timeOut <= 0.milliseconds) {
       sessionManager.session.currentState.set(States.CLOSED)
       Future.exception(new ConnectionFailed("Session timeout <= 0"))
@@ -45,11 +47,12 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   /**
    * It should make decisions depending on tries counter, connect response,
    * and session status
+   *
    * @param conRep the connect response
    * @param tries current number of tries
    * @return Future.Done or exception
    */
-  def actOnReconnectWithSession(
+  private[this] def actOnReconnectWithSession(
     host: Option[String],
     tries: Int)(conRep: ConnectResponse): Future[Unit] = {
 
@@ -60,14 +63,12 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       val seenRwBefore = !sessionManager.session.hasFakeSessionId.get()
       if (seenRwBefore) {
         if (conRep.isRO) {
-          // todo log connection to ro server after rw one
           sessionManager.reinit(conRep, ping) rescue {
             case exc: Throwable =>
               Return(sessionManager.newSession(conRep, sessionTimeout, ping))
           }
           configureNewSession() before startJob()
         } else {
-          // todo log reconnection to a majority server with same session
           sessionManager.reinit(conRep, ping) match {
             case Return(unit) =>
               startStateLoop()
@@ -82,7 +83,15 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
     }
   }
 
-  def actOnReconnectWithoutSession(
+  /**
+   * Should take a decision depending on connect response
+   *
+   * @param host a host to reconnect to
+   * @param tries number of tries
+   * @param conRep connect response
+   * @return Future.Done or Exception
+   */
+  private[this] def actOnReconnectWithoutSession(
     host: Option[String],
     tries: Int)
     (conRep: ConnectResponse): Future[Unit] = {
@@ -90,7 +99,6 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       sessionManager.session.currentState.set(States.NOT_CONNECTED)
       reconnectWithoutSession(host, tries + 1)
     } else {
-      // todo log if we are in ro mode
       sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession()
       startJob()
@@ -101,6 +109,7 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   /**
    * A composable connect operation, could be used to create a new session
    * or reconnect.
+   *
    * @param connectReq the connect request to use
    * @param actOnEvent the decision to make with connect response
    * @return Future.Done or exception
@@ -120,7 +129,17 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
         connect(connectReq, host, actOnEvent)
     }
 
-  def onConnect(connectReq: => ConnectRequest, actOnEvent: ConnectResponseBehaviour) = {
+  /**
+   * Should perform an action after connecting to a server.
+   *
+   * @param connectReq a connect request to send
+   * @param actOnEvent a decision to make after receiving to connect response
+   * @return Future.Done or Exception
+   */
+  private[this] def onConnect(
+    connectReq: => ConnectRequest,
+    actOnEvent: ConnectResponseBehaviour
+    ): Future[Unit] = {
     sessionManager.session.currentState.set(States.CONNECTING)
     configureDispatcher() before
       connectionManager.connection.get.serve(
@@ -140,8 +159,9 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
    * Should try to connect to a new host if possible.
    * This operation will interrupt request sending until a new
    * connection and a new session are established
+   *
    * @param host the server to connect to
-   * @return FutureDone or NoServerFound exception
+   * @return Future.Done or Exception
    */
   def changeHost(host: Option[String]): Future[Unit] =
     if (host.isDefined)
@@ -160,10 +180,21 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       }
     }
 
-  def addHosts(hostList: String) = connectionManager.addHosts(hostList)
+  /**
+   * Should add some new servers to the host list
+   *
+   * @param hostList hosts to add
+   */
+  def addHosts(hostList: String): Unit = connectionManager.addHosts(hostList)
 
-  def removeHosts(hostList: String) = {
-    connectionManager.removeHosts(hostList) flatMap { server =>
+  /**
+   * Should remove some hosts from the host list
+   *
+   * @param hostList hosts to remove
+   * @return Future.Done or Exception
+   */
+  def removeHosts(hostList: String): Future[Unit] = {
+    connectionManager.removeAndFind(hostList) flatMap { server =>
       if (connectionManager.currentHost.isDefined
         && connectionManager.currentHost.get == server)
         Future(connectionManager.hostProvider.removeHost(hostList))
@@ -176,7 +207,8 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   /**
    * Should close the current session, however it should not
    * close the service and factory.
-   * @return Future.Done
+   *
+   * @return Future.Done or Exception
    */
   def disconnect(): Future[Unit] =
     if (sessionManager.canCloseSession) {
@@ -208,7 +240,8 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
    * Should find a suitable server and connect to.
    * This operation will interrupt request sending until a new
    * connection and a new session are established
-   * @return Future.Done or NoServerFound exception
+   *
+   * @return Future.Done or Exception
    */
   def newSession(host: Option[String]): Future[Unit] =
     if (sessionManager.canCreateSession) {
@@ -222,9 +255,10 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   /**
    * Should reconnect to a suitable server and try to regain the session,
    * or else create a new session.
-   * @return Future.Done or NoServerFound exception
+   *
+   * @return Future.Done or Exception
    */
-  def reconnect(
+  private[this] def reconnect(
     host: Option[String] = None,
     tries: Int = 0,
     requestBuilder: => ConnectRequest,
@@ -243,7 +277,14 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       new CantReconnect("Reconnection not allowed")) ensure stopJob()
 
 
-  def reconnectWithSession(
+  /**
+   * Should reconnect to a host using the last session ids.
+   *
+   * @param host a server to reconnect to
+   * @param tries tries counter
+   * @return Future.Done or Exception
+   */
+  private[finagle] def reconnectWithSession(
     host: Option[String] = None,
     tries: Int = 0
     ): Future[Unit] =
@@ -254,7 +295,14 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       sessionManager.buildReconnectRequest(),
       actOnReconnectWithSession)
 
-  def reconnectWithoutSession(
+  /**
+   * Should reconnect without using the last session ids.
+   *
+   * @param host a server to reconnect to
+   * @param tries tries counter
+   * @return Future.Done or Exception
+   */
+  private[finagle] def reconnectWithoutSession(
     host: Option[String] = None,
     tries: Int = 0
     ): Future[Unit] =
@@ -265,6 +313,13 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
       sessionManager.buildConnectRequest(sessionTimeout),
       actOnReconnectWithoutSession)
 
+  /**
+   * Should start connection and session management jobs :
+   * link checker's loop, rw mode server search, preventive search,
+   * and unlock the zookeeper request service.
+   *
+   * @return Future.Done or Exception
+   */
   private[finagle] def startJob(): Future[Unit] = {
     startStateLoop()
     actIfRO()
@@ -273,7 +328,8 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
   }
 
   /**
-   * Should stop background jobs like preventive search
+   * Should stop background jobs like preventive search.
+   *
    * @return Future.Done
    */
   private[finagle] def stopJob(): Future[Unit] =
@@ -285,10 +341,11 @@ trait ClientManager extends AutoLinkManager with ReadOnlyMode {slf: ZkClient =>
 
   /**
    * Should configure the dispatcher and session after reconnection
-   * with new session
+   * with new session.
+   *
    * @return Future.Done
    */
-  def configureNewSession(): Future[Unit] =
+  private[finagle] def configureNewSession(): Future[Unit] =
     setWatches() before recoverAuth()
 
 }

@@ -7,7 +7,7 @@ import com.twitter.util._
 import com.twitter.util.TimeConversions._
 
 /**
- * Mother of all response, used to describe what a response can do.
+ * Mother of all responses, used to describe what a response can do.
  */
 sealed trait GlobalRep
 /**
@@ -25,6 +25,7 @@ sealed trait OpResult extends GlobalRep
 private[finagle] trait RepHeader extends GlobalRep
 /**
  * Describes what a response decoder must do
+ *
  * @tparam T Response type
  */
 sealed trait GlobalRepDecoder[T <: GlobalRep] {
@@ -96,9 +97,9 @@ case class WatchEvent(typ: Int, state: Int, path: String) extends Response
 private[finagle]
 object ConnectResponse extends GlobalRepDecoder[ConnectResponse] {
   def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = {
-    val BufInt(protocolVersion,
-    BufInt(timeOut,
-    BufLong(sessionId,
+    val Buf.U32BE(protocolVersion,
+    Buf.U32BE(timeOut,
+    Buf.U64BE(sessionId,
     BufArray(passwd,
     BufBool(isRO,
     rem
@@ -134,7 +135,7 @@ object Create2Response extends GlobalRepDecoder[Create2Response] {
 private[finagle]
 object ErrorResponse extends GlobalRepDecoder[ErrorResponse] {
   def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
-    val BufInt(err, rem) = buf
+    val Buf.U32BE(err, rem) = buf
     Some(ErrorResponse(
       ZookeeperException.create("Exception during the transaction:", err)),
       rem)
@@ -184,7 +185,7 @@ object GetDataResponse extends GlobalRepDecoder[GetDataResponse] {
 private[finagle]
 object ReplyHeader extends GlobalRepDecoder[ReplyHeader] {
   def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
-    val BufInt(xid, BufLong(zxid, BufInt(err, rem))) = buf
+    val Buf.U32BE(xid, Buf.U64BE(zxid, Buf.U32BE(err, rem))) = buf
     Some(ReplyHeader(xid, zxid, err), rem)
   }
 }
@@ -227,7 +228,7 @@ object TransactionResponse extends GlobalRepDecoder[TransactionResponse] {
 private[finagle]
 object WatchEvent extends GlobalRepDecoder[WatchEvent] {
   def unapply(buf: Buf): Option[(WatchEvent, Buf)] = {
-    val BufInt(typ, BufInt(state, BufString(path, rem))) = buf
+    val Buf.U32BE(typ, Buf.U32BE(state, BufString(path, rem))) = buf
     Some(new WatchEvent(typ, state, path), rem)
   }
 }

@@ -10,6 +10,7 @@ import scala.annotation.tailrec
 
 /**
  * A MultiHeader is used to describe an operation
+ *
  * @param typ type of the operation
  * @param state state
  * @param err error
@@ -17,14 +18,14 @@ import scala.annotation.tailrec
 private[finagle] case class MultiHeader(typ: Int, state: Boolean, err: Int)
   extends ReqHeader with RepHeader {
   def buf: Buf = Buf.Empty
-    .concat(BufInt(typ))
+    .concat(Buf.U32BE(typ))
     .concat(BufBool(state))
-    .concat(BufInt(err))
+    .concat(Buf.U32BE(err))
 }
 
 private[finagle] object MultiHeader extends {
   def unapply(buf: Buf): Option[(MultiHeader, Buf)] = {
-    val BufInt(typ, BufBool(done, BufInt(err, rem))) = buf
+    val Buf.U32BE(typ, BufBool(done, Buf.U32BE(err, rem))) = buf
     Some(MultiHeader(typ, done, err), rem)
   }
 }
@@ -34,6 +35,7 @@ private[finagle] object Transaction {
    * Should decode a multi operation request (ie Transaction) by
    * decomposing the buf until we find the "end multiheader" acting
    * as a delimiter.
+   *
    * @param results the OpResult sequence to use
    * @param buf the Buf to read
    * @return (Seq[OpResult], Buf)
@@ -78,6 +80,7 @@ private[finagle] object Transaction {
   /**
    * Should prepare a Transaction request by checking each operation :
    * check ACL, prepend chroot and validate path.
+   *
    * @param opList the operation list to prepare
    * @param chroot the client's chroot
    * @return configured operation list
@@ -123,6 +126,7 @@ private[finagle] object Transaction {
   /**
    * Should correctly format each operation response path by removing chroot
    * from the returned path.
+   *
    * @param opList the operation result to format
    * @param chroot the client's chroot
    * @return correctly formatted operation list

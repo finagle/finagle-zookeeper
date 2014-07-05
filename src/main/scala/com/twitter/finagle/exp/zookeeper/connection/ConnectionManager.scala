@@ -2,6 +2,7 @@ package com.twitter.finagle.exp.zookeeper.connection
 
 import com.twitter.finagle.ServiceFactory
 import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities.ServerNotAvailable
 import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,6 +27,7 @@ class ConnectionManager(
 
   /**
    * Should add new hosts to the server list
+   *
    * @param hostList the hosts to add
    * @return Future.Done or Exception
    */
@@ -33,6 +35,7 @@ class ConnectionManager(
 
   /**
    * Return the currently connected host
+   *
    * @return Some(host) or None if not connected
    */
   def currentHost: Option[String] = activeHost
@@ -40,6 +43,7 @@ class ConnectionManager(
   /**
    * To close connection manager, the current connexion, stop preventive
    * search and stop rw server search.
+   *
    * @return a Future.Done or Exception
    */
   def close(): Future[Unit] = {
@@ -57,65 +61,69 @@ class ConnectionManager(
   /**
    * To close connection manager, the current connexion, stop preventive
    * search and stop rw server search.
+   *
    * @return a Future.Done or Exception
    */
   def close(deadline: Time): Future[Unit] = {
-    if (connection.isDefined) {
-      isInitiated.set(false)
-      connection.get.close(deadline) before hostProvider.stopPreventiveSearch() before
+    isInitiated.set(false)
+    if (connection.isDefined)
+      connection.get.close(deadline) before
+        hostProvider.stopPreventiveSearch() before
         hostProvider.stopRwServerSearch()
-    } else {
-      isInitiated.set(false)
+    else
       hostProvider.stopPreventiveSearch() before
         hostProvider.stopRwServerSearch()
-    }
   }
 
   /**
-   * Should connect to a server with its address
+   * Should connect to a server with its address.
+   *
    * @param server the server address
-   * @return Future.Done
+   * @return Unit
    */
-  private[this] def connect(server: String): Future[Unit] = {
-    if (connection.isDefined) {
-      connection.get.close()
-      activeHost = Some(server)
-      connection = Some(
-        new Connection(ZooKeeperClient.newClient(server)))
-      isInitiated.set(true)
-      Future.Done
-    } else {
-      activeHost = Some(server)
-      connection = Some(
-        new Connection(ZooKeeperClient.newClient(server)))
-      isInitiated.set(true)
-      Future.Done
-    }
-  }
+  private[this] def connect(server: String): Unit = {
+    if (connection.isDefined) connection.get.close()
+    activeHost = Some(server)
+    connection = Some(new Connection(ZooKeeperClient.newClient(server)))
+    isInitiated.set(true)
 
+    ZkClient.logger.info("Now connected to %s".format(server))
+  }
 
   /**
    * Find a server, and connect to it, priority to RW server,
    * then RO server and finally not RO server.
+   *
    * @return a Future.Done or Exception
    */
   def findAndConnect(): Future[Unit] =
     hostProvider.findServer() transform {
-      case Return(server) => connect(server)
+      case Return(server) => Future(connect(server))
       case Throw(exc) => Future.exception(exc)
     }
 
+  /**
+   * Test a server with isro request and connect request, then connect to it
+   * if testing is successful.
+   *
+   * @param host a host to test
+   * @return Future.Done or Exception
+   */
   def testAndConnect(host: String): Future[Unit] =
     hostProvider.testHost(host) transform {
       case Return(available) =>
-        if (available) connect(host)
+        if (available) {
+          addHosts(host)
+          Future(connect(host))
+        }
         else Future.exception(new ServerNotAvailable(
           "%s is not available for connection".format(host)))
       case Throw(exc) => Future.exception(exc)
     }
 
   /**
-   * Should say if the current connection is valid or not
+   * Should say if the current connection is valid or not.
+   *
    * @return Future[Boolean]
    */
   private[finagle] def hasAvailableConnection: Future[Boolean] = {
@@ -125,9 +133,9 @@ class ConnectionManager(
     else Future(false)
   }
 
-
   /**
-   * Initiates connection Manager on client creation
+   * Initiates connection Manager on client creation.
+   *
    * @return Future.Done or Exception
    */
   def initConnectionManager(): Future[Unit] =
@@ -141,50 +149,21 @@ class ConnectionManager(
     else Future.exception(
       new RuntimeException("ConnectionManager is already initiated"))
 
-  /**
-   * Connect to a new server from host list
-   * @return Future.Done or Exception
-   */
-  def reconnect(): Future[Unit] =
-    if (isInitiated.get()) {
-      findAndConnect() flatMap { _ =>
-        Future(hostProvider.startPreventiveSearch())
-      }
-    } else
-      Future.exception(
-        new RuntimeException("ConnectionManager is not initiated"))
 
   /**
    * Should remove the given hosts from the host list, if the client is
-   * connected to one of these hosts, we need to disconnect before and
-   * connect to an available server.
+   * connected to one of these hosts, it will find a new host and return it.
+   *
    * @param hostList the hosts to remove from the current host list.
-   * @return Future.Done or NoServerFound exception
+   * @return Future[String] or Exception
    */
-  def removeHosts(hostList: String): Future[String] = {
+  def removeAndFind(hostList: String): Future[String] = {
     val hostSeq = hostProvider.formatHostList(hostList)
+    hostSeq map HostUtilities.testIpAddress
     if (currentHost.isDefined && hostSeq.contains(currentHost.get)) {
       val newList = hostProvider.serverList filterNot (hostList.contains(_))
 
       hostProvider.findServer(Some(newList))
     } else Future(activeHost.get)
   }
-
-  /**
-   * Reset connection manager, restart preventive search,
-   * connect to a new server.
-   * @return Future.Done or Exception
-   */
-  /*def resetAndReconnect(): Future[Unit] =
-    if (isInitiated.get() && connection.isDefined) {
-      hostProvider.stopPreventiveSearch()
-      hostProvider.stopRwServerSearch()
-      hostProvider.seenRoServer = None
-      hostProvider.seenRwServer = None
-      isInitiated.set(true)
-      reconnect()
-    } else
-      Future.exception(
-        new RuntimeException("ConnectionManager is not initiated"))*/
-
 }

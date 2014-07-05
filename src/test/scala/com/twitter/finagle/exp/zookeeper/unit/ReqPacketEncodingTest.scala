@@ -16,10 +16,10 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(None, Some(connectReq))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(0))
-      .concat(BufLong(0L))
-      .concat(BufInt(2000.milliseconds.inMilliseconds.toInt))
-      .concat(BufLong(0L))
+      .concat(Buf.U32BE(0))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(2000.milliseconds.inMilliseconds.toInt))
+      .concat(Buf.U64BE(0L))
       .concat(BufArray(Array[Byte](16)))
       .concat(BufBool(true))
 
@@ -31,8 +31,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), None)
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.PING))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.PING))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -44,12 +44,12 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(createRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.CREATE))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.CREATE))
       .concat(BufString("/zookeeeper/test"))
       .concat(BufArray("CHANGE".getBytes))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
-      .concat(BufInt(CreateMode.EPHEMERAL))
+      .concat(Buf.U32BE(CreateMode.EPHEMERAL))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -60,8 +60,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(getAclRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.GET_ACL))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.GET_ACL))
       .concat(BufString("/zookeeper/test"))
 
     assert(packetReq.buf === encoderBuf)
@@ -73,8 +73,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(getDataRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.GET_DATA))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.GET_DATA))
       .concat(BufString("/zookeeper/test"))
       .concat(BufBool(true))
 
@@ -87,10 +87,10 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(deleteRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.DELETE))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.DELETE))
       .concat(BufString("/zookeeper/test"))
-      .concat(BufInt(1))
+      .concat(Buf.U32BE(1))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -101,8 +101,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(existsRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.EXISTS))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.EXISTS))
       .concat(BufString("/zookeeper/test"))
       .concat(BufBool(true))
 
@@ -116,11 +116,11 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(setDataRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.SET_DATA))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.SET_DATA))
       .concat(BufString("/zookeeper/test"))
       .concat(BufArray("CHANGE IT TO THIS".getBytes))
-      .concat(BufInt(1))
+      .concat(Buf.U32BE(1))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -131,8 +131,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(getChildrenRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.GET_CHILDREN))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.GET_CHILDREN))
       .concat(BufString("/zookeeper/test"))
       .concat(BufBool(true))
 
@@ -145,8 +145,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(getChildren2Request))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.GET_CHILDREN2))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.GET_CHILDREN2))
       .concat(BufString("/zookeeper/test"))
       .concat(BufBool(true))
 
@@ -159,11 +159,11 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(setACLRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.SET_ACL))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.SET_ACL))
       .concat(BufString("/zookeeper/test"))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
-      .concat(BufInt(1))
+      .concat(Buf.U32BE(1))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -174,8 +174,8 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(syncRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.SYNC))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.SYNC))
       .concat(BufString("/zookeeper/test"))
 
     assert(packetReq.buf === encoderBuf)
@@ -191,9 +191,9 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(setWatchesRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.SET_WATCHES))
-      .concat(BufLong(750L))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.SET_WATCHES))
+      .concat(Buf.U64BE(750L))
       .concat(BufSeqString(Seq("/zookeeper/test", "/zookeeper/hello")))
       .concat(BufSeqString(Seq("/zookeeper/test", "/zookeeper/hello")))
       .concat(BufSeqString(Seq("/zookeeper/test", "/zookeeper/hello")))
@@ -205,9 +205,9 @@ class ReqPacketEncodingTest extends FunSuite {
     val multiHeader = MultiHeader(OpCode.CHECK, false, -1)
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(OpCode.CHECK))
+      .concat(Buf.U32BE(OpCode.CHECK))
       .concat(BufBool(false))
-      .concat(BufInt(-1))
+      .concat(Buf.U32BE(-1))
 
     assert(multiHeader.buf === encoderBuf)
   }
@@ -226,33 +226,33 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(transactionRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.MULTI))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.MULTI))
 
       .concat(MultiHeader(OpCode.CREATE, false, -1).buf)
       .concat(BufString("/zookeeper/test"))
       .concat(BufArray("change".getBytes))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
-      .concat(BufInt(CreateMode.EPHEMERAL))
+      .concat(Buf.U32BE(CreateMode.EPHEMERAL))
 
       .concat(MultiHeader(OpCode.CREATE2, false, -1).buf)
       .concat(BufString("/zookeeper/test1"))
       .concat(BufArray("change".getBytes))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
-      .concat(BufInt(CreateMode.EPHEMERAL))
+      .concat(Buf.U32BE(CreateMode.EPHEMERAL))
 
       .concat(MultiHeader(OpCode.SET_DATA, false, -1).buf)
       .concat(BufString("/zookeeper/test"))
       .concat(BufArray("changed".getBytes))
-      .concat(BufInt(-1))
+      .concat(Buf.U32BE(-1))
 
       .concat(MultiHeader(OpCode.CHECK, false, -1).buf)
       .concat(BufString("/zookeeper/test"))
-      .concat(BufInt(2))
+      .concat(Buf.U32BE(2))
 
       .concat(MultiHeader(OpCode.DELETE, false, -1).buf)
       .concat(BufString("/zookeeper/test"))
-      .concat(BufInt(-1))
+      .concat(Buf.U32BE(-1))
 
       .concat(MultiHeader(-1, true, -1).buf)
 
@@ -266,10 +266,10 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(removeWatchesRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.REMOVE_WATCHES))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.REMOVE_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(BufInt(Watch.Type.exists))
+      .concat(Buf.U32BE(Watch.Type.exists))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -281,12 +281,12 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(reconfigRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.RECONFIG))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.RECONFIG))
       .concat(BufString("192.168.10.10"))
       .concat(BufString("192.168.10.13"))
       .concat(BufString("192.168.10.20"))
-      .concat(BufLong(0L))
+      .concat(Buf.U64BE(0L))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -297,9 +297,9 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(authRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.AUTH))
-      .concat(BufInt(0))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.AUTH))
+      .concat(Buf.U32BE(0))
       .concat(BufString("digest"))
       .concat(BufArray("toto:nocall".getBytes))
 
@@ -312,10 +312,10 @@ class ReqPacketEncodingTest extends FunSuite {
     val packetReq = ReqPacket(Some(requestHeader), Some(checkWatchesRequest))
 
     val encoderBuf = Buf.Empty
-      .concat(BufInt(732))
-      .concat(BufInt(OpCode.CHECK_WATCHES))
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.CHECK_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(BufInt(Watch.Type.data))
+      .concat(Buf.U32BE(Watch.Type.data))
 
     assert(packetReq.buf === encoderBuf)
   }

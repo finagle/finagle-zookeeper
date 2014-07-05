@@ -9,27 +9,44 @@ import com.twitter.finagle.exp.zookeeper.watch.WatchManager
 import com.twitter.io.Buf
 import com.twitter.util.Duration
 
+/**
+ * Mother of all requests
+ */
 sealed trait GlobalRequest {def buf: Buf }
-private[finagle] trait ReqHeader extends GlobalRequest
+/**
+ * OpRequest is used to compose a Transaction request.
+ * A Transaction request can be composed by OpRequest only.
+ */
 sealed trait OpRequest extends GlobalRequest
+/**
+ * Unique request, used to send basic zookeeper request
+ * and also to configure the dispatcher at session creation.
+ * opCode describes the operation code of the request
+ */
 sealed trait Request extends GlobalRequest {
   val opCode: Option[Int]
 }
+/**
+ * Special case of request header, used for RequestHeader
+ * It as the same properties as a Request, but can be used
+ * as one. (ie ReqPacket composed of Option[ReqHeader] +
+ * Option[Request])
+ */
+private[finagle] trait ReqHeader extends GlobalRequest
 
 private[finagle]
 case class AuthRequest(typ: Int = 0, auth: Auth) extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.AUTH)
   def buf: Buf = Buf.Empty
-    .concat(BufInt(typ))
+    .concat(Buf.U32BE(typ))
     .concat(auth.buf)
 }
 
-private[finagle]
 case class CheckVersionRequest(path: String, version: Int) extends OpRequest {
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
-    .concat(BufInt(version))
+    .concat(Buf.U32BE(version))
 }
 
 private[finagle]
@@ -38,7 +55,7 @@ case class CheckWatchesRequest(path: String, typ: Int) extends Request {
   override val opCode: Option[Int] = Some(OpCode.CHECK_WATCHES)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
-    .concat(BufInt(typ))
+    .concat(Buf.U32BE(typ))
 }
 
 private[finagle] case class ConfigureRequest(
@@ -62,15 +79,15 @@ private[finagle] case class ConnectRequest(
 
   override val opCode: Option[Int] = Some(OpCode.CREATE_SESSION)
   def buf: Buf = Buf.Empty
-    .concat(BufInt(protocolVersion))
-    .concat(BufLong(lastZxidSeen))
-    .concat(BufInt(sessionTimeout.inMilliseconds.toInt))
-    .concat(BufLong(sessionId))
+    .concat(Buf.U32BE(protocolVersion))
+    .concat(Buf.U64BE(lastZxidSeen))
+    .concat(Buf.U32BE(sessionTimeout.inMilliseconds.toInt))
+    .concat(Buf.U64BE(sessionId))
     .concat(BufArray(passwd))
     .concat(BufBool(canBeRO))
 }
 
-private[finagle] case class CreateRequest(
+case class CreateRequest(
   path: String,
   data: Array[Byte],
   aclList: Seq[ACL],
@@ -82,10 +99,10 @@ private[finagle] case class CreateRequest(
     .concat(BufString(path))
     .concat(BufArray(data))
     .concat(BufSeqACL(aclList))
-    .concat(BufInt(createMode))
+    .concat(Buf.U32BE(createMode))
 }
 
-private[finagle] case class Create2Request(
+case class Create2Request(
   path: String,
   data: Array[Byte],
   aclList: Seq[ACL],
@@ -97,16 +114,16 @@ private[finagle] case class Create2Request(
     .concat(BufString(path))
     .concat(BufArray(data))
     .concat(BufSeqACL(aclList))
-    .concat(BufInt(createMode))
+    .concat(Buf.U32BE(createMode))
 }
 
-private[finagle] case class DeleteRequest(path: String, version: Int)
+case class DeleteRequest(path: String, version: Int)
   extends Request with OpRequest {
 
   override val opCode: Option[Int] = Some(OpCode.DELETE)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
-    .concat(BufInt(version))
+    .concat(Buf.U32BE(version))
 }
 
 private[finagle]
@@ -163,7 +180,7 @@ private[finagle] case class ReconfigRequest(
     .concat(BufString(joiningServers))
     .concat(BufString(leavingServers))
     .concat(BufString(newMembers))
-    .concat(BufLong(curConfigId))
+    .concat(Buf.U64BE(curConfigId))
 }
 
 private[finagle] case class RemoveWatchesRequest(
@@ -174,28 +191,28 @@ private[finagle] case class RemoveWatchesRequest(
   override val opCode: Option[Int] = Some(OpCode.REMOVE_WATCHES)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
-    .concat(BufInt(typ))
+    .concat(Buf.U32BE(typ))
 }
 
 private[finagle]
 case class RequestHeader(xid: Int, opCode: Int) extends RepHeader {
   def buf: Buf = Buf.Empty
-    .concat(BufInt(xid))
-    .concat(BufInt(opCode))
+    .concat(Buf.U32BE(xid))
+    .concat(Buf.U32BE(opCode))
 }
 
 private[finagle]
-case class SetACLRequest(path: String, acl: Array[ACL], version: Int)
+case class SetACLRequest(path: String, acl: Seq[ACL], version: Int)
   extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.SET_ACL)
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufSeqACL(acl))
-    .concat(BufInt(version))
+    .concat(Buf.U32BE(version))
 }
 
-private[finagle] case class SetDataRequest(
+case class SetDataRequest(
   path: String,
   data: Array[Byte],
   version: Int
@@ -205,7 +222,7 @@ private[finagle] case class SetDataRequest(
   def buf: Buf = Buf.Empty
     .concat(BufString(path))
     .concat(BufArray(data))
-    .concat(BufInt(version))
+    .concat(Buf.U32BE(version))
 }
 
 /* Only available during client reconnection to set back watches */
@@ -218,7 +235,7 @@ private[finagle] case class SetWatchesRequest(
 
   override val opCode: Option[Int] = Some(OpCode.SET_WATCHES)
   def buf: Buf = Buf.Empty
-    .concat(BufLong(relativeZxid))
+    .concat(Buf.U64BE(relativeZxid))
     .concat(BufSeqString(dataWatches))
     .concat(BufSeqString(existWatches))
     .concat(BufSeqString(childWatches))

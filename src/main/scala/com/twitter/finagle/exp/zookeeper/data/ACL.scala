@@ -1,11 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.data
 
-import com.twitter.finagle.exp.zookeeper.transport.BufInt
 import com.twitter.io.Buf
 
 case class ACL(perms: Int, id: Id) extends Data {
   def buf: Buf = Buf.Empty
-    .concat(BufInt(perms))
+    .concat(Buf.U32BE(perms))
     .concat(id.buf)
 }
 
@@ -16,7 +15,7 @@ object ACL extends DataDecoder[ACL] {
   def apply(perm: Int, id: String) = parseACL(id + perm)(0)
 
   def unapply(buf: Buf): Option[(ACL, Buf)] = {
-    val BufInt(perms, Id(id, rem)) = buf
+    val Buf.U32BE(perms, Id(id, rem)) = buf
     Some(ACL(perms, id), rem)
   }
 

@@ -1,8 +1,9 @@
-package com.twitter.finagle.exp.zookeeper.client.managers
+package com.twitter.finagle.exp.zookeeper.client
 
 import com.twitter.concurrent.{AsyncSemaphore, Permit}
 import com.twitter.finagle.Service
 import com.twitter.finagle.exp.zookeeper._
+import com.twitter.finagle.exp.zookeeper.client.managers.AutoLinkManager
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
 import com.twitter.util._
@@ -25,6 +26,18 @@ class PreProcessService(
   private[this] val semaphore = new AsyncSemaphore(1)
   private[this] var permit: Option[Permit] = None
 
+  /**
+   * Should send a request to the dispatcher, this request will be checked
+   * by isROCheck before, to make sure this is not a Write operation and
+   * that we are currently on read-only mode. Then the connection and
+   * session are possibly checked with tryCheckLink depending if we
+   * are already trying to reconnect. Next the request is prepared :
+   * transformed to a ReqPacket, by adding opCode and xid. It is finally
+   * sent to the service owned by the current connection object.
+   *
+   * @param req a Request
+   * @return a Future[RepPacket] in response to the request
+   */
   def apply(req: Request): Future[RepPacket] = {
     isROCheck(req) match {
       case Return(unit) =>
@@ -49,7 +62,9 @@ class PreProcessService(
   }
 
   /**
-   * Should lock the service until unlockServe() is called
+   * Should lock the service until unlockServe() is called, it's done
+   * simply by acquiring the semaphore permit.
+   *
    * @return Future.Done
    */
   private[finagle] def lockServe(): Future[Unit] = this.synchronized {
@@ -61,7 +76,9 @@ class PreProcessService(
   }
 
   /**
-   * Should unlock the service after lockServe() was called
+   * Should unlock the service after lockServe() was called, it's done
+   * simply by releasing the semaphore permit.
+   *
    * @return Future.Done
    */
   private[finagle] def unlockServe(): Future[Unit] = this.synchronized {
@@ -73,7 +90,8 @@ class PreProcessService(
   }
 
   /**
-   * Should prepare a request by adding xid and op code
+   * Should prepare a request by adding xid and request's op code
+   *
    * @param req the request to prepare
    * @return a ReqPacket
    */
@@ -84,6 +102,7 @@ class PreProcessService(
    * Should check if the request is a write operation and throw an
    * exception if the server is in Read Only mode, because only read
    * operations are allowed during this state.
+   *
    * @param req the request to test
    * @return
    */

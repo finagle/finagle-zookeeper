@@ -2,7 +2,7 @@ package com.twitter.finagle.exp.zookeeper.client
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.client.managers.{PreProcessService, ClientManager}
+import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
@@ -40,8 +40,11 @@ class ZkClient(
 
   def session: Session = sessionManager.session
 
+  // todo implement create2, removeWatches, checkWatches, ReconfigRequest, check ?
+
   /**
    * To set back auth right after reconnection
+   *
    * @return Future.Done if request worked, or exception
    */
   private[finagle] def recoverAuth(): Future[Unit] = {
@@ -52,6 +55,12 @@ class ZkClient(
       )
       connectionManager.connection.get.serve(req) flatMap { rep =>
         if (rep.err.get == 0) Future.Unit
+        else if (rep.err.get == -115) {
+          watchManager.process(
+            WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
+          Future.exception(
+            ZookeeperException.create("Error while addAuth", rep.err.get))
+        }
         else Future.exception(
           ZookeeperException.create("Error while addAuth", rep.err.get))
       }
@@ -59,6 +68,12 @@ class ZkClient(
     Future.join(fetches)
   }
 
+  /**
+   * Add the specified Auth(scheme:data) information to this connection.
+   *
+   * @param auth an Auth
+   * @return Future[Unit] or Exception
+   */
   def addAuth(auth: Auth): Future[Unit] = {
     val req = new AuthRequest(0, auth)
 
@@ -66,20 +81,54 @@ class ZkClient(
       if (rep.err.get == 0) {
         authInfo += auth
         Future.Unit
-      } else Future.exception(
+      } else if (rep.err.get == -115) {
+        watchManager.process(
+          WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
+        Future.exception(
+          ZookeeperException.create("Error while addAuth", rep.err.get))
+      }
+      else Future.exception(
         ZookeeperException.create("Error while addAuth", rep.err.get))
     }
   }
 
+  /**
+   * Connects to a host or finds an available server, then creates a session.
+   *
+   * @param host a server to connect to
+   * @return Future[Unit] or Exception
+   */
   def connect(host: Option[String] = None): Future[Unit] = newSession(host)
+
+  /**
+   * Stops background jobs and closes the connection. Should be used after
+   * closing the session.
+   *
+   * @param deadline a deadline for closing
+   * @return Future[Unit] or Exception
+   */
   def close(deadline: Time): Future[Unit] = stopJob() before connectionManager.close(deadline)
+
+  /**
+   * Stops background jobs and closes the connection. Should be used after
+   * closing the session.
+   *
+   * @return Future[Unit] or Exception
+   */
   def closeService(): Future[Unit] = stopJob() before connectionManager.close()
+
+  /**
+   * Closes the session and stops background jobs.
+   *
+   * @return Future[Unit] or Exception
+   */
   def closeSession(): Future[Unit] = disconnect()
 
   /**
    * We use this to configure the dispatcher, gives connectionManager, WatchManager
    * and SessionManager
-   * @return
+   *
+   * @return Future.Done
    */
   private[finagle] def configureDispatcher(): Future[Unit] = {
     val req = ReqPacket(None, Some(ConfigureRequest(
@@ -90,11 +139,22 @@ class ZkClient(
     connectionManager.connection.get.serve(req).unit
   }
 
+  /**
+   * Create a node with the given path. The node data will be the given data,
+   * and node acl will be the given acl.
+   *
+   * @param path the path for the node
+   * @param data the initial data for the node
+   * @param acl  the acl for the node
+   * @param createMode specifying whether the node to be created is ephemeral
+   *                   and/or sequential
+   * @return Future[String] or Exception
+   */
   def create(
     path: String,
     data: Array[Byte],
     acl: Array[ACL],
-    createMode: Int): Future[String] = {
+    createMode: Int) = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
@@ -109,6 +169,15 @@ class ZkClient(
     }
   }
 
+  /**
+   * Delete the node with the given path. The call will succeed if such a node
+   * exists, and the given version matches the node's version (if the given
+   * version is -1, it matches any node's versions).
+   *
+   * @param path the path of the node to be deleted.
+   * @param version the expected node version.
+   * @return Future[Unit] or Exception
+   */
   def delete(path: String, version: Int): Future[Unit] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -121,6 +190,19 @@ class ZkClient(
     }
   }
 
+  /**
+   * Return the stat of the node of the given path. Return null if no such a
+   * node exists.
+   *
+   * If the watch is non-null and the call is successful (no exception is thrown),
+   * a watch will be left on the node with the given path. The watch will be
+   * triggered by a successful operation that creates/delete the node or sets
+   * the data on the node.
+   *
+   * @param path the node path
+   * @param watch a boolean to set a watch or not
+   * @return
+   */
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -148,6 +230,12 @@ class ZkClient(
     }
   }
 
+  /**
+   * Return the ACL and stat of the node of the given path.
+   *
+   * @param path the node path
+   * @return Future[GetACLResponse] or Exception
+   */
   def getACL(path: String): Future[GetACLResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -161,6 +249,18 @@ class ZkClient(
     }
   }
 
+  /**
+   * For the given znode path return the stat and children list.
+   *
+   * If the watch is true and the call is successful (no exception is thrown),
+   * a watch will be left on the node with the given path. The watch will be
+   * triggered by a successful operation that deletes the node of the given
+   * path or creates/delete a child under the node.
+   *
+   * @param path the node path
+   * @param watch a boolean to set a watch or not
+   * @return Future[GetChildrenResponse] or Exception
+   */
   def getChildren(path: String, watch: Boolean = false): Future[GetChildrenResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -184,6 +284,18 @@ class ZkClient(
     }
   }
 
+  /**
+   * For the given znode path return the stat and children list.
+   *
+   * If the watch is true and the call is successful (no exception is thrown),
+   * a watch will be left on the node with the given path. The watch will be
+   * triggered by a successful operation that deletes the node of the given
+   * path or creates/delete a child under the node.
+   *
+   * @param path the node path
+   * @param watch a boolean to set a watch or not
+   * @return Future[GetChildren2Response] or Exception
+   */
   def getChildren2(path: String, watch: Boolean = false): Future[GetChildren2Response] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -207,6 +319,18 @@ class ZkClient(
     }
   }
 
+  /**
+   * Return the data and the stat of the node of the given path.
+   *
+   * If the watch is non-null and the call is successful (no exception is
+   * thrown), a watch will be left on the node with the given path. The watch
+   * will be triggered by a successful operation that sets data on the node, or
+   * deletes the node.
+   *
+   * @param path the node path
+   * @param watch a boolean to set a watch or not
+   * @return Future[GetDataResponse] or Exception
+   */
   def getData(path: String, watch: Boolean = false): Future[GetDataResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -225,6 +349,11 @@ class ZkClient(
     }
   }
 
+  /**
+   * Sends a heart beat to the server.
+   *
+   * @return Future[Unit] or Exception
+   */
   protected[this] def ping(): Future[Unit] = {
     val req = ReqPacket(Some(RequestHeader(-2, OpCode.PING)), None)
 
@@ -235,7 +364,17 @@ class ZkClient(
     }
   }
 
-  def setACL(path: String, acl: Array[ACL], version: Int): Future[SetACLResponse] = {
+  /**
+   * Set the ACL for the node of the given path if such a node exists and the
+   * given version matches the version of the node. Return the stat of the
+   * node.
+   *
+   * @param path the node path
+   * @param acl the ACLs to set
+   * @param version the node version
+   * @return Future[SetACLResponse] or Exception
+   */
+  def setACL(path: String, acl: Seq[ACL], version: Int): Future[SetACLResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     ACL.check(acl)
@@ -250,7 +389,24 @@ class ZkClient(
     }
   }
 
+  /**
+   * Set the data for the node of the given path if such a node exists and the
+   * given version matches the version of the node (if the given version is
+   * -1, it matches any node's versions). Return the stat of the node.
+   *
+   * This operation, if successful, will trigger all the watches on the node
+   * of the given path left by getData calls.
+   *
+   * The maximum allowable size of the data array is 1 MB (1,048,576 bytes).
+   * Arrays larger than this will cause a ZooKeeperException to be thrown.
+   *
+   * @param path the node path
+   * @param data the data Array
+   * @param version the node version
+   * @return Future[SetDataResponse] or Exception
+   */
   def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
+    // todo check is data is larger than 1 MB before sending
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = SetDataRequest(finalPath, data, version)
@@ -265,8 +421,9 @@ class ZkClient(
   }
 
   /**
-   * To set watches back right after reconnection
-   * @return Future.Done if request worked, or exception
+   * To set watches back right after reconnection.
+   *
+   * @return Future[Unit] or Exception
    */
   private[finagle] def setWatches(): Future[Unit] = {
     if (autoWatchReset) {
@@ -304,6 +461,12 @@ class ZkClient(
     }
   }
 
+  /**
+   * Synchronize client and server for a node.
+   *
+   * @param path the node path
+   * @return Future[SyncResponse] or Exception
+   */
   def sync(path: String): Future[SyncResponse] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
@@ -320,6 +483,16 @@ class ZkClient(
     }
   }
 
+  /**
+   * Executes multiple ZooKeeper operations or none of them.
+   *
+   * On success, a list of results is returned.
+   * On failure, an exception is raised which contains partial results and
+   * error details.
+   *
+   * @param opList a Sequence composed of OpRequest
+   * @return Future[TransactionResponse] or Exception
+   */
   def transaction(opList: Seq[OpRequest]): Future[TransactionResponse] = {
     Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>

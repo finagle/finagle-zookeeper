@@ -1,19 +1,19 @@
 package com.twitter.finagle.exp.zookeeper.client.managers
 
-import java.util.concurrent.atomic.AtomicBoolean
-
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.{SessionMovedException, ZookeeperException}
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.util.{Duration, TimerTask, Future}
+import java.util.concurrent.atomic.AtomicBoolean
 
-trait AutoLinkManager {self: ZkClient with ClientManager =>
+private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
 
   private[this] val canCheckLink = new AtomicBoolean(false)
   /**
    * Start the loop which will check connection and session
    * every timeBetweenLinkCheck
+   *
    * @return Future.Done
    */
   def startStateLoop(): Unit =
@@ -31,17 +31,25 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
       }
     }
 
-  def stopStateLoop(): Unit = {
+  /**
+   * Stop the state loop by cancelling its scheduler task
+   */
+  def stopStateLoop() {
     canCheckLink.set(false)
     CheckLingScheduler.stop()
   }
 
+  /**
+   * Try to check connection and session if we are not currently
+   * trying to reconnect.
+   */
   private[finagle] def tryCheckLink(): Unit =
     if (canCheckLink.get()) checkLink()
 
 
   /**
    * Check session state before checking connection state
+   *
    * @param tries number of reconnect attempts
    * @return Future.Done or exception
    */
@@ -66,11 +74,14 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
 
   /**
    * To check that connection is still valid
+   *
    * @return Future.Done or exception
    */
   private[this] def checkConnection(): Future[Unit] =
     if (connectionManager.connection.isDefined &&
       !connectionManager.connection.get.isValid.get()) {
+      ZkClient.logger.warning(("Connection to %s has failed," +
+        " reconnecting with session...").format(connectionManager.currentHost))
       stopJob() before reconnectWithSession()
     } else Future.Done
 
@@ -83,13 +94,22 @@ trait AutoLinkManager {self: ZkClient with ClientManager =>
   private[this] def checkSession(): Future[Unit] =
     sessionManager.session.state match {
       case States.CONNECTION_LOSS | States.NOT_CONNECTED =>
+        ZkClient.logger.warning(("Connection loss with %s," +
+          " reconnecting with session...").format(connectionManager.currentHost))
         stopJob() before reconnectWithSession()
 
-      case States.SESSION_MOVED => stopJob() before
-        Future.exception(SessionMovedException(
+      case States.SESSION_MOVED =>
+        ZkClient.logger.warning("Session with %s has moved, disconnecting."
+          .format(connectionManager.currentHost))
+        stopJob() before Future.exception(SessionMovedException(
           "Session has moved to another server"))
 
-      case States.SESSION_EXPIRED => stopJob() before reconnectWithoutSession()
+      case States.SESSION_EXPIRED =>
+        ZkClient.logger.warning(("Session with %s has expired," +
+          " reconnecting without session...")
+          .format(connectionManager.currentHost))
+        stopJob() before reconnectWithoutSession()
+
       case _ => Future.Done
     }
 

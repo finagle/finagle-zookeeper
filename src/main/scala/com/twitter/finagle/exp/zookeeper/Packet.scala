@@ -9,7 +9,8 @@ import com.twitter.io.Buf
  * - connect : ReqPacket(None, Some(Request))
  * - closeSession : ReqPacket(Some(RequestHeader), None)
  * - create : ReqPacket(Some(RequestHeader), Some(Request))
- * - configureDispatcher : ReqPacket(None, None)
+ * - configureDispatcher : ReqPacket(None, Some(Request))
+ *
  * @param header optionally Some(RequestHeader) or None
  * @param request optionally Some(Request) or None
  */
@@ -32,6 +33,7 @@ case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
 /**
  * Used to represent a response, composed by a StateHeader
  * and an Option[Response].
+ *
  * @param err request's error code
  * @param response an optional Response
  */

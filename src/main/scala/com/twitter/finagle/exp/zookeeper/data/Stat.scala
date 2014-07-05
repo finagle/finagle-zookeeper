@@ -1,6 +1,5 @@
 package com.twitter.finagle.exp.zookeeper.data
 
-import com.twitter.finagle.exp.zookeeper.transport.{BufInt, BufLong}
 import com.twitter.io.Buf
 
 /**
@@ -30,32 +29,32 @@ case class Stat(
   numChildren: Int,
   pzxid: Long) extends Data {
   def buf: Buf = Buf.Empty
-    .concat(BufLong(czxid))
-    .concat(BufLong(mzxid))
-    .concat(BufLong(ctime))
-    .concat(BufLong(mtime))
-    .concat(BufInt(version))
-    .concat(BufInt(cversion))
-    .concat(BufInt(aversion))
-    .concat(BufLong(ephemeralOwner))
-    .concat(BufInt(dataLength))
-    .concat(BufInt(numChildren))
-    .concat(BufLong(pzxid))
+    .concat(Buf.U64BE(czxid))
+    .concat(Buf.U64BE(mzxid))
+    .concat(Buf.U64BE(ctime))
+    .concat(Buf.U64BE(mtime))
+    .concat(Buf.U32BE(version))
+    .concat(Buf.U32BE(cversion))
+    .concat(Buf.U32BE(aversion))
+    .concat(Buf.U64BE(ephemeralOwner))
+    .concat(Buf.U32BE(dataLength))
+    .concat(Buf.U32BE(numChildren))
+    .concat(Buf.U64BE(pzxid))
 }
 
 private[finagle] object Stat extends DataDecoder[Stat] {
   def unapply(buf: Buf): Option[(Stat, Buf)] = {
-    val BufLong(czxid,
-    BufLong(mzxid,
-    BufLong(ctime,
-    BufLong(mtime,
-    BufInt(version,
-    BufInt(cversion,
-    BufInt(aversion,
-    BufLong(ephemeralOwner,
-    BufInt(dataLength,
-    BufInt(numChildren,
-    BufLong(pzxid,
+    val Buf.U64BE(czxid,
+    Buf.U64BE(mzxid,
+    Buf.U64BE(ctime,
+    Buf.U64BE(mtime,
+    Buf.U32BE(version,
+    Buf.U32BE(cversion,
+    Buf.U32BE(aversion,
+    Buf.U64BE(ephemeralOwner,
+    Buf.U32BE(dataLength,
+    Buf.U32BE(numChildren,
+    Buf.U64BE(pzxid,
     rem
     ))))))))))) = buf
 

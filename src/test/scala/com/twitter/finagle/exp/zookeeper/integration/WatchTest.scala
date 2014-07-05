@@ -33,7 +33,7 @@ class WatchTest extends IntegrationConfig {
 
     exists.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_DATA_CHANGED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -56,7 +56,7 @@ class WatchTest extends IntegrationConfig {
 
     ret.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_DATA_CHANGED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -81,7 +81,7 @@ class WatchTest extends IntegrationConfig {
 
     ret.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -106,7 +106,7 @@ class WatchTest extends IntegrationConfig {
 
     ret.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 
@@ -138,13 +138,13 @@ class WatchTest extends IntegrationConfig {
 
     existsRep.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_DELETED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test/hello")
     }
 
     getChildrenRep.watch.get onSuccess { rep =>
       assert(rep.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
-      assert(rep.state === Watch.State.SYNC_CONNECTED)
+      assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
 

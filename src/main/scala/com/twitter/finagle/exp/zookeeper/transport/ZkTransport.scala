@@ -28,11 +28,11 @@ private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer
 
   def read(): Future[Buf] =
     read(4) flatMap {
-      case BufInt(len, _) if len < 0 || len >= maxBuffer =>
+      case Buf.U32BE(len, _) if len < 0 || len >= maxBuffer =>
         // Emptying buffer before throwing
         buf = Buf.Empty
         Future.exception(new IOException("Packet len" + len + " is out of range!"))
-      case BufInt(len, _) => read(len)
+      case Buf.U32BE(len, _) => read(len)
     }
 
   def read(len: Int): Future[Buf] =
@@ -48,7 +48,7 @@ private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer
     }
 
   def write(req: Buf): Future[Unit] = {
-    val framedReq = BufInt(req.length).concat(req)
+    val framedReq = Buf.U32BE(req.length).concat(req)
     val bytes = new Array[Byte](framedReq.length)
     framedReq.write(bytes, 0)
     trans.write(ChannelBuffers.wrappedBuffer(bytes))

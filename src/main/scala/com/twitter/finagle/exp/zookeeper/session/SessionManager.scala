@@ -16,6 +16,7 @@ class SessionManager(canBeRo: Boolean) {
 
   /**
    * Build a connect request to create a new session
+   *
    * @return a customized ConnectResponse
    */
   def buildConnectRequest(sessionTimeout: Duration): ConnectRequest = {
@@ -34,6 +35,7 @@ class SessionManager(canBeRo: Boolean) {
    * Build a reconnect request depending if RO mode is allowed by user,
    * and if current session has a fake session ID ( never connected
    * to RW server)
+   *
    * @return a customized ConnectResponse
    */
   def buildReconnectRequest(): ConnectRequest = {
@@ -56,15 +58,15 @@ class SessionManager(canBeRo: Boolean) {
 
   /**
    * To close current session and clean session manager
-   * @return
    */
-  def closeAndClean(): Unit = {
+  def closeAndClean() {
     session.close()
   }
 
   /**
    * Used to create a fresh new Session from the connect response.
    * Use cases : connection, reconnection with new Session
+   *
    * @param conRep connect Response
    * @param sessionTimeout connect request session timeout
    * @param pinger function to send ping request
@@ -73,7 +75,7 @@ class SessionManager(canBeRo: Boolean) {
   def newSession(
     conRep: ConnectResponse,
     sessionTimeout: Duration,
-    pinger: PingSender): Unit = {
+    pinger: PingSender) {
     ZkClient.logger.info(
       "Connected to session with ID: %d".format(conRep.sessionId))
 
@@ -93,15 +95,23 @@ class SessionManager(canBeRo: Boolean) {
    * Here we are parsing the header's error field
    * and changing the connection state if required
    * then the ZXID is updated.
+   *
    * @param header request's header
    */
   def parseHeader(header: ReplyHeader) {
     header.err match {
       case 0 => // Ok error code
-      case -4 => session.currentState.set(States.CONNECTION_LOSS)
-      case -112 => session.currentState.set(States.SESSION_EXPIRED)
-      case -115 => session.currentState.set(States.AUTH_FAILED)
+      case -4 =>
+        session.currentState.set(States.CONNECTION_LOSS)
+        ZkClient.logger.warning("Received CONNECTION_LOSS event from server")
+      case -112 =>
+        session.currentState.set(States.SESSION_EXPIRED)
+        ZkClient.logger.warning("Session %d has expired".format(session.id))
+      case -115 =>
+        session.currentState.set(States.AUTH_FAILED)
+        ZkClient.logger.warning("Authentication to server has failed")
       case -118 => session.currentState.set(States.SESSION_MOVED)
+        ZkClient.logger.warning("Session has moved to another server")
       case _ =>
     }
     if (header.zxid > 0) session.lastZxid.set(header.zxid)
@@ -110,6 +120,7 @@ class SessionManager(canBeRo: Boolean) {
   /**
    * Here we are parsing the watchEvent's state field
    * and changing the connection state if required
+   *
    * @param event a request header
    */
   def parseWatchEvent(event: WatchEvent) {
@@ -117,17 +128,24 @@ class SessionManager(canBeRo: Boolean) {
       case -112 =>
         session.stop()
         session.currentState.set(States.SESSION_EXPIRED)
+        ZkClient.logger.warning("Session %d has expired".format(session.id))
       case 0 =>
         session.stop()
         session.currentState.set(States.NOT_CONNECTED)
+        ZkClient.logger.warning("Received NOT_CONNECTED event from server")
       case 3 =>
         session.isRO.set(false)
+        session.hasFakeSessionId.set(false)
         session.currentState.set(States.CONNECTED)
+        ZkClient.logger.info("Server is now in Read-Write mode")
       case 4 => session.currentState.set(States.AUTH_FAILED)
       case 5 =>
         session.isRO.set(true)
         session.currentState.set(States.CONNECTED_READONLY)
-      case 6 => session.currentState.set(States.SASL_AUTHENTICATED)
+        ZkClient.logger.info("Server is now in Read Only mode")
+      case 6 =>
+        session.currentState.set(States.SASL_AUTHENTICATED)
+        ZkClient.logger.info("SASL authentication confirmed by server")
       case _ =>
     }
   }
@@ -136,6 +154,7 @@ class SessionManager(canBeRo: Boolean) {
    * Used to reconnect with the same session Ids
    * Use cases : session reconnection after connection loss,
    * reconnection to RW mode server.
+   *
    * @param conReq connect response
    * @param pinger function to send ping request
    * @return Future.Done when session is configured
@@ -150,11 +169,11 @@ class SessionManager(canBeRo: Boolean) {
   /**
    * Use reset before reconnection to a server with a new session
    * it will clean up connection and manager.
+   *
    * @return Future.Done when session resetting is finished
    */
-  private[this] def reset(): Future[Unit] = {
+  private[this] def reset() {
     session.reset()
     session.hasFakeSessionId.set(true)
-    Future.Done
   }
 }
