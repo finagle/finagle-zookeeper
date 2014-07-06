@@ -17,13 +17,13 @@ Here is the list of commands supported by version 0.1 :
 See src/test/scala
 
 ### Client creation
-```
+```scala
   val client = ZooKeeper.newRichClient("127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181")
 ```
 - `127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181` is a String representing the server list, separated by a comma
 
 ### Connection
-```
+```scala
 val connect = client.connect
     connect onSuccess {
       a =>
@@ -43,7 +43,7 @@ client.disconnect
 ### First request
 For an unknown reason please use a for comprehension when sending multiple request at the same time, otherwise your requests won't be sequentialized :
 
-```
+```scala
 val res = for {
       acl <- client.getACL("/zookeeper")
       _ <- client.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
@@ -53,7 +53,7 @@ val res = for {
 ```
 
 ### Create
-```
+```scala
 val create = client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
 ```
 - `/zookeeper/hello` : String the node that you want to create
@@ -70,7 +70,7 @@ Return value `Future[String]` representing the path you have just created
 
 
 ### Delete
-```
+```scala
 _ <- client.delete("/zookeeper/test", -1)
 ```
 - `/zookeeper/test` : String the node that you want to delete
@@ -79,7 +79,7 @@ _ <- client.delete("/zookeeper/test", -1)
 Return value `Future[Unit]`
 
 ### Exists
-```
+```scala
 _ <- client.exists("/zookeeper/test", false)
 ```
 - `/zookeeper/test` : String the node that you want to test
@@ -88,7 +88,7 @@ _ <- client.exists("/zookeeper/test", false)
 Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Future[WatchEvent]])`
 
 ### Get ACL
-```
+```scala
 client.getACL("/zookeeper")
 ```
 - `/zookeeper` : String the node from which you want to retrieve ACL
@@ -96,7 +96,7 @@ client.getACL("/zookeeper")
 Return value `Future[GetACLResponse]` `GetACLResponse(acl: Array[ACL], stat: Stat)`
 
 ### Set ACL
-```
+```scala
 client.setACL("/zookeeper/test", Ids.OPEN_ACL_UNSAFE, -1)
 ```
 - `/zookeeper/test` : String the node that you want to set
@@ -106,7 +106,7 @@ client.setACL("/zookeeper/test", Ids.OPEN_ACL_UNSAFE, -1)
 Return value `Future[Stat]`
 
 ### Get children
-```
+```scala
 client.getChildren("/zookeeper", false)
 ```
 - `/zookeeper` : String the node that you want to get
@@ -115,7 +115,7 @@ client.getChildren("/zookeeper", false)
 Return value `Future[GetChildrenResponse]` `GetChildrenResponse(children: Seq[String], watch: Option[Future[WatchEvent]])`
 
 ### Get children2
-```
+```scala
 client.getChildren2("/zookeeper", false)
 ```
 - `/zookeeper` : String the node that you want to get
@@ -124,7 +124,7 @@ client.getChildren2("/zookeeper", false)
 Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[String], stat: Stat, watch: Option[Future[WatchEvent]])`
 
 ### Get Data
-```
+```scala
 client.getData("/zookeeper/test", false)
 ```
 - `/zookeeper/test` : String the node that you want to get
@@ -133,7 +133,7 @@ client.getData("/zookeeper/test", false)
 Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat: Stat, watch: Option[Future[WatchEvent]])`
 
 ### Set Data
-```
+```scala
 client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 ```
 - `/zookeeper/test` : String the node that you want to set
@@ -143,7 +143,7 @@ client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 Return value `Future[Stat]`
 
 ### Sync
-```
+```scala
 client.sync("/zookeeper")
 ```
 - `/zookeeper` : String the node that you want to sync
