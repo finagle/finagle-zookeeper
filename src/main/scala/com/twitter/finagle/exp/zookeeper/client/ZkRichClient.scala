@@ -6,8 +6,9 @@ import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
 import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, ConnectionManager}
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
+import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
-import com.twitter.finagle.exp.zookeeper.watch.{Watch, WatchManager}
+import com.twitter.finagle.exp.zookeeper.watcher.{Watch, WatcherManager}
 import com.twitter.logging.Logger
 import com.twitter.util.TimeConversions._
 import com.twitter.util._
@@ -33,14 +34,12 @@ class ZkClient(
     timeBetweenPrevSrch,
     timeBetweenRwSrch)
   private[finagle] val sessionManager = new SessionManager(canReadOnly)
-  private[finagle] val watchManager: WatchManager = new WatchManager(chroot, autoWatchReset)
+  val watchManager: WatcherManager = new WatcherManager(chroot, autoWatchReset)
   private[finagle] val zkRequestService =
     new PreProcessService(connectionManager, sessionManager, this)
   @volatile protected[this] var authInfo: Set[Auth] = Set()
 
   def session: Session = sessionManager.session
-
-  // todo implement create2, removeWatches, checkWatches, ReconfigRequest, check ?
 
   /**
    * Add the specified Auth(scheme:data) information to this connection.
@@ -128,7 +127,8 @@ class ZkClient(
     path: String,
     data: Array[Byte],
     acl: Array[ACL],
-    createMode: Int) = {
+    createMode: Int): Future[String] = {
+
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
@@ -138,6 +138,39 @@ class ZkClient(
       if (rep.err.get == 0) {
         val finalRep = rep.response.get.asInstanceOf[CreateResponse]
         Future(finalRep.path.substring(chroot.length))
+      } else Future.exception(
+        ZookeeperException.create("Error while create", rep.err.get))
+    }
+  }
+
+  /**
+   * Create a node with the given path. The node data will be the given data,
+   * and node acl will be the given acl.
+   *
+   * @param path the path for the node
+   * @param data the initial data for the node
+   * @param acl  the acl for the node
+   * @param createMode specifying whether the node to be created is ephemeral
+   *                   and/or sequential
+   * @return Future[Create2Response] or Exception
+   * @since 3.5.0
+   */
+  def create2(
+    path: String,
+    data: Array[Byte],
+    acl: Array[ACL],
+    createMode: Int): Future[Create2Response] = {
+
+    val finalPath = prependChroot(path, chroot)
+    validatePath(finalPath, createMode)
+    ACL.check(acl)
+    val req = Create2Request(finalPath, data, acl, createMode)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        val finalRep = rep.response.get.asInstanceOf[Create2Response]
+        val lastPath = finalRep.path.substring(chroot.length)
+        Future(Create2Response(lastPath, finalRep.stat))
       } else Future.exception(
         ZookeeperException.create("Error while create", rep.err.get))
     }
@@ -186,14 +219,14 @@ class ZkClient(
       rep.response match {
         case Some(response: ExistsResponse) =>
           if (watch) {
-            val watch = watchManager.register(path, Watch.Type.exists)
+            val watch = watchManager.registerWatcher(path, Watch.RequestType.exists)
             val finalRep = ExistsResponse(response.stat, Some(watch))
             Future(finalRep)
           } else Future(response)
 
         case None =>
           if (rep.err.get == -101 && watch) {
-            val watch = watchManager.register(path, Watch.Type.exists)
+            val watch = watchManager.registerWatcher(path, Watch.RequestType.exists)
             Future(ExistsResponse(None, Some(watch)))
           } else Future.exception(
             ZookeeperException.create("Error while exists", rep.err.get))
@@ -244,7 +277,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.child)
+          val watch = watchManager.registerWatcher(path, Watch.RequestType.children)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildrenResponse(childrenList, Some(watch))
           Future(finalRep)
@@ -279,7 +312,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.child)
+          val watch = watchManager.registerWatcher(path, Watch.RequestType.children)
           val childrenList = res.children map (_.substring(chroot.length))
           val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
           Future(finalRep)
@@ -299,10 +332,11 @@ class ZkClient(
    *
    * If the watch is true and the call is successful (no exception is
    * thrown), a watch will be left on the configuration node. The watch
-   * will be triggered by a successful reconfig operation
+   * will be triggered by a successful reconfig operation.
    *
    * @param watch set a watch or not
    * @return configuration node data
+   * @since 3.5.0
    */
   def getConfig(watch: Boolean = false): Future[GetDataResponse] = {
     val req = GetDataRequest(ZookeeperDefs.CONFIG_NODE, watch)
@@ -311,7 +345,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.register(ZookeeperDefs.CONFIG_NODE, Watch.Type.data)
+          val watch = watchManager.registerWatcher(ZookeeperDefs.CONFIG_NODE, Watch.RequestType.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else Future(res)
@@ -341,7 +375,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.register(path, Watch.Type.data)
+          val watch = watchManager.registerWatcher(path, Watch.RequestType.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else Future(res)
@@ -366,7 +400,7 @@ class ZkClient(
   }
 
   /**
-   * Reconfigure - add/remove servers. Return the new configuration
+   * Reconfigure - add/remove servers. Return the new configuration.
    *
    * @param joiningServers a comma separated list of servers being added
    *                       (incremental reconfiguration)
@@ -378,6 +412,7 @@ class ZkClient(
    *                   causes reconfiguration to throw an exception if
    *                   configuration is no longer current)
    * @return configuration node data
+   * @since 3.5.0
    */
   def reconfig(
     joiningServers: String,
@@ -401,7 +436,7 @@ class ZkClient(
   }
 
   /**
-   * To set back auth right after reconnection
+   * To set back auth right after reconnection.
    *
    * @return Future.Done if request worked, or exception
    */
@@ -427,6 +462,86 @@ class ZkClient(
   }
 
   /**
+   * Convenience method to remove a watcher or all watchers on a znode.
+   *
+   * @param opCode CHECK_WATCHES or REMOVE_WATCHES
+   * @param path the node path
+   * @param watcherType the watcher type (children, data, any)
+   * @param local whether watches can be removed locally when there is no
+   *              server connection.
+   * @return Future[Unit]
+   * @since 3.5.0
+   */
+  private[this] def removeWatches(
+    opCode: Int,
+    path: String,
+    watcherType: Int,
+    local: Boolean
+    ): Future[Unit] = {
+    PathUtils.validatePath(path)
+    val finalPath = prependChroot(path, chroot)
+
+    val req = opCode match {
+      case OpCode.CHECK_WATCHES => CheckWatchesRequest(finalPath, watcherType)
+      case OpCode.REMOVE_WATCHES => RemoveWatchesRequest(finalPath, watcherType)
+    }
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        watchManager.removeWatchers(path, watcherType)
+        Future.Unit
+      }
+      else {
+        if (local) {
+          watchManager.removeWatchers(path, watcherType)
+          Future.Done
+        }
+        else Future.exception(
+          ZookeeperException.create("Error while removing watches", rep.err.get))
+      }
+    }
+  }
+
+  /**
+   * For the given znode path, removes the specified watcher of given
+   * watcherType.
+   *
+   * @param path the node path
+   * @param watcherType the watcher type (children, data, any)
+   * @param local whether watches can be removed locally when there is no
+   *              server connection.
+   * @return Future[Unit]
+   * @since 3.5.0
+   */
+  def removeWatches(
+    path: String,
+    watcherType: Int,
+    local: Boolean
+    ): Future[Unit] = {
+    if (!watchManager.isWatcherDefined(path, watcherType))
+      throw new IllegalArgumentException("No watch registered for this node")
+    removeWatches(OpCode.CHECK_WATCHES, path, watcherType, local)
+  }
+
+  /**
+   * For the given znode path, removes all the registered watchers of given
+   * watcherType.
+   *
+   * @param path the node path
+   * @param watcherType the watcher type (children, data, any)
+   * @param local whether watches can be removed locally when there is no
+   *              server connection.
+   * @return Future[Unit]
+   * @since 3.5.0
+   */
+  def removeAllWatches(
+    path: String,
+    watcherType: Int,
+    local: Boolean
+    ): Future[Unit] =
+    removeWatches(OpCode.REMOVE_WATCHES, path, watcherType, local)
+
+  /**
    * Set the ACL for the node of the given path if such a node exists and the
    * given version matches the version of the node. Return the stat of the
    * node.
@@ -442,12 +557,13 @@ class ZkClient(
     ACL.check(acl)
     val req = SetACLRequest(finalPath, acl, version)
 
-    zkRequestService(req) flatMap { rep =>
-      if (rep.err.get == 0) {
-        val res = rep.response.get.asInstanceOf[SetACLResponse]
-        Future(res)
-      } else Future.exception(
-        ZookeeperException.create("Error while setACL", rep.err.get))
+    zkRequestService(req) flatMap {
+      rep =>
+        if (rep.err.get == 0) {
+          val res = rep.response.get.asInstanceOf[SetACLResponse]
+          Future(res)
+        } else Future.exception(
+          ZookeeperException.create("Error while setACL", rep.err.get))
     }
   }
 
@@ -475,12 +591,13 @@ class ZkClient(
     validatePath(finalPath)
     val req = SetDataRequest(finalPath, data, version)
 
-    zkRequestService(req) flatMap { rep =>
-      if (rep.err.get == 0) {
-        val res = rep.response.get.asInstanceOf[SetDataResponse]
-        Future(res)
-      } else Future.exception(
-        ZookeeperException.create("Error while setData", rep.err.get))
+    zkRequestService(req) flatMap {
+      rep =>
+        if (rep.err.get == 0) {
+          val res = rep.response.get.asInstanceOf[SetDataResponse]
+          Future(res)
+        } else Future.exception(
+          ZookeeperException.create("Error while setData", rep.err.get))
     }
   }
 
@@ -492,14 +609,17 @@ class ZkClient(
   private[finagle] def setWatches(): Future[Unit] = {
     if (autoWatchReset) {
       val relativeZxid: Long = sessionManager.session.lastZxid.get
-      val dataWatches: Seq[String] = watchManager.getDataWatches.keySet.map { path =>
-        prependChroot(path, chroot)
+      val dataWatches: Seq[String] = watchManager.getDataWatchers.keySet.map {
+        path =>
+          prependChroot(path, chroot)
       }.toSeq
-      val existsWatches: Seq[String] = watchManager.getExistsWatches.keySet.map { path =>
-        prependChroot(path, chroot)
+      val existsWatches: Seq[String] = watchManager.getExistsWatchers.keySet.map {
+        path =>
+          prependChroot(path, chroot)
       }.toSeq
-      val childWatches: Seq[String] = watchManager.getChildWatches.keySet.map { path =>
-        prependChroot(path, chroot)
+      val childWatches: Seq[String] = watchManager.getChildWatchers.keySet.map {
+        path =>
+          prependChroot(path, chroot)
       }.toSeq
 
       if (dataWatches.nonEmpty || existsWatches.nonEmpty || childWatches.nonEmpty) {
@@ -508,19 +628,20 @@ class ZkClient(
           Some(SetWatchesRequest(relativeZxid, dataWatches, existsWatches, childWatches))
         )
 
-        connectionManager.connection.get.serve(req) flatMap { rep =>
-          if (rep.err.get == 0) Future.Done
-          else {
-            val exc = ZookeeperException.create(
-              "Error while setWatches", rep.err.get)
-            ZkClient.logger.error("Error after setting back watches: " + exc.getMessage)
-            Future.exception(exc)
-          }
+        connectionManager.connection.get.serve(req) flatMap {
+          rep =>
+            if (rep.err.get == 0) Future.Done
+            else {
+              val exc = ZookeeperException.create(
+                "Error while setWatches", rep.err.get)
+              ZkClient.logger.error("Error after setting back watches: " + exc.getMessage)
+              Future.exception(exc)
+            }
         }
       } else
         Future.Done
     } else {
-      watchManager.clearWatches()
+      watchManager.clearWatchers()
       Future.Done
     }
   }
@@ -554,19 +675,11 @@ class ZkClient(
    * On failure, an exception is raised which contains partial results and
    * error details.
    * OpRequest:
-   * - CheckVersionRequest(path: String, version: Int)
-   * - CreateRequest( path: String,
-   *                  data: Array[Byte],
-   *                  aclList: Seq[ACL],
-   *                  createMode: Int )
-   * - Create2Request(  path: String,
-   *                    data: Array[Byte],
-   *                    aclList: Seq[ACL],
-   *                    createMode: Int )
-   * - DeleteRequest(path: String, version: Int)
-   * - SetDataRequest(  path: String,
-   *                    data: Array[Byte],
-   *                    version: Int )
+   * - CheckVersionRequest
+   * - CreateRequest
+   * - Create2Request (available in v3.5.0)
+   * - DeleteRequest
+   * - SetDataRequest
    *
    * @param opList a Sequence composed of OpRequest
    * @return Future[TransactionResponse] or Exception

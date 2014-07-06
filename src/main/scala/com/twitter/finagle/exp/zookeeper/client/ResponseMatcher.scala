@@ -4,7 +4,7 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
-import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.finagle.exp.zookeeper.watcher.WatcherManager
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.{CancelledRequestException, ChannelException, WriteException}
@@ -30,7 +30,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
 
   private[this] var connectionManager: Option[ConnectionManager] = None
   private[this] var sessionManager: Option[SessionManager] = None
-  private[this] var watchManager: Option[WatchManager] = None
+  private[this] var watchManager: Option[WatcherManager] = None
 
   private[this] val isReading = new AtomicBoolean(false)
   private[this] val hasDispatcherFailed = new AtomicBoolean(false)
@@ -60,7 +60,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
         case Throw(exc) => exc match {
           case exc: Exception
             if exc.isInstanceOf[ChannelException]
-              | exc.isInstanceOf[WriteException] =>
+              || exc.isInstanceOf[WriteException] =>
             failDispatcher(exc)
             Future.exception(new CancelledRequestException(exc))
 
@@ -199,7 +199,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
 
         case Throw(exc1) => exc1 match {
           case exc: Exception if exc.isInstanceOf[ZkDecodingException]
-            | exc.isInstanceOf[ZkDispatchingException] =>
+            || exc.isInstanceOf[ZkDispatchingException] =>
 
             readNotification(buffer) match {
               case Return(watch) => watch
@@ -270,6 +270,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
       reqRecord.opCode match {
         case OpCode.AUTH => decodeHeader(reqRecord, buf)
         case OpCode.CREATE => decodeResponse(reqRecord, buf, CreateResponse.apply)
+        case OpCode.CREATE2 => decodeResponse(reqRecord, buf, Create2Response.apply)
         case OpCode.CHECK_WATCHES => decodeHeader(reqRecord, buf)
         case OpCode.CREATE_SESSION =>
           ConnectResponse(buf) match {
@@ -362,7 +363,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
           case Throw(exc) => exc match {
             case exc: Exception
               if exc.isInstanceOf[ChannelException]
-                | exc.isInstanceOf[WriteException] =>
+                || exc.isInstanceOf[WriteException] =>
               failDispatcher(exc)
               Future.exception(new CancelledRequestException(exc))
 

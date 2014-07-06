@@ -5,7 +5,7 @@ import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
 import com.twitter.finagle.exp.zookeeper.transport._
-import com.twitter.finagle.exp.zookeeper.watch.WatchManager
+import com.twitter.finagle.exp.zookeeper.watcher.WatcherManager
 import com.twitter.io.Buf
 import com.twitter.util.Duration
 
@@ -61,7 +61,7 @@ case class CheckWatchesRequest(path: String, typ: Int) extends Request {
 private[finagle] case class ConfigureRequest(
   connectionManager: ConnectionManager,
   sessionManagr: SessionManager,
-  watchManagr: WatchManager
+  watchManagr: WatcherManager
   ) extends Request {
 
   override val opCode: Option[Int] = None

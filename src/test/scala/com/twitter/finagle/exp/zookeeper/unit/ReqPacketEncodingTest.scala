@@ -3,7 +3,7 @@ package com.twitter.finagle.exp.zookeeper.unit
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.data.{Auth, Ids}
 import com.twitter.finagle.exp.zookeeper.transport._
-import com.twitter.finagle.exp.zookeeper.watch.Watch
+import com.twitter.finagle.exp.zookeeper.watcher.Watch
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.{CreateMode, OpCode}
 import com.twitter.io.Buf
 import com.twitter.util.TimeConversions._
@@ -262,14 +262,14 @@ class ReqPacketEncodingTest extends FunSuite {
   test("RemoveWatchesRequest") {
     val requestHeader = new RequestHeader(732, OpCode.REMOVE_WATCHES)
     val removeWatchesRequest = new RemoveWatchesRequest(
-      "/zookeeper/test", Watch.Type.exists)
+      "/zookeeper/test", Watch.RequestType.exists)
     val packetReq = ReqPacket(Some(requestHeader), Some(removeWatchesRequest))
 
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.REMOVE_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(Buf.U32BE(Watch.Type.exists))
+      .concat(Buf.U32BE(Watch.RequestType.exists))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -308,14 +308,14 @@ class ReqPacketEncodingTest extends FunSuite {
 
   test("CheckWatchesRequest") {
     val requestHeader = new RequestHeader(732, OpCode.CHECK_WATCHES)
-    val checkWatchesRequest = new CheckWatchesRequest("/zookeeper/test", Watch.Type.data)
+    val checkWatchesRequest = new CheckWatchesRequest("/zookeeper/test", Watch.RequestType.data)
     val packetReq = ReqPacket(Some(requestHeader), Some(checkWatchesRequest))
 
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.CHECK_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(Buf.U32BE(Watch.Type.data))
+      .concat(Buf.U32BE(Watch.RequestType.data))
 
     assert(packetReq.buf === encoderBuf)
   }

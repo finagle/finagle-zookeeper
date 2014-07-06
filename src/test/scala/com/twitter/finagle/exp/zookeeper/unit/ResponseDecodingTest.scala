@@ -5,7 +5,7 @@ import java.util
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.data.{Stat, Ids}
 import com.twitter.finagle.exp.zookeeper.transport._
-import com.twitter.finagle.exp.zookeeper.watch.Watch
+import com.twitter.finagle.exp.zookeeper.watcher.Watch
 import com.twitter.io.Buf
 import com.twitter.util.TimeConversions._
 import org.scalatest.FunSuite
@@ -243,4 +243,6 @@ class ResponseDecodingTest extends FunSuite {
 
     assert(decodedRep === setDataRep)
   }
+
+  //todo transaction, create2, sync
 }

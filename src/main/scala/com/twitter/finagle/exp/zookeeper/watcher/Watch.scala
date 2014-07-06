@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.watch
+package com.twitter.finagle.exp.zookeeper.watcher
 
 private[finagle] object Watch {
   object EventType {
@@ -21,10 +21,22 @@ private[finagle] object Watch {
     }
   }
 
-  object Type {
+  /**
+   * Used to classify map in three categories
+   */
+  object WatcherType {
+    val CHILDREN = 1
+    val DATA = 2
+    val ANY = 3
+  }
+
+  /**
+   * Used to describe in which map we are holding the watch
+   */
+  private[finagle] object RequestType {
     val data = 1
     val exists = 2
-    val child = 3
+    val children = 3
   }
 
   object EventState {

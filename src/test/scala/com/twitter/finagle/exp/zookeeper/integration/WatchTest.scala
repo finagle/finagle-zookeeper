@@ -2,7 +2,7 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids
-import com.twitter.finagle.exp.zookeeper.watch.Watch
+import com.twitter.finagle.exp.zookeeper.watcher.Watch
 import com.twitter.util.Await
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner

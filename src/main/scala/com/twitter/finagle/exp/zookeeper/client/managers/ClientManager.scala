@@ -222,7 +222,7 @@ with ReadOnlyManager {slf: ZkClient =>
             connectionManager.connection.get.serve(closeReq) transform {
               case Return(closeRep) =>
                 if (closeRep.err.get == 0) {
-                  watchManager.clearWatches()
+                  watchManager.clearWatchers()
                   sessionManager.session.close()
                   Future.Done
                 } else Future.exception(

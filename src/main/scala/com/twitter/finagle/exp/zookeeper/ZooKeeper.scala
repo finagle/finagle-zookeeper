@@ -26,6 +26,7 @@ object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
     NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
 
 object ZooKeeper extends Client[ReqPacket, RepPacket] {
+  // todo improve client builder
   def newClient(name: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
     ZooKeeperClient.newClient(name, label)
 
