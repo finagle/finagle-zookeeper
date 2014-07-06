@@ -80,9 +80,9 @@ class ConnectionTest extends FunSuite {
       case rep: ExistsResponse => assert(rep.stat.get.dataLength === "HELLO".getBytes.length)
       case _ => throw new RuntimeException("Test failed")
     }
-    assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
+    assert(ret._2.dataLength === "CHANGE IS GOOD1".getBytes.length)
     assert(ret._3.data === "CHANGE IS GOOD1".getBytes)
-    assert(ret._4.path === "/zookeeper")
+    assert(ret._4 === "/zookeeper")
 
     Await.ready(client.closeSession())
     Await.ready(client.closeService())

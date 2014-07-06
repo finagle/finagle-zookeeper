@@ -68,9 +68,9 @@ class CRUDTest extends FunSuite with IntegrationConfig {
       case rep: ExistsResponse => assert(rep.stat.get.dataLength === "HELLO".getBytes.length)
       case _ => throw new RuntimeException("Test failed")
     }
-    assert(ret._2.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
+    assert(ret._2.dataLength === "CHANGE IS GOOD1".getBytes.length)
     assert(ret._3.data === "CHANGE IS GOOD1".getBytes)
-    assert(ret._4.path === "/zookeeper")
+    assert(ret._4 === "/zookeeper")
 
     disconnect()
     Await.ready(client.get.closeService())
@@ -174,7 +174,7 @@ class CRUDTest extends FunSuite with IntegrationConfig {
     } yield set
 
     val ret = Await.result(res)
-    assert(ret.stat.dataLength === "CHANGE IS GOOD1".getBytes.length)
+    assert(ret.dataLength === "CHANGE IS GOOD1".getBytes.length)
 
     disconnect()
     Await.result(client.get.closeService())

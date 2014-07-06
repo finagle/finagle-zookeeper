@@ -4,7 +4,7 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
 import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, ConnectionManager}
-import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth}
+import com.twitter.finagle.exp.zookeeper.data.{Stat, ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
@@ -549,9 +549,9 @@ class ZkClient(
    * @param path the node path
    * @param acl the ACLs to set
    * @param version the node version
-   * @return Future[SetACLResponse] or Exception
+   * @return the new znode stat
    */
-  def setACL(path: String, acl: Seq[ACL], version: Int): Future[SetACLResponse] = {
+  def setACL(path: String, acl: Seq[ACL], version: Int): Future[Stat] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     ACL.check(acl)
@@ -561,7 +561,7 @@ class ZkClient(
       rep =>
         if (rep.err.get == 0) {
           val res = rep.response.get.asInstanceOf[SetACLResponse]
-          Future(res)
+          Future(res.stat)
         } else Future.exception(
           ZookeeperException.create("Error while setACL", rep.err.get))
     }
@@ -581,9 +581,9 @@ class ZkClient(
    * @param path the node path
    * @param data the data Array
    * @param version the node version
-   * @return Future[SetDataResponse] or Exception
+   * @return the new znode stat
    */
-  def setData(path: String, data: Array[Byte], version: Int): Future[SetDataResponse] = {
+  def setData(path: String, data: Array[Byte], version: Int): Future[Stat] = {
     require(data.size < 1048576,
       "The maximum allowable size of the data array is 1 MB (1,048,576 bytes)")
 
@@ -595,7 +595,7 @@ class ZkClient(
       rep =>
         if (rep.err.get == 0) {
           val res = rep.response.get.asInstanceOf[SetDataResponse]
-          Future(res)
+          Future(res.stat)
         } else Future.exception(
           ZookeeperException.create("Error while setData", rep.err.get))
     }
@@ -650,9 +650,9 @@ class ZkClient(
    * Synchronize client and server for a node.
    *
    * @param path the node path
-   * @return Future[SyncResponse] or Exception
+   * @return the synchronized znode's path
    */
-  def sync(path: String): Future[SyncResponse] = {
+  def sync(path: String): Future[String] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = SyncRequest(finalPath)
@@ -662,7 +662,7 @@ class ZkClient(
         if (rep.err.get == 0) {
           val res = rep.response.get.asInstanceOf[SyncResponse]
           val finalRep = SyncResponse(res.path.substring(chroot.length))
-          Future(finalRep)
+          Future(finalRep.path)
         } else Future.exception(
           ZookeeperException.create("Error while sync", rep.err.get))
     }
