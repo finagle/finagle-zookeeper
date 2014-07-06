@@ -26,8 +26,10 @@ object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
     NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
 
 object ZooKeeper extends Client[ReqPacket, RepPacket] {
-  // todo improve client builder
-  def newClient(name: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
+  def newClient(
+    name: Name,
+    label: String
+    ): ServiceFactory[ReqPacket, RepPacket] =
     ZooKeeperClient.newClient(name, label)
 
   def newRichClient(hostsList: String): ZkClient =
@@ -49,6 +51,7 @@ private[finagle] object SimpleClient extends DefaultClient[Buf, Buf](
 private[finagle] object BufClient extends Client[Buf, Buf] {
   override def newClient(dest: Name, label: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest, label)
+
   def newSimpleClient(dest: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest)
 }
