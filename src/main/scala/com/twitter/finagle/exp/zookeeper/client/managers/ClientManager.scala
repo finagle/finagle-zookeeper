@@ -164,20 +164,24 @@ with ReadOnlyManager {slf: ZkClient =>
    * @param host the server to connect to
    * @return Future.Done or Exception
    */
-  def changeHost(host: Option[String]): Future[Unit] =
+  def changeHost(host: Option[String] = None): Future[Unit] =
     if (host.isDefined)
       connectionManager.hostProvider.testOrFind(host.get) flatMap { server =>
         reconnectWithSession(Some(server))
       }
     else {
-      if (connectionManager.hostProvider.seenRwServer.isDefined
-        && connectionManager.hostProvider.seenRwServer.get == host.get)
-        connectionManager.hostProvider.seenRwServer = None
+      connectionManager.hostProvider.seenRwServer match {
+        case Some(rwServer) =>
+          if (rwServer == connectionManager.currentHost.get)
+            connectionManager.hostProvider.seenRwServer = None
+        case None =>
+      }
+
       val newList = connectionManager.hostProvider.serverList
         .filter(connectionManager.currentHost.getOrElse("") == _)
-      connectionManager.hostProvider.findServer(Some(newList))
-        .flatMap { server =>
-        reconnectWithSession(Some(server))
+      connectionManager.hostProvider.findServer(Some(newList)).flatMap { srv =>
+        connectionManager.close() before
+          reconnectWithSession(Some(srv))
       }
     }
 
@@ -196,12 +200,16 @@ with ReadOnlyManager {slf: ZkClient =>
    */
   def removeHosts(hostList: String): Future[Unit] = {
     connectionManager.removeAndFind(hostList) flatMap { server =>
-      if (connectionManager.currentHost.isDefined
-        && connectionManager.currentHost.get == server)
-        Future(connectionManager.hostProvider.removeHost(hostList))
-      else
-        reconnectWithSession(Some(server)) before
-          Future(connectionManager.hostProvider.removeHost(hostList))
+      connectionManager.currentHost match {
+        case Some(host) =>
+          if (host == server)
+            Future(connectionManager.hostProvider.removeHost(hostList))
+          else
+            reconnectWithSession(Some(server)) before
+              Future(connectionManager.hostProvider.removeHost(hostList))
+        case None =>
+            Future(connectionManager.hostProvider.removeHost(hostList))
+      }
     }
   }
 

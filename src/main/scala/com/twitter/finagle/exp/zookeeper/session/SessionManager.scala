@@ -54,7 +54,7 @@ class SessionManager(canBeRo: Boolean) {
 
   def canCloseSession: Boolean = session.canClose
   def canCreateSession: Boolean = session.canConnect
-  def canReconnect: Boolean = session.canConnect
+  def canReconnect: Boolean = session.canReconnect
 
   /**
    * To close current session and clean session manager

@@ -81,6 +81,16 @@ class Session(
   }
 
   /**
+   * Determines if we can reconnect to a server.
+   * @return whether or not we can reconnect
+   */
+  private[finagle] def canReconnect: Boolean = currentState.get() match {
+    case States.CONNECTING |
+         States.ASSOCIATING => false
+    case _ => true
+  }
+
+  /**
    * Called after the close session response decoding
    */
   private[finagle] def close() {
@@ -98,7 +108,9 @@ class Session(
    * Use init just after session creation
    */
   private[finagle] def init() {
-    if (pingSender.isDefined && !PingScheduler.isRunning) {
+    if (!PingScheduler.isRunning) {
+      if (!pingSender.isDefined)
+        throw new RuntimeException("Ping sender not defined in Session")
       xid.set(2)
       lastZxid.set(0L)
       startPing()

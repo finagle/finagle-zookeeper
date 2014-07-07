@@ -77,12 +77,16 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    * @return Future.Done or exception
    */
   private[this] def checkConnection(): Future[Unit] =
-    if (connectionManager.connection.isDefined &&
-      !connectionManager.connection.get.isValid.get()) {
-      ZkClient.logger.warning(("Connection to %s has failed," +
-        " reconnecting with session...").format(connectionManager.currentHost))
-      stopJob() before reconnectWithSession()
-    } else Future.Done
+    connectionManager.connection match {
+      case Some(connect) =>
+        if (!connect.isValid.get()) {
+          ZkClient.logger.warning(("Connection to %s has failed," +
+            " reconnecting with session...").format(connectionManager.currentHost))
+          stopJob() before reconnectWithSession()
+        }
+        else Future.Done
+      case None => Future.Done
+    }
 
   /**
    * This method is called to make sure the connection is still alive.
@@ -126,7 +130,9 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
       currentTask = Some(DefaultTimer.twitter.schedule(period)(f))
     }
 
-    def isRunning: Boolean = { currentTask.isDefined }
+    def isRunning: Boolean = {
+      currentTask.isDefined
+    }
 
     def stop() {
       if (currentTask.isDefined) currentTask.get.cancel()

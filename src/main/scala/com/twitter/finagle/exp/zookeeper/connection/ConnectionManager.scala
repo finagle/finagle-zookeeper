@@ -125,10 +125,14 @@ class ConnectionManager(
    * @return Future[Boolean]
    */
   private[finagle] def hasAvailableConnection: Future[Boolean] = {
-    if (connection.isDefined && connection.get.isServiceFactoryAvailable
-      && connection.get.isValid.get())
-      connection.get.isServiceAvailable
-    else Future(false)
+    connection match {
+      case Some(connect) =>
+        if (connect.isServiceFactoryAvailable
+          && connect.isValid.get())
+          connect.isServiceAvailable
+        else Future(false)
+      case None => Future(false)
+    }
   }
 
   /**
@@ -157,12 +161,16 @@ class ConnectionManager(
    *         or an Exception
    */
   def removeAndFind(hostList: String): Future[String] = {
-    val hostSeq = HostUtilities.formatHostList(hostList)
-    hostSeq map HostUtilities.testIpAddress
-    if (currentHost.isDefined && hostSeq.contains(currentHost.get)) {
-      val newList = hostProvider.serverList filterNot (hostList.contains(_))
+    val hostsToDelete = HostUtilities.formatHostList(hostList)
+    hostsToDelete map HostUtilities.testIpAddress
+    currentHost match {
+      case Some(activHost) =>
+        if (hostsToDelete.contains(activHost)) {
+          val newList = hostProvider.serverList filterNot (hostsToDelete.contains(_))
+          hostProvider.findServer(Some(newList))
+        } else Future(activHost)
 
-      hostProvider.findServer(Some(newList))
-    } else Future(activeHost.get)
+      case None => Future(activeHost.get)
+    }
   }
 }
