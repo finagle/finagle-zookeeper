@@ -2,6 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Stat}
 import com.twitter.finagle.exp.zookeeper.transport._
+import com.twitter.finagle.exp.zookeeper.watcher.Watcher
 import com.twitter.io.Buf
 import com.twitter.util._
 import com.twitter.util.TimeConversions._
@@ -52,7 +53,7 @@ case class Create2Response(
 
 case class ExistsResponse(
   stat: Option[Stat],
-  watch: Option[Future[WatchEvent]]
+  watcher: Option[Watcher]
   ) extends Response
 
 case class ErrorResponse(exception: ZookeeperException) extends OpResult
@@ -63,19 +64,19 @@ case class GetACLResponse(acl: Seq[ACL], stat: Stat) extends Response
 
 case class GetChildrenResponse(
   children: Seq[String],
-  watch: Option[Future[WatchEvent]]
+  watcher: Option[Watcher]
   ) extends Response
 
 case class GetChildren2Response(
   children: Seq[String],
   stat: Stat,
-  watch: Option[Future[WatchEvent]]
+  watcher: Option[Watcher]
   ) extends Response
 
 case class GetDataResponse(
   data: Array[Byte],
   stat: Stat,
-  watch: Option[Future[WatchEvent]]
+  watcher: Option[Watcher]
   ) extends Response
 
 case class SetACLResponse(stat: Stat) extends Response

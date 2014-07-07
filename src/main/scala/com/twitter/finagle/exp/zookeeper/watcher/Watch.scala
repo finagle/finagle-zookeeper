@@ -1,5 +1,18 @@
 package com.twitter.finagle.exp.zookeeper.watcher
 
+import com.twitter.finagle.exp.zookeeper.WatchEvent
+import com.twitter.util.Promise
+
+/**
+ * A watcher represents a Watch which is a Future[WatchEvent] and a path,
+ * corresponding to the znode.
+ *
+ * @param path path to the watched znode
+ * @param typ watchManager map type (child, data, exists)
+ * @param event a Future[WatchEvent)
+ */
+case class Watcher(path: String, private[finagle] val typ: Int, event: Promise[WatchEvent])
+
 private[finagle] object Watch {
   object EventType {
     val NONE = -1
@@ -33,7 +46,7 @@ private[finagle] object Watch {
   /**
    * Used to describe in which map we are holding the watch
    */
-  private[finagle] object RequestType {
+  private[finagle] object WatcherMapType {
     val data = 1
     val exists = 2
     val children = 3

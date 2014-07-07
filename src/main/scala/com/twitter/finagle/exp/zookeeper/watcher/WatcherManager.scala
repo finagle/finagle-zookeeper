@@ -1,6 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.watcher
 
 import com.twitter.finagle.exp.zookeeper.WatchEvent
+import com.twitter.finagle.exp.zookeeper.watcher.Watch.WatcherMapType
 import com.twitter.util.Promise
 import scala.collection.mutable
 
@@ -11,11 +12,11 @@ import scala.collection.mutable
  * @param chroot default user chroot
  */
 private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
-  val dataWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+  val dataWatches: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
-  val existsWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+  val existsWatches: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
-  val childrenWatches: mutable.HashMap[String, Promise[WatchEvent]] =
+  val childrenWatches: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
 
   def getDataWatchers = this.synchronized(dataWatches)
@@ -27,19 +28,21 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    *
    * @param map HashMap[String, Promise[WatchEvent]
    * @param path watcher's path
-   * @return a new Promise[WatchEvent]
+   * @return a new Watcher
    */
   private[this] def addWatcher(
-    map: mutable.HashMap[String, Promise[WatchEvent]],
+    map: mutable.HashMap[String, Set[Watcher]],
+    typ: Int,
     path: String
-    ): Promise[WatchEvent] = {
+    ): Watcher = {
+    val watcher = new Watcher(path, typ, Promise[WatchEvent]())
 
     map synchronized {
-      map.getOrElse(path, {
-        val p = Promise[WatchEvent]()
-        map += path -> p
-        p
+      val watchers = map.getOrElse(path, {
+        Set.empty[Watcher]
       })
+      map += path -> (watchers + watcher)
+      watcher
     }
   }
 
@@ -54,17 +57,13 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     }
   }
 
-  private[this] def removeWatchers(
-    map: mutable.HashMap[String, Promise[WatchEvent]],
-    path: String) {
-    map synchronized {
-      map.get(path) match {
-        case Some(promise) => map -= path
-        case None =>
-      }
-    }
-  }
-
+  /**
+   * Checks if a Watcher is still defined in the watcher manager
+   *
+   * @param path the path of the znode
+   * @param watcherType the type of the watcher
+   * @return Whether or not the watcher is still defined
+   */
   def isWatcherDefined(path: String, watcherType: Int): Boolean = {
     watcherType match {
       case Watch.WatcherType.CHILDREN =>
@@ -91,19 +90,44 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
   }
 
   /**
+   * Checks if a Watcher is still defined in the watcher manager
+   *
+   * @param watcher the watcher to test
+   * @return Whether or not the watcher is still defined
+   */
+  def isWatcherDefined(watcher: Watcher): Boolean = {
+    watcher.typ match {
+      case Watch.WatcherMapType.data =>
+        dataWatches.synchronized {
+          dataWatches.get(watcher.path).isDefined
+        }
+      case Watch.WatcherMapType.exists =>
+        existsWatches.synchronized {
+          existsWatches.get(watcher.path).isDefined
+        }
+      case Watch.WatcherMapType.`children` =>
+        childrenWatches.synchronized {
+          childrenWatches.get(watcher.path).isDefined
+        }
+    }
+  }
+
+  /**
    * Should find a watcher and satisfy its promise with the event
    *
    * @param map the path -> watch map
    * @param event a watched event
    */
   private[this] def findAndSatisfy(
-    map: mutable.HashMap[String, Promise[WatchEvent]],
+    map: mutable.HashMap[String, Set[Watcher]],
     event: WatchEvent) {
 
     map synchronized {
       map.get(event.path) match {
-        case Some(promise) =>
-          promise.setValue(event)
+        case Some(set) =>
+          set map { watcher =>
+            watcher.event.setValue(event)
+          }
           map -= event.path
         case None =>
       }
@@ -148,40 +172,73 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    * Should register a new watcher.
    *
    * @param path the node path
-   * @param requestType request type: child, data, exists
-   * @return Promise[WatchEvent]
+   * @param mapType request type: child, data, exists
+   * @return a new Watcher
    */
-  private[finagle] def registerWatcher(path: String, requestType: Int): Promise[WatchEvent] = {
-    requestType match {
-      case Watch.RequestType.data => addWatcher(dataWatches, path)
-      case Watch.RequestType.exists => addWatcher(existsWatches, path)
-      case Watch.RequestType.`children` => addWatcher(childrenWatches, path)
+  private[finagle] def registerWatcher(path: String, mapType: Int): Watcher = {
+    mapType match {
+      case Watch.WatcherMapType.data => addWatcher(dataWatches, WatcherMapType.data, path)
+      case Watch.WatcherMapType.exists => addWatcher(existsWatches, WatcherMapType.exists, path)
+      case Watch.WatcherMapType.`children` => addWatcher(childrenWatches, WatcherMapType.children, path)
     }
   }
 
   /**
-   * Unregister watchers on a node.
+   * Unregister watchers on a node by WatcherType.
    *
    * @param path node path
    * @param watcherType watcher type (children, data, any)
-   * @since 3.5.0
    */
   def removeWatchers(path: String, watcherType: Int) {
+    def removeAllWatchers(
+      map: mutable.HashMap[String, Set[Watcher]],
+      path: String) {
+      map synchronized {
+        map.remove(path)
+      }
+    }
+
     if (!isWatcherDefined(path, watcherType))
       throw new IllegalArgumentException("No watch registered for this node")
 
     watcherType match {
       case Watch.WatcherType.CHILDREN =>
-        removeWatchers(childrenWatches, path)
+        removeAllWatchers(childrenWatches, path)
 
       case Watch.WatcherType.DATA =>
-        removeWatchers(dataWatches, path)
-        removeWatchers(existsWatches, path)
+        removeAllWatchers(dataWatches, path)
+        removeAllWatchers(existsWatches, path)
 
       case Watch.WatcherType.ANY =>
-        removeWatchers(childrenWatches, path)
-        removeWatchers(dataWatches, path)
-        removeWatchers(existsWatches, path)
+        removeAllWatchers(childrenWatches, path)
+        removeAllWatchers(dataWatches, path)
+        removeAllWatchers(existsWatches, path)
+    }
+  }
+
+  /**
+   * Remove a watcher from its map, it will never be satisfied.
+   *
+   * @param watcher the watcher to disable
+   */
+  def removeWatcher(watcher: Watcher) {
+    def removeFromMap(
+      map: mutable.HashMap[String, Set[Watcher]],
+      watcher: Watcher
+      ) {
+      map synchronized {
+        map.get(watcher.path) match {
+          case Some(watchers) =>
+            map += watcher.path -> (watchers - watcher)
+          case None =>
+        }
+      }
+    }
+
+    watcher.typ match {
+      case Watch.WatcherMapType.data => removeFromMap(dataWatches, watcher)
+      case Watch.WatcherMapType.exists => removeFromMap(existsWatches, watcher)
+      case Watch.WatcherMapType.`children` => removeFromMap(childrenWatches, watcher)
     }
   }
 }

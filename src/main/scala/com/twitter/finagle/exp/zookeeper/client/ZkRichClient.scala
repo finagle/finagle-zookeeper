@@ -8,7 +8,8 @@ import com.twitter.finagle.exp.zookeeper.data.{Stat, ACL, Auth}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
-import com.twitter.finagle.exp.zookeeper.watcher.{Watch, WatcherManager}
+import com.twitter.finagle.exp.zookeeper.watcher.Watch.{WatcherType, WatcherMapType}
+import com.twitter.finagle.exp.zookeeper.watcher.{Watcher, Watch, WatcherManager}
 import com.twitter.logging.Logger
 import com.twitter.util.TimeConversions._
 import com.twitter.util._
@@ -62,6 +63,55 @@ class ZkClient(
       }
       else Future.exception(
         ZookeeperException.create("Error while addAuth", rep.err.get))
+    }
+  }
+
+  /**
+   * Checks if the watches on a znode for this watcher type are not
+   * triggered on the server side.
+   *
+   * @param path the path to the znode
+   * @param watcherType the watcher type (children, data, any)
+   * @return Future[Unit] if the watches are ok, or else ZooKeeperException
+   * @since 3.5.0
+   */
+  def checkWatches(path: String, watcherType: Int): Future[Unit] = {
+    if (!watchManager.isWatcherDefined(path, watcherType))
+      throw new IllegalArgumentException("No watch registered for this node")
+
+    PathUtils.validatePath(path)
+    val finalPath = prependChroot(path, chroot)
+    val req = CheckWatchesRequest(finalPath, watcherType)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) Future.Unit
+      else Future.exception(
+        ZookeeperException.create("Error while removing watches", rep.err.get))
+    }
+  }
+
+  /**
+   * Checks if a watcher event is still not triggered.
+   *
+   * @param watcher a watcher to test
+   * @return Future[Unit] if the watcher is ok, or else ZooKeeperException
+   */
+  def checkWatcher(watcher: Watcher): Future[Unit] = {
+    if (!watchManager.isWatcherDefined(watcher))
+      throw new IllegalArgumentException("No watch registered for this node")
+
+    PathUtils.validatePath(watcher.path)
+    val finalPath = prependChroot(watcher.path, chroot)
+    val watcherType = watcher.typ match {
+      case WatcherMapType.data | WatcherMapType.exists => WatcherType.DATA
+      case WatcherMapType.children => WatcherType.CHILDREN
+    }
+    val req = CheckWatchesRequest(finalPath, watcherType)
+
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) Future.Unit
+      else Future.exception(
+        ZookeeperException.create("Error while removing watches", rep.err.get))
     }
   }
 
@@ -208,7 +258,7 @@ class ZkClient(
    *
    * @param path the node path
    * @param watch a boolean to set a watch or not
-   * @return
+   * @return an ExistsReponse
    */
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
     val finalPath = prependChroot(path, chroot)
@@ -219,15 +269,15 @@ class ZkClient(
       rep.response match {
         case Some(response: ExistsResponse) =>
           if (watch) {
-            val watch = watchManager.registerWatcher(path, Watch.RequestType.exists)
-            val finalRep = ExistsResponse(response.stat, Some(watch))
+            val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.exists)
+            val finalRep = ExistsResponse(response.stat, Some(watcher))
             Future(finalRep)
           } else Future(response)
 
         case None =>
           if (rep.err.get == -101 && watch) {
-            val watch = watchManager.registerWatcher(path, Watch.RequestType.exists)
-            Future(ExistsResponse(None, Some(watch)))
+            val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.exists)
+            Future(ExistsResponse(None, Some(watcher)))
           } else Future.exception(
             ZookeeperException.create("Error while exists", rep.err.get))
 
@@ -277,9 +327,9 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
-          val watch = watchManager.registerWatcher(path, Watch.RequestType.children)
+          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
           val childrenList = res.children map (_.substring(chroot.length))
-          val finalRep = GetChildrenResponse(childrenList, Some(watch))
+          val finalRep = GetChildrenResponse(childrenList, Some(watcher))
           Future(finalRep)
         } else {
           val childrenList = res.children map (_.substring(chroot.length))
@@ -312,9 +362,9 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
-          val watch = watchManager.registerWatcher(path, Watch.RequestType.children)
+          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
           val childrenList = res.children map (_.substring(chroot.length))
-          val finalRep = GetChildren2Response(childrenList, res.stat, Some(watch))
+          val finalRep = GetChildren2Response(childrenList, res.stat, Some(watcher))
           Future(finalRep)
         } else {
           val childrenList = res.children map (_.substring(chroot.length))
@@ -345,7 +395,7 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.registerWatcher(ZookeeperDefs.CONFIG_NODE, Watch.RequestType.data)
+          val watch = watchManager.registerWatcher(ZookeeperDefs.CONFIG_NODE, Watch.WatcherMapType.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else Future(res)
@@ -375,8 +425,8 @@ class ZkClient(
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.registerWatcher(path, Watch.RequestType.data)
-          val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
+          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.data)
+          val finalRep = GetDataResponse(res.data, res.stat, Some(watcher))
           Future(finalRep)
         } else Future(res)
       } else Future.exception(
@@ -477,7 +527,7 @@ class ZkClient(
     path: String,
     watcherType: Int,
     local: Boolean
-    ): Future[Unit] = {
+    ): Future[RepPacket] = {
     PathUtils.validatePath(path)
     val finalPath = prependChroot(path, chroot)
 
@@ -486,41 +536,43 @@ class ZkClient(
       case OpCode.REMOVE_WATCHES => RemoveWatchesRequest(finalPath, watcherType)
     }
 
-    zkRequestService(req) flatMap { rep =>
-      if (rep.err.get == 0) {
-        watchManager.removeWatchers(path, watcherType)
-        Future.Unit
-      }
-      else {
-        if (local) {
-          watchManager.removeWatchers(path, watcherType)
-          Future.Done
-        }
-        else Future.exception(
-          ZookeeperException.create("Error while removing watches", rep.err.get))
-      }
-    }
+    zkRequestService(req)
   }
 
   /**
-   * For the given znode path, removes the specified watcher of given
-   * watcherType.
+   * For the given znode path, removes the specified watcher.
    *
-   * @param path the node path
-   * @param watcherType the watcher type (children, data, any)
+   * @param watcher the watcher to be removed
    * @param local whether watches can be removed locally when there is no
    *              server connection.
    * @return Future[Unit]
    * @since 3.5.0
    */
   def removeWatches(
-    path: String,
-    watcherType: Int,
+    watcher: Watcher,
     local: Boolean
     ): Future[Unit] = {
-    if (!watchManager.isWatcherDefined(path, watcherType))
+    if (!watchManager.isWatcherDefined(watcher))
       throw new IllegalArgumentException("No watch registered for this node")
-    removeWatches(OpCode.CHECK_WATCHES, path, watcherType, local)
+
+    val watcherType = watcher.typ match {
+      case WatcherMapType.data | WatcherMapType.exists => WatcherType.DATA
+      case WatcherMapType.children => WatcherType.CHILDREN
+    }
+    removeWatches(OpCode.CHECK_WATCHES, watcher.path, watcherType, local) flatMap { rep =>
+      if (rep.err.get == 0) {
+        watchManager.removeWatcher(watcher)
+        Future.Unit
+      }
+      else {
+        if (local) {
+          watchManager.removeWatcher(watcher)
+          Future.Done
+        }
+        else Future.exception(
+          ZookeeperException.create("Error while removing watches", rep.err.get))
+      }
+    }
   }
 
   /**
@@ -539,7 +591,20 @@ class ZkClient(
     watcherType: Int,
     local: Boolean
     ): Future[Unit] =
-    removeWatches(OpCode.REMOVE_WATCHES, path, watcherType, local)
+    removeWatches(OpCode.REMOVE_WATCHES, path, watcherType, local) flatMap { rep =>
+      if (rep.err.get == 0) {
+        watchManager.removeWatchers(path, watcherType)
+        Future.Unit
+      }
+      else {
+        if (local) {
+          watchManager.removeWatchers(path, watcherType)
+          Future.Done
+        }
+        else Future.exception(
+          ZookeeperException.create("Error while removing watches", rep.err.get))
+      }
+    }
 
   /**
    * Set the ACL for the node of the given path if such a node exists and the

@@ -85,7 +85,7 @@ _ <- client.exists("/zookeeper/test", false)
 - `/zookeeper/test` : String the node that you want to test
 - `false` : Boolean if you want to set a watch or not on this node
 
-Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Future[WatchEvent]])`
+Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Watcher])`
 
 ### Get ACL
 ```scala
@@ -112,7 +112,7 @@ client.getChildren("/zookeeper", false)
 - `/zookeeper` : String the node that you want to get
 - `false` : Boolean if you want to set a watch on this node
 
-Return value `Future[GetChildrenResponse]` `GetChildrenResponse(children: Seq[String], watch: Option[Future[WatchEvent]])`
+Return value `Future[GetChildrenResponse]` `GetChildrenResponse(children: Seq[String], watch: Option[Watcher])`
 
 ### Get children2
 ```scala
@@ -121,7 +121,7 @@ client.getChildren2("/zookeeper", false)
 - `/zookeeper` : String the node that you want to get
 - `false` : Boolean if you want to set a watch on this node
 
-Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[String], stat: Stat, watch: Option[Future[WatchEvent]])`
+Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[String], stat: Stat, watch: Option[Watcher])`
 
 ### Get Data
 ```scala
@@ -130,7 +130,7 @@ client.getData("/zookeeper/test", false)
 - `/zookeeper/test` : String the node that you want to get
 - `false` : Boolean if you want to set a watch on this node
 
-Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat: Stat, watch: Option[Future[WatchEvent]])`
+Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat: Stat, watch: Option[Watcher])`
 
 ### Set Data
 ```scala

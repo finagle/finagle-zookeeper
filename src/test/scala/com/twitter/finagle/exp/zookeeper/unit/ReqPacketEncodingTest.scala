@@ -40,13 +40,13 @@ class ReqPacketEncodingTest extends FunSuite {
   test("CreateRequest encoding") {
     val requestHeader = new RequestHeader(732, OpCode.CREATE)
     val createRequest = new CreateRequest(
-      "/zookeeeper/test", "CHANGE".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+      "/zookeeper/test", "CHANGE".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
     val packetReq = ReqPacket(Some(requestHeader), Some(createRequest))
 
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.CREATE))
-      .concat(BufString("/zookeeeper/test"))
+      .concat(BufString("/zookeeper/test"))
       .concat(BufArray("CHANGE".getBytes))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
       .concat(Buf.U32BE(CreateMode.EPHEMERAL))
@@ -262,14 +262,14 @@ class ReqPacketEncodingTest extends FunSuite {
   test("RemoveWatchesRequest") {
     val requestHeader = new RequestHeader(732, OpCode.REMOVE_WATCHES)
     val removeWatchesRequest = new RemoveWatchesRequest(
-      "/zookeeper/test", Watch.RequestType.exists)
+      "/zookeeper/test", Watch.WatcherMapType.exists)
     val packetReq = ReqPacket(Some(requestHeader), Some(removeWatchesRequest))
 
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.REMOVE_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(Buf.U32BE(Watch.RequestType.exists))
+      .concat(Buf.U32BE(Watch.WatcherMapType.exists))
 
     assert(packetReq.buf === encoderBuf)
   }
@@ -308,14 +308,14 @@ class ReqPacketEncodingTest extends FunSuite {
 
   test("CheckWatchesRequest") {
     val requestHeader = new RequestHeader(732, OpCode.CHECK_WATCHES)
-    val checkWatchesRequest = new CheckWatchesRequest("/zookeeper/test", Watch.RequestType.data)
+    val checkWatchesRequest = new CheckWatchesRequest("/zookeeper/test", Watch.WatcherMapType.data)
     val packetReq = ReqPacket(Some(requestHeader), Some(checkWatchesRequest))
 
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.CHECK_WATCHES))
       .concat(BufString("/zookeeper/test"))
-      .concat(Buf.U32BE(Watch.RequestType.data))
+      .concat(Buf.U32BE(Watch.WatcherMapType.data))
 
     assert(packetReq.buf === encoderBuf)
   }
