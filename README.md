@@ -1,6 +1,7 @@
 # finagle-zookeeper
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
+Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.
 
 ## Architecture
 ### Client
@@ -41,8 +42,7 @@ client.disconnect
 ```
 
 ### First request
-For an unknown reason please use a for comprehension when sending multiple request at the same time, otherwise your requests won't be sequentialized :
-
+Example of request with sequential composition :
 ```scala
 val res = for {
       acl <- client.getACL("/zookeeper")
