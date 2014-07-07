@@ -34,7 +34,6 @@ val connect = client.connect
         logger.severe("Connect Error")
     }
 ```
-logger is a java.util.logging.Logger
 
 ### Disconnect
 ```
