@@ -7,14 +7,17 @@ import com.twitter.io.Buf
 import com.twitter.util.{Await, Future}
 import java.util
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
+import org.junit.runner.RunWith
 import org.mockito.Matchers._
 import org.mockito.Mockito
 import org.mockito.Mockito.{times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 import org.scalatest.mock.MockitoSugar
 
+@RunWith(classOf[JUnitRunner])
 class BufTransportTest extends FunSuite with MockitoSugar{
   trait TestHelper {
     val deleteReq = DeleteRequest("/zookeeper/node", -1)

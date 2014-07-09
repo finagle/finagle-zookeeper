@@ -7,9 +7,27 @@ import com.twitter.finagle.exp.zookeeper.watcher.Watch
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.{CreateMode, OpCode}
 import com.twitter.io.Buf
 import com.twitter.util.TimeConversions._
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class ReqPacketEncodingTest extends FunSuite {
+  test("CheckWatchesRequest encoding") {
+    val requestHeader = new RequestHeader(732, OpCode.CHECK_WATCHES)
+    val checkWatches = new CheckWatchesRequest(
+      "/zookeeper/test", Watch.WatcherType.CHILDREN)
+    val packetReq = ReqPacket(Some(requestHeader), Some(checkWatches))
+
+    val encoderBuf = Buf.Empty
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.CHECK_WATCHES))
+      .concat(BufString("/zookeeper/test"))
+      .concat(Buf.U32BE(Watch.WatcherType.CHILDREN))
+
+    assert(packetReq.buf === encoderBuf)
+  }
+
   test("ConnectRequest encoding") {
     val connectReq = new ConnectRequest(
       0, 0L, 2000.milliseconds, 0L, Array[Byte](16), true)
@@ -46,6 +64,23 @@ class ReqPacketEncodingTest extends FunSuite {
     val encoderBuf = Buf.Empty
       .concat(Buf.U32BE(732))
       .concat(Buf.U32BE(OpCode.CREATE))
+      .concat(BufString("/zookeeper/test"))
+      .concat(BufArray("CHANGE".getBytes))
+      .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
+      .concat(Buf.U32BE(CreateMode.EPHEMERAL))
+
+    assert(packetReq.buf === encoderBuf)
+  }
+
+  test("Create2Request encoding") {
+    val requestHeader = new RequestHeader(732, OpCode.CREATE2)
+    val create2Request = new Create2Request(
+      "/zookeeper/test", "CHANGE".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+    val packetReq = ReqPacket(Some(requestHeader), Some(create2Request))
+
+    val encoderBuf = Buf.Empty
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.CREATE2))
       .concat(BufString("/zookeeper/test"))
       .concat(BufArray("CHANGE".getBytes))
       .concat(BufSeqACL(Ids.OPEN_ACL_UNSAFE))
@@ -149,6 +184,42 @@ class ReqPacketEncodingTest extends FunSuite {
       .concat(Buf.U32BE(OpCode.GET_CHILDREN2))
       .concat(BufString("/zookeeper/test"))
       .concat(BufBool(true))
+
+    assert(packetReq.buf === encoderBuf)
+  }
+
+  test("ReconfigRequest encoding") {
+    val requestHeader = new RequestHeader(732, OpCode.RECONFIG)
+    val reconfigRequest = new ReconfigRequest(
+      "127.0.0.1:2121",
+      "127.0.0.1:2121",
+      "127.0.0.1:2121",
+      11L
+    )
+    val packetReq = ReqPacket(Some(requestHeader), Some(reconfigRequest))
+
+    val encoderBuf = Buf.Empty
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.RECONFIG))
+      .concat(BufString("127.0.0.1:2121"))
+      .concat(BufString("127.0.0.1:2121"))
+      .concat(BufString("127.0.0.1:2121"))
+      .concat(Buf.U64BE(11L))
+
+    assert(packetReq.buf === encoderBuf)
+  }
+
+  test("RemoveWatches encoding") {
+    val requestHeader = new RequestHeader(732, OpCode.REMOVE_WATCHES)
+    val removeWatches = new RemoveWatchesRequest("/zookeeper/test",
+      Watch.WatcherType.ANY)
+    val packetReq = ReqPacket(Some(requestHeader), Some(removeWatches))
+
+    val encoderBuf = Buf.Empty
+      .concat(Buf.U32BE(732))
+      .concat(Buf.U32BE(OpCode.REMOVE_WATCHES))
+      .concat(BufString("/zookeeper/test"))
+      .concat(Buf.U32BE(Watch.WatcherType.ANY))
 
     assert(packetReq.buf === encoderBuf)
   }

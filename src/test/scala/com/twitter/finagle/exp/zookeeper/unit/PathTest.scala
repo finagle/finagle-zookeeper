@@ -1,8 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class PathTest extends FunSuite {
   test("validate paths") {
     PathUtils.validatePath("/")
