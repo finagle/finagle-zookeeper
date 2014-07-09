@@ -2,7 +2,7 @@
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
-Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.
+*Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.*
 
 ### Client
 - `Client` is based on Finagle 6 client model.

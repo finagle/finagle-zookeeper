@@ -60,6 +60,31 @@ class ResponseDecodingTest extends FunSuite {
     assert(decodedRep === createResponse)
   }
 
+  test("Decode a create2 response") {
+    val create2Response = Create2Response("/zookeeper/test",
+      Stat(0L, 0L, 0L, 0L, 1, 1, 1, 0L, 1, 1, 0L))
+
+    val readBuffer = Buf.Empty
+      .concat(BufString("/zookeeper/test"))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U32BE(1))
+      .concat(Buf.U64BE(0L))
+
+    val (decodedRep, _) = Create2Response
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
+
+    assert(decodedRep === create2Response)
+  }
+
   test("Decode a watch event") {
     val watchEvent = WatchEvent(
       Watch.EventType.NODE_CREATED, Watch.EventState.SYNC_CONNECTED, "/zookeeper/test")
@@ -244,5 +269,18 @@ class ResponseDecodingTest extends FunSuite {
     assert(decodedRep === setDataRep)
   }
 
-  //todo transaction, create2, sync
+  test("Decode a sync response"){
+    val syncResponse = SyncResponse("/zookeeper/test")
+
+    val readBuffer = Buf.Empty
+      .concat(BufString("/zookeeper/test"))
+
+    val (decodedRep, _) = SyncResponse
+      .unapply(readBuffer)
+      .getOrElse(throw new RuntimeException)
+
+    assert(decodedRep === syncResponse)
+  }
+
+  //todo transaction
 }
