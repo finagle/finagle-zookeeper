@@ -13,7 +13,7 @@ import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
-class ResponseMatcher(trans: Transport[Buf, Buf]) {
+class RepDispatcher(trans: Transport[Buf, Buf]) {
   sealed case class ResponsePacket(header: Option[ReplyHeader], body: Option[Response])
   sealed case class RequestRecord(opCode: Int, xid: Option[Int])
 
@@ -49,51 +49,37 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
           val currentReq: Option[(RequestRecord, Promise[RepPacket])] =
             if (processedReq.size > 0) Some(processedReq.front) else None
 
-          decoder.read(currentReq, buffer) rescue {
+          decoder.read(currentReq, buffer) onFailure { exc =>
             // If this exception is associated to a request, then propagate to the promise
-            case exc => if (currentReq.isDefined) {
-              processedReq.dequeue()._2.setException(exc)
-              Future.exception(exc)
-            } else Future.exception(exc)
+            currentReq match {
+              case Some((rec, p)) =>
+                p.setException(exc)
+                processedReq.dequeue()
+              case _ =>
+            }
           }
 
         case Throw(exc) => exc match {
-          case exc: Exception
-            if exc.isInstanceOf[ChannelException]
-              || exc.isInstanceOf[WriteException] =>
-            failDispatcher(exc)
-            Future.exception(new CancelledRequestException(exc))
+          case exc: Exception =>
+            if (exc.isInstanceOf[ChannelException]
+              || exc.isInstanceOf[WriteException])
+              failDispatcher(exc)
 
-          case exc: Exception => Future.exception(new CancelledRequestException(exc))
+            Future.exception(new CancelledRequestException(exc))
         }
       }
     } else Future.exception(new CancelledRequestException)
 
-    fullRep transform {
-      case Return(rep) => rep.body match {
-        // This is a notification
-        case Some(event: WatchEvent) => Future.Done
-
-        // This is a Response with Body
-        case Some(resp: Response) =>
-          // The request record is dequeued now that it's satisfied
-          processedReq.dequeue()._2.setValue(RepPacket(
-          { rep.header map (header => Some(header.err)) getOrElse None },
-          rep.body))
-          Future.Done
-
-        // This is a Response without Body
-        case None =>
-          processedReq.dequeue()._2.setValue(RepPacket(
-          { rep.header map (header => Some(header.err)) getOrElse None },
-          rep.body))
-          Future.Done
+    fullRep onSuccess { rep =>
+      rep.body match {
+        case Some(_: WatchEvent) =>
+        case Some(_: Response) | None =>
+          val p = processedReq.dequeue()._2
+          p.setValue(RepPacket(rep.header map { _.err }, rep.body))
+        case _ =>
       }
-
-      // This case is already handled during decoder.read (see onFailure)
-      case Throw(exc) => Future.Done
     }
-  }
+  }.unit
 
   /**
    * Reads from the transport until the session is closed or the connection
@@ -199,7 +185,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
 
         case Throw(exc1) => exc1 match {
           case exc: Exception if exc.isInstanceOf[ZkDecodingException]
-            || exc.isInstanceOf[ZkDispatchingException] =>
+            | exc.isInstanceOf[ZkDispatchingException] =>
 
             readNotification(buffer) match {
               case Return(watch) => watch
@@ -363,7 +349,7 @@ class ResponseMatcher(trans: Transport[Buf, Buf]) {
           case Throw(exc) => exc match {
             case exc: Exception
               if exc.isInstanceOf[ChannelException]
-                || exc.isInstanceOf[WriteException] =>
+                | exc.isInstanceOf[WriteException] =>
               failDispatcher(exc)
               Future.exception(new CancelledRequestException(exc))
 

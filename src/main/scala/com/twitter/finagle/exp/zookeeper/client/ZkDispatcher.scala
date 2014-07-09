@@ -8,7 +8,7 @@ import com.twitter.util._
 
 class ZkDispatcher(trans: Transport[Buf, Buf])
   extends GenSerialClientDispatcher[ReqPacket, RepPacket, Buf, Buf](trans) {
-  val responseMatcher = new ResponseMatcher(trans)
+  val responseMatcher = new RepDispatcher(trans)
 
   protected def dispatch(req: ReqPacket, p: Promise[RepPacket]): Future[Unit] = {
     responseMatcher.write(req) respond { resp =>
