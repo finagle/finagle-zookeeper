@@ -26,7 +26,7 @@ private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer
   val onClose: Future[Throwable] = trans.onClose
   def remoteAddress: SocketAddress = trans.remoteAddress
 
-  def read(): Future[Buf] =
+  def read(): Future[Buf] = this.synchronized {
     read(4) flatMap {
       case Buf.U32BE(len, _) if len < 0 || len >= maxBuffer =>
         // Emptying buffer before throwing
@@ -34,6 +34,7 @@ private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer
         Future.exception(new IOException("Packet len" + len + " is out of range!"))
       case Buf.U32BE(len, _) => read(len)
     }
+  }
 
   def read(len: Int): Future[Buf] =
     if (buf.length < len) {
