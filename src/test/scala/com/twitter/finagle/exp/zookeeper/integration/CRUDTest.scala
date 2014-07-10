@@ -9,7 +9,6 @@ import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class CRUDTest extends FunSuite with IntegrationConfig {
   /* Configure your server here */
   val ipAddress: String = "127.0.0.1"

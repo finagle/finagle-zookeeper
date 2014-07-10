@@ -1,11 +1,10 @@
 package com.twitter.finagle.exp.zookeeper.session
 
-import java.util.concurrent.atomic.AtomicBoolean
-
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.session.Session.{PingSender, States}
 import com.twitter.finagle.exp.zookeeper.{ConnectRequest, ConnectResponse, ReplyHeader, WatchEvent}
-import com.twitter.util.{Try, Duration, Future}
+import com.twitter.util.{Duration, Try}
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Session manager is used to manage sessions during client life
@@ -36,16 +35,18 @@ class SessionManager(canBeRo: Boolean) {
    * and if current session has a fake session ID ( never connected
    * to RW server)
    *
+   * @param sessionTimeout an optional timeout for the session
    * @return a customized ConnectResponse
    */
-  def buildReconnectRequest(): ConnectRequest = {
+  def buildReconnectRequest(sessionTimeout: Option[Duration] = None): ConnectRequest = {
     val sessionId = if (session.hasFakeSessionId.get) 0
     else session.id
+    val sessTimeout = sessionTimeout getOrElse session.diseredTimeout
 
     ConnectRequest(
       0,
       session.lastZxid.get(),
-      session.diseredTimeout,
+      sessTimeout,
       sessionId,
       session.password,
       canBeRo
@@ -79,7 +80,7 @@ class SessionManager(canBeRo: Boolean) {
     ZkClient.logger.info(
       "Connected to session with ID: %d".format(conRep.sessionId))
 
-    reset()
+    session.stop()
     session = new Session(
       conRep.sessionId,
       conRep.passwd,
@@ -103,14 +104,17 @@ class SessionManager(canBeRo: Boolean) {
       case 0 => // Ok error code
       case -4 =>
         session.currentState.set(States.CONNECTION_LOSS)
+        session.stop()
         ZkClient.logger.warning("Received CONNECTION_LOSS event from server")
       case -112 =>
         session.currentState.set(States.SESSION_EXPIRED)
+        session.stop()
         ZkClient.logger.warning("Session %d has expired".format(session.id))
       case -115 =>
         session.currentState.set(States.AUTH_FAILED)
         ZkClient.logger.warning("Authentication to server has failed")
       case -118 => session.currentState.set(States.SESSION_MOVED)
+        session.stop()
         ZkClient.logger.warning("Session has moved to another server")
       case _ =>
     }
@@ -165,19 +169,9 @@ class SessionManager(canBeRo: Boolean) {
    */
   def reinit(
     conReq: ConnectResponse,
-    pinger: PingSender): Try[Unit] = {
-    session.reset()
+    pinger: PingSender
+    ): Try[Unit] = {
+    session.stop()
     session.reinit(conReq, pinger)
-  }
-
-  /**
-   * Use reset before reconnection to a server with a new session
-   * it will clean up connection and manager.
-   *
-   * @return Unit
-   */
-  private[this] def reset() {
-    session.reset()
-    session.hasFakeSessionId.set(true)
   }
 }

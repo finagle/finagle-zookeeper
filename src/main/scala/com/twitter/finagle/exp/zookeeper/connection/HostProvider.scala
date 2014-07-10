@@ -99,6 +99,7 @@ private[finagle] class HostProvider(
   /**
    * Find a server to connect to, if no server is found an exception is thrown
    *
+   * @throws NoServerFound if no host is found
    * @return Future[String] or Exception
    */
   def findServer(serverList: Option[Seq[String]] = None): Future[String] = {

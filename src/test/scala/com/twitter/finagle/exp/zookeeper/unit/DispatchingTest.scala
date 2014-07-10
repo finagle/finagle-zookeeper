@@ -138,9 +138,9 @@ class DispatchingTest extends FunSuite with MockitoSugar {
     new TestHelper {
       Await.ready(dispatcher(configDispatcher))
       when(transport.write(any[Buf])) thenReturn Future.Done
-      when(transport.read()) thenReturn {
+      when(transport.read()) thenReturn
         Future.exception(new ChannelClosedException())
-      }
+
       intercept[CancelledRequestException] {
         Await.result(dispatcher(deleteReq))
       }
