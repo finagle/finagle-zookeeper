@@ -2,7 +2,7 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import org.scalatest.FunSuite
 
-class HostProvider extends FunSuite {
+class HostProviderTest extends FunSuite {
 
   test("should test a host") {
 

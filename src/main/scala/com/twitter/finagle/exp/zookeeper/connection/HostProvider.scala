@@ -22,7 +22,7 @@ private[finagle] class HostProvider(
   type TestMethod = String => Future[String]
   val canSearchRwServer = new AtomicBoolean(false)
   var hasStoppedRwServerSearch = Promise[Unit]()
-  private[this] var hostList: Seq[String] = shuffleSeq(HostUtilities.formatHostList(dest))
+  private[this] var hostList: Seq[String] = HostUtilities.shuffleSeq(HostUtilities.formatHostList(dest))
   var seenRwServer: Option[String] = None
   var seenRoServer: Option[String] = None
 
@@ -35,10 +35,9 @@ private[finagle] class HostProvider(
    * @return Unit
    */
   def addHost(hostList: String): Unit = this.synchronized {
-    val newHosts = HostUtilities.formatHostList(hostList).toSeq
-    newHosts map HostUtilities.testIpAddress
+    val newHosts = HostUtilities.formatAndTest(hostList).toSeq
     this.hostList ++= newHosts.diff(this.hostList)
-    this.hostList = shuffleSeq(this.hostList)
+    this.hostList = HostUtilities.shuffleSeq(this.hostList)
   }
 
   /**
@@ -48,24 +47,8 @@ private[finagle] class HostProvider(
    * @return Unit
    */
   def removeHost(hostList: String): Unit = this.synchronized {
-    val badHosts = HostUtilities.formatHostList(hostList)
-    badHosts map HostUtilities.testIpAddress
+    val badHosts = HostUtilities.formatAndTest(hostList)
     this.hostList = this.hostList filterNot (badHosts.contains(_))
-  }
-
-  /**
-   * A simple way to shuffle host list, thus we can dispatch clients
-   * on several hosts.
-   *
-   * @param seq sequence to shuffle
-   * @tparam T sequence type
-   * @return the freshly shuffled sequence
-   */
-  def shuffleSeq[T](seq: Seq[T]): Seq[T] = seq match {
-    case Seq() => Seq[T]()
-    case xs =>
-      val i = Random.nextInt(xs.size)
-      xs(i) +: Random.shuffle(xs.take(i) ++ xs.drop(i + 1))
   }
 
   /**
@@ -107,14 +90,14 @@ private[finagle] class HostProvider(
     val finalHostList = {
       if (serverList.isDefined) {
         serverList.get map HostUtilities.testIpAddress
-        shuffleSeq(serverList.get)
+        HostUtilities.shuffleSeq(serverList.get)
       }
       else {
         if (seenRwServer.isDefined)
           seenRwServer.get +:
-            shuffleSeq(hostList.filter(_ == seenRwServer.get))
+            HostUtilities.shuffleSeq(hostList.filter(_ == seenRwServer.get))
 
-        else shuffleSeq(hostList)
+        else HostUtilities.shuffleSeq(hostList)
       }
     }
     // Will try to find server using isro request first
@@ -164,7 +147,7 @@ private[finagle] class HostProvider(
    * @return address of an available RW server
    */
   def findRwServer(timeInterval: Duration): Future[String] =
-    scanHostList(shuffleSeq(hostList))(withIsroRequest) transform {
+    scanHostList(HostUtilities.shuffleSeq(hostList))(withIsroRequest) transform {
       // Found a RW server, best choice
       case Return(server) =>
         canSearchRwServer.set(false)
@@ -214,7 +197,7 @@ private[finagle] class HostProvider(
    * @return Future.Done when the action is completed
    */
   def preventiveRwServerSearch(): Future[Unit] =
-    scanHostList(shuffleSeq(hostList))(withIsroRequest) transform {
+    scanHostList(HostUtilities.shuffleSeq(hostList))(withIsroRequest) transform {
       case Return(server) => Future.Done
       case Throw(exc) =>
         scanHostList(hostList)(withConnectRequest).unit rescue {
@@ -398,9 +381,10 @@ object HostUtilities {
       throw new IllegalArgumentException("Host list is empty")
     else list.trim.split(",")
 
-  def formatAndTest(list: String) {
+  def formatAndTest(list: String): Seq[String] = {
     val seq = formatHostList(list)
     seq map HostUtilities.testIpAddress
+    seq
   }
 
   def testIpAddress(address: String) {
@@ -409,6 +393,21 @@ object HostUtilities {
       throw new IllegalArgumentException(
         "Address %s does not respect this format x.x.x.x:port".format(address))
     else ACL.ipToBytes(addressAndPort(0))
+  }
+
+  /**
+   * A simple way to shuffle host list, thus we can dispatch clients
+   * on several hosts.
+   *
+   * @param seq sequence to shuffle
+   * @tparam T sequence type
+   * @return the freshly shuffled sequence
+   */
+  def shuffleSeq[T](seq: Seq[T]): Seq[T] = seq match {
+    case Seq() => Seq[T]()
+    case xs =>
+      val i = Random.nextInt(xs.size)
+      xs(i) +: Random.shuffle(xs.take(i) ++ xs.drop(i + 1))
   }
 
   object hostStates extends Enumeration {

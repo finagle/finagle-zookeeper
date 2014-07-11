@@ -105,7 +105,7 @@ class PreProcessService(
    * @return
    */
   private[this] def isROCheck(req: Request): Try[Unit] = {
-    val isro = sessionManager.session.isRO.get()
+    lazy val isro = sessionManager.session.isRO.get()
 
     def testRO(): Try[Unit] =
       if (isro) actOnRO()
@@ -117,7 +117,6 @@ class PreProcessService(
     }
 
     req match {
-      case req: CheckVersionRequest => testRO()
       case req: CreateRequest => testRO()
       case req: Create2Request => testRO()
       case req: DeleteRequest => testRO()
