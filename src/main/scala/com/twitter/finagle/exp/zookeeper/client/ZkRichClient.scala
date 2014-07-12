@@ -19,15 +19,20 @@ class ZkClient(
   protected[this] val params: ClientHandler
   ) extends Closable with ClientManager {
 
-  private[finagle] val connectionManager = new ConnectionManager(
-    dest,
-    params.canReadOnly,
-    params.timeBetweenPrevSrch,
-    params.timeBetweenRwSrch)
+  private[finagle] val connectionManager =
+    new ConnectionManager(
+      dest,
+      label,
+      params.canReadOnly,
+      params.timeBetweenPrevSrch,
+      params.timeBetweenRwSrch)
+
   private[finagle] val sessionManager = new SessionManager(params.canReadOnly)
-  val watchManager: WatcherManager = new WatcherManager(params.chroot, params.autoWatchReset)
+  val watchManager: WatcherManager =
+    new WatcherManager(params.chroot, params.autoWatchReset)
   private[finagle] val zkRequestService =
     new PreProcessService(connectionManager, sessionManager, this)
+
   @volatile protected[this] var authInfo: Set[Auth] = Set()
 
   def session: Session = sessionManager.session

@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class ConnectionManager(
   dest: String,
+  label: Option[String],
   canBeRo: Boolean,
   timeForPreventive: Option[Duration],
   timeForRoMode: Option[Duration]
@@ -82,7 +83,7 @@ class ConnectionManager(
   private[this] def connect(server: String): Unit = {
     if (connection.isDefined) connection.get.close()
     activeHost = Some(server)
-    connection = Some(new Connection(ZookeeperStackClient.newClient(server)))
+    connection = Some(new Connection(newServiceFactory(server)))
     isInitiated.set(true)
 
     ZkClient.logger.info("Now connected to %s".format(server))
@@ -99,6 +100,15 @@ class ConnectionManager(
       case Return(server) => Future(connect(server))
       case Throw(exc) => Future.exception(exc)
     }
+
+  /**
+   * Creates a new service factory.
+   * @param server the server to connect to
+   * @return a brand new service factory
+   */
+  def newServiceFactory(server: String): ServiceFactory[ReqPacket, RepPacket] =
+    if (label.isDefined) ZookeeperStackClient.newClient(server, label.get)
+    else ZookeeperStackClient.newClient(server)
 
   /**
    * Test a server with isro request and connect request, then connect to it
@@ -143,7 +153,7 @@ class ConnectionManager(
   def initConnectionManager(): Future[Unit] =
     if (!isInitiated.get())
       hostProvider.findServer() flatMap { server =>
-        connection = Some(new Connection(ZookeeperStackClient.newClient(server)))
+        connection = Some(new Connection(newServiceFactory(server)))
         hostProvider.startPreventiveSearch()
         isInitiated.set(true)
         Future.Unit

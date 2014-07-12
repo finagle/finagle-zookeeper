@@ -1,11 +1,9 @@
 package com.twitter.finagle.exp.zookeeper
 
-
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.PipeliningDispatcher
 import com.twitter.finagle.exp.zookeeper.client.{ClientHandler, ZkClient, ZkDispatcher}
 import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport, ZookeeperTransporter}
-import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.{Client, Name, ServiceFactory, Stack}
 import com.twitter.io.Buf
 import com.twitter.util.Duration
@@ -23,38 +21,26 @@ import org.jboss.netty.buffer.ChannelBuffer
  * which is responsible framing Buf and converting to Buf.
  * It is also reading the request by copying the corresponding buffer in a Buf.
  */
-/*object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
-  name = "zookeeper",
-  pool = { _ => identity },
-  endpointer = Bridge[Buf, Buf, ReqPacket, RepPacket](
-    NettyTrans(_, _) map { new ZkTransport(_) }, new ZkDispatcher(_)))
-
-object ZooKeeper extends Client[ReqPacket, RepPacket] {
-  def newClient(
-    name: Name,
-    label: String
-    ): ServiceFactory[ReqPacket, RepPacket] =
-    ZooKeeperClient.newClient(name, label)
-
-  def newRichClient(hostsList: String): ZkClient =
-    new ZkClient(hostList = hostsList)
-}*/
-
 trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket] =>
-  val stackClient: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer]
+  val params: Stack.Params
   def newRichClient(dest: String): ZkClient =
-    new ZkClient(dest, None, ClientHandler(stackClient.params))
+    new ZkClient(dest, None, ClientHandler(params))
 
   def newRichClient(dest: String, label: String): ZkClient =
-    new ZkClient(dest, None, ClientHandler(stackClient.params))
+    new ZkClient(dest, None, ClientHandler(params))
 }
 
-object ZookeeperStackClient extends StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer] {
+object ZookeeperStackClient
+  extends StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer] {
   protected val newTransporter = ZookeeperTransporter(_)
-  protected val newDispatcher: Stack.Params => Dispatcher = { prms =>
-    trans: Transport[ChannelBuffer, ChannelBuffer] => new ZkDispatcher(new ZkTransport(trans))
+  protected val newDispatcher: Stack.Params => Dispatcher = { params =>
+    trans => new ZkDispatcher(new ZkTransport(trans))
   }
-  override def newClient(dest: Name, label: String): ServiceFactory[ReqPacket, RepPacket] = {
+
+  override def newClient(
+    dest: Name,
+    label: String
+    ): ServiceFactory[ReqPacket, RepPacket] = {
     super.newClient(dest, label)
   }
 }
@@ -62,13 +48,41 @@ object ZookeeperStackClient extends StackClient[ReqPacket, RepPacket, ChannelBuf
 class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer])
   extends StackClientLike[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer, ZookeeperClient](client)
   with ZookeeperRichClient {
-
-  override val stackClient = client
+  override val params = client.params
   protected def newInstance(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer]) =
     new ZookeeperClient(client)
 
+  def withAutoReconnect(
+    timeBetweenAttempts: Option[Duration],
+    timeBetweenLinkCheck: Option[Duration],
+    maxConsecutiveRetries: Option[Int],
+    maxReconnectAttempts: Option[Int]
+    ) =
+    configured(ClientHandler.AutoReconnect(
+      true,
+      timeBetweenAttempts,
+      timeBetweenLinkCheck,
+      maxConsecutiveRetries,
+      maxReconnectAttempts
+    ))
+
+  def withAutoRwServerSearch(duration: Option[Duration]) =
+    configured(ClientHandler.AutoRwServerSearch(duration))
+
+  def withAutoWatchReset() =
+    configured(ClientHandler.AutoWatchReset(true))
+
+  def withCanReadOnly() =
+    configured(ClientHandler.CanReadOnly(true))
+
   def withChroot(path: String): ZookeeperClient =
     configured(ClientHandler.Chroot(path))
+
+  def withPreventiveSearch(duration: Option[Duration]) =
+    configured(ClientHandler.PreventiveSearch(duration))
+
+  def withSessionTimeout(duration: Duration) =
+    configured(ClientHandler.SessionTimeout(duration))
 }
 
 object Zookeeper extends ZookeeperClient(
@@ -78,7 +92,6 @@ object Zookeeper extends ZookeeperClient(
     idleTime = Duration.Top,
     maxWaiters = Int.MaxValue))
 )
-
 
 /**
  * Simple client is used to send isro request ( not framed request )
