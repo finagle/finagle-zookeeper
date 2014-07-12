@@ -1,11 +1,15 @@
 package com.twitter.finagle.exp.zookeeper
 
-import com.twitter.finagle.{Client, Name, ServiceFactory}
-import com.twitter.finagle.client.{Bridge, DefaultClient}
+
+import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.PipeliningDispatcher
-import com.twitter.finagle.exp.zookeeper.client.{ZkClient, ZkDispatcher}
-import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport}
+import com.twitter.finagle.exp.zookeeper.client.{ClientHandler, ZkClient, ZkDispatcher}
+import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport, ZookeeperTransporter}
+import com.twitter.finagle.transport.Transport
+import com.twitter.finagle.{Client, Name, ServiceFactory, Stack}
 import com.twitter.io.Buf
+import com.twitter.util.Duration
+import org.jboss.netty.buffer.ChannelBuffer
 
 /**
  * -- ZkDispatcher
@@ -16,10 +20,10 @@ import com.twitter.io.Buf
  *
  * -- ZkTransport
  * We need to frame Rep here, that's why we use ZkTransport
- * which is responsible framing Buf and converting to ChannelBuffer.
+ * which is responsible framing Buf and converting to Buf.
  * It is also reading the request by copying the corresponding buffer in a Buf.
  */
-object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
+/*object ZooKeeperClient extends DefaultClient[ReqPacket, RepPacket](
   name = "zookeeper",
   pool = { _ => identity },
   endpointer = Bridge[Buf, Buf, ReqPacket, RepPacket](
@@ -34,7 +38,47 @@ object ZooKeeper extends Client[ReqPacket, RepPacket] {
 
   def newRichClient(hostsList: String): ZkClient =
     new ZkClient(hostList = hostsList)
+}*/
+
+trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket] =>
+  val stackClient: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer]
+  def newRichClient(dest: String): ZkClient =
+    new ZkClient(dest, None, ClientHandler(stackClient.params))
+
+  def newRichClient(dest: String, label: String): ZkClient =
+    new ZkClient(dest, None, ClientHandler(stackClient.params))
 }
+
+object ZookeeperStackClient extends StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer] {
+  protected val newTransporter = ZookeeperTransporter(_)
+  protected val newDispatcher: Stack.Params => Dispatcher = { prms =>
+    trans: Transport[ChannelBuffer, ChannelBuffer] => new ZkDispatcher(new ZkTransport(trans))
+  }
+  override def newClient(dest: Name, label: String): ServiceFactory[ReqPacket, RepPacket] = {
+    super.newClient(dest, label)
+  }
+}
+
+class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer])
+  extends StackClientLike[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer, ZookeeperClient](client)
+  with ZookeeperRichClient {
+
+  override val stackClient = client
+  protected def newInstance(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer]) =
+    new ZookeeperClient(client)
+
+  def withChroot(path: String): ZookeeperClient =
+    configured(ClientHandler.Chroot(path))
+}
+
+object Zookeeper extends ZookeeperClient(
+  ZookeeperStackClient
+    .configured(DefaultPool.Param(
+    low = 0, high = 1, bufferSize = 0,
+    idleTime = Duration.Top,
+    maxWaiters = Int.MaxValue))
+)
+
 
 /**
  * Simple client is used to send isro request ( not framed request )

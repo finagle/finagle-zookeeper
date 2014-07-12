@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.transport
 
+import com.twitter.finagle.Stack
 import com.twitter.finagle.netty3.Netty3Transporter
 import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.channel._
@@ -21,3 +22,7 @@ object PipelineFactory extends ChannelPipelineFactory {
 
 object NettyTrans extends Netty3Transporter[ChannelBuffer, ChannelBuffer](
   "zookeeper", PipelineFactory)
+
+object ZookeeperTransporter {
+  def apply(params: Stack.Params) = Netty3Transporter[ChannelBuffer, ChannelBuffer](PipelineFactory, params)
+}

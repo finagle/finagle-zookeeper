@@ -63,7 +63,7 @@ class ConnectionTest extends FunSuite {
   }
 
   test("Test with 2 servers unavailable") {
-    val client = ZooKeeper.newRichClient(
+    val client = Zookeeper.newRichClient(
       "127.0.0.1:2121,127.0.0.1:2151," + ipAddress + ":" + port)
     Await.result(client.connect())
 

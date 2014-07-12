@@ -1,9 +1,9 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
-import java.net.{BindException, ServerSocket}
+import com.twitter.finagle.exp.zookeeper.Zookeeper
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.util.Await
-import com.twitter.finagle.exp.zookeeper.ZooKeeper
+import java.net.{BindException, ServerSocket}
 import org.scalatest.FunSuite
 
 trait IntegrationConfig extends FunSuite{
@@ -25,7 +25,7 @@ trait IntegrationConfig extends FunSuite{
     assume(!isPortAvailable, "A server is required for integration tests, see IntegrationConfig")
     client = {
       if (!isPortAvailable)
-        Some(ZooKeeper.newRichClient(ipAddress + ":" + port))
+        Some(Zookeeper.newRichClient(ipAddress + ":" + port))
       else
         None
     }

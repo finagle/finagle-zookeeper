@@ -82,7 +82,7 @@ class ConnectionManager(
   private[this] def connect(server: String): Unit = {
     if (connection.isDefined) connection.get.close()
     activeHost = Some(server)
-    connection = Some(new Connection(ZooKeeperClient.newClient(server)))
+    connection = Some(new Connection(ZookeeperStackClient.newClient(server)))
     isInitiated.set(true)
 
     ZkClient.logger.info("Now connected to %s".format(server))
@@ -143,7 +143,7 @@ class ConnectionManager(
   def initConnectionManager(): Future[Unit] =
     if (!isInitiated.get())
       hostProvider.findServer() flatMap { server =>
-        connection = Some(new Connection(ZooKeeperClient.newClient(server)))
+        connection = Some(new Connection(ZookeeperStackClient.newClient(server)))
         hostProvider.startPreventiveSearch()
         isInitiated.set(true)
         Future.Unit
