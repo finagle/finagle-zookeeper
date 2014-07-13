@@ -1,21 +1,19 @@
 # finagle-zookeeper
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
-Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.
 
-## Architecture
+*Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.*
+
 ### Client
 - `Client` is based on Finagle 6 client model.
 
-## Commands
+### Commands
 
 Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
 [Finagle documentation](https://twitter.github.io/scala_school/finagle.html#Future) and [Scaladoc](http://twitter.github.io/util/util-core/target/doc/main/api/com/twitter/util/Future.html))
 
 Here is the list of commands supported by version 0.1 :
 
-## Test
-See src/test/scala
 
 ### Client creation
 ```scala

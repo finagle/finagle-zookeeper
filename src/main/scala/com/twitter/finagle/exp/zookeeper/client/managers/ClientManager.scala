@@ -20,7 +20,7 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    */
   private[this] def actIfRO(): Unit = {
-    if (sessionManager.session.isReadOnly.get()
+    if (sessionManager.session.isRO.get()
       && timeBetweenRwSrch.isDefined) {
       startRwSearch()
     }
@@ -72,7 +72,7 @@ with ReadOnlyManager {slf: ZkClient =>
           sessionManager.reinit(conRep, ping) match {
             case Return(unit) =>
               startStateLoop()
-              Future(zkRequestService.unlockServe())
+              Future(zkRequestService.unlockService())
             case Throw(exc) =>
               sessionManager
                 .newSession(conRep, sessionTimeout, ping)
@@ -333,7 +333,7 @@ with ReadOnlyManager {slf: ZkClient =>
     startStateLoop()
     actIfRO()
     connectionManager.hostProvider.startPreventiveSearch()
-    Future(zkRequestService.unlockServe())
+    Future(zkRequestService.unlockService())
   }
 
   /**
@@ -342,7 +342,7 @@ with ReadOnlyManager {slf: ZkClient =>
    * @return Future.Done
    */
   private[finagle] def stopJob(): Future[Unit] =
-    zkRequestService.lockServe() before {
+    zkRequestService.lockService() before {
       stopStateLoop()
       stopRwSearch before
         connectionManager.hostProvider.stopPreventiveSearch

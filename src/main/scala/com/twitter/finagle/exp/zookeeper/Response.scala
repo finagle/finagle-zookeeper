@@ -58,7 +58,7 @@ case class ExistsResponse(
 
 case class ErrorResponse(exception: ZookeeperException) extends OpResult
 
-class EmptyResponse extends Response with OpResult
+case class EmptyResponse() extends Response with OpResult
 
 case class GetACLResponse(acl: Seq[ACL], stat: Stat) extends Response
 

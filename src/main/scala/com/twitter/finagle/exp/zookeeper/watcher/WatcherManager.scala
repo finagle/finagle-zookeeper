@@ -21,7 +21,7 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
 
   def getDataWatchers = this.synchronized(dataWatches)
   def getExistsWatchers = this.synchronized(existsWatches)
-  def getChildWatchers = this.synchronized(childrenWatches)
+  def getChildrenWatchers = this.synchronized(childrenWatches)
 
   /**
    * Should register a new watcher in the corresponding map
@@ -229,7 +229,9 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
       map synchronized {
         map.get(watcher.path) match {
           case Some(watchers) =>
-            map += watcher.path -> (watchers - watcher)
+            val newWatchers = watchers - watcher
+            if (newWatchers.isEmpty) map.remove(watcher.path)
+            else map += watcher.path -> (watchers - watcher)
           case None =>
         }
       }
@@ -238,7 +240,7 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     watcher.typ match {
       case Watch.WatcherMapType.data => removeFromMap(dataWatches, watcher)
       case Watch.WatcherMapType.exists => removeFromMap(existsWatches, watcher)
-      case Watch.WatcherMapType.`children` => removeFromMap(childrenWatches, watcher)
+      case Watch.WatcherMapType.children => removeFromMap(childrenWatches, watcher)
     }
   }
 }

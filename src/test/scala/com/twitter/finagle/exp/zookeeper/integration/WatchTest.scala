@@ -7,7 +7,6 @@ import com.twitter.util.Await
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class WatchTest extends IntegrationConfig {
   /* Configure your server here */
   val ipAddress: String = "127.0.0.1"

@@ -371,7 +371,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
     sessionManager.get.session.stop()
     sessionManager.get.session.currentState.set(States.NOT_CONNECTED)
     // inform connection manager that the connection is no longer valid
-    connectionManager.get.connection.get.isValid.set(false)
+    if (connectionManager.get.connection.isDefined)
+      connectionManager.get.connection.get.isValid.set(false)
     // fail pending requests
     failPendingResponses(exc)
   }
