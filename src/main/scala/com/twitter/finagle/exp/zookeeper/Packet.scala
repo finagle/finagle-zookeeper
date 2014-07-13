@@ -18,7 +18,7 @@ private[finagle]
 case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
   def buf: Buf = if (header.isDefined) {
     request match {
-      case Some(req: Request) => header.get.buf.concat(req.buf)
+      case Some(req) => header.get.buf.concat(req.buf)
       case None => header.get.buf
     }
   } else {
@@ -31,7 +31,7 @@ case class ReqPacket(header: Option[RequestHeader], request: Option[Request]) {
 }
 
 /**
- * Used to represent a response, composed by a StateHeader
+ * Used to represent a response, composed by an optional response's error code
  * and an Option[Response].
  *
  * @param err request's error code

@@ -15,8 +15,8 @@ case class Auth(scheme: String, data: Array[Byte]) extends Data {
     .concat(BufArray(data))
 }
 
-private[finagle] object Id extends DataDecoder[Id] {
-  def unapply(buf: Buf): Option[(Id, Buf)] = {
+object Id extends DataDecoder[Id] {
+  private[finagle] def unapply(buf: Buf): Option[(Id, Buf)] = {
     val BufString(scheme, BufString(id, rem)) = buf
     Some(Id(scheme, id), rem)
   }
@@ -40,15 +40,15 @@ object Ids {
   /**
    * This is a completely open ACL .
    */
-  val OPEN_ACL_UNSAFE = Array[ACL](ACL(Perms.ALL, ANYONE_ID_UNSAFE))
+  val OPEN_ACL_UNSAFE = Seq[ACL](ACL(Perms.ALL, ANYONE_ID_UNSAFE))
 
   /**
    * This ACL gives the creators authentication id's all permissions.
    */
-  val CREATOR_ALL_ACL = Array[ACL](ACL(Perms.ALL, AUTH_IDS))
+  val CREATOR_ALL_ACL = Seq[ACL](ACL(Perms.ALL, AUTH_IDS))
 
   /**
    * This ACL gives the world the ability to read.
    */
-  val READ_ACL_UNSAFE = Array[ACL](ACL(Perms.READ, ANYONE_ID_UNSAFE))
+  val READ_ACL_UNSAFE = Seq[ACL](ACL(Perms.READ, ANYONE_ID_UNSAFE))
 }

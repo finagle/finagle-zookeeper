@@ -44,33 +44,35 @@ case class Stat(
 
 private[finagle] object Stat extends DataDecoder[Stat] {
   def unapply(buf: Buf): Option[(Stat, Buf)] = {
-    val Buf.U64BE(czxid,
-    Buf.U64BE(mzxid,
-    Buf.U64BE(ctime,
-    Buf.U64BE(mtime,
-    Buf.U32BE(version,
-    Buf.U32BE(cversion,
-    Buf.U32BE(aversion,
-    Buf.U64BE(ephemeralOwner,
-    Buf.U32BE(dataLength,
-    Buf.U32BE(numChildren,
-    Buf.U64BE(pzxid,
-    rem
-    ))))))))))) = buf
-
-    Some(
-      Stat(
-        czxid,
-        mzxid,
-        ctime,
-        mtime,
-        version,
-        cversion,
-        aversion,
-        ephemeralOwner,
-        dataLength,
-        numChildren,
-        pzxid),
-      rem)
+    buf match {
+      case Buf.U64BE(czxid,
+      Buf.U64BE(mzxid,
+      Buf.U64BE(ctime,
+      Buf.U64BE(mtime,
+      Buf.U32BE(version,
+      Buf.U32BE(cversion,
+      Buf.U32BE(aversion,
+      Buf.U64BE(ephemeralOwner,
+      Buf.U32BE(dataLength,
+      Buf.U32BE(numChildren,
+      Buf.U64BE(pzxid,
+      rem
+      ))))))))))) =>
+        Some(
+          Stat(
+            czxid,
+            mzxid,
+            ctime,
+            mtime,
+            version,
+            cversion,
+            aversion,
+            ephemeralOwner,
+            dataLength,
+            numChildren,
+            pzxid),
+          rem)
+      case _ => None
+    }
   }
 }

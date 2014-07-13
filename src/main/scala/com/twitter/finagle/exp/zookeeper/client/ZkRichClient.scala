@@ -171,7 +171,7 @@ class ZkClient(
   def create(
     path: String,
     data: Array[Byte],
-    acl: Array[ACL],
+    acl: Seq[ACL],
     createMode: Int): Future[String] = {
 
     val finalPath = prependChroot(path, params.chroot)
@@ -203,7 +203,7 @@ class ZkClient(
   def create2(
     path: String,
     data: Array[Byte],
-    acl: Array[ACL],
+    acl: Seq[ACL],
     createMode: Int): Future[Create2Response] = {
 
     val finalPath = prependChroot(path, params.chroot)

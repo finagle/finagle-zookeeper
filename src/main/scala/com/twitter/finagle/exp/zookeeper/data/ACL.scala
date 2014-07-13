@@ -46,6 +46,8 @@ object ACL extends DataDecoder[ACL] {
     }
   }
 
+  def check(acl: ACL): Unit = check(Seq(acl))
+
   /**
    * Check IP address
    * @param addr the IP address
