@@ -2,7 +2,7 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.PipeliningDispatcher
-import com.twitter.finagle.exp.zookeeper.client.{ClientHandler, ZkClient, ZkDispatcher}
+import com.twitter.finagle.exp.zookeeper.client.{ClientParams, ZkClient, ZkDispatcher}
 import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport, ZookeeperTransporter}
 import com.twitter.finagle.{Client, Name, ServiceFactory, Stack}
 import com.twitter.io.Buf
@@ -24,10 +24,10 @@ import org.jboss.netty.buffer.ChannelBuffer
 trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket] =>
   val params: Stack.Params
   def newRichClient(dest: String): ZkClient =
-    new ZkClient(dest, None, ClientHandler(params))
+    new ZkClient(dest, None, ClientParams(params))
 
   def newRichClient(dest: String, label: String): ZkClient =
-    new ZkClient(dest, None, ClientHandler(params))
+    new ZkClient(dest, Some(label), ClientParams(params))
 }
 
 object ZookeeperStackClient
@@ -58,7 +58,7 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, C
     maxConsecutiveRetries: Option[Int],
     maxReconnectAttempts: Option[Int]
     ) =
-    configured(ClientHandler.AutoReconnect(
+    configured(ClientParams.AutoReconnect(
       true,
       timeBetweenAttempts,
       timeBetweenLinkCheck,
@@ -67,22 +67,22 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, C
     ))
 
   def withAutoRwServerSearch(duration: Option[Duration]) =
-    configured(ClientHandler.AutoRwServerSearch(duration))
+    configured(ClientParams.AutoRwServerSearch(duration))
 
   def withAutoWatchReset() =
-    configured(ClientHandler.AutoWatchReset(true))
+    configured(ClientParams.AutoWatchReset(true))
 
   def withCanReadOnly() =
-    configured(ClientHandler.CanReadOnly(true))
+    configured(ClientParams.CanReadOnly(true))
 
   def withChroot(path: String): ZookeeperClient =
-    configured(ClientHandler.Chroot(path))
+    configured(ClientParams.Chroot(path))
 
   def withPreventiveSearch(duration: Option[Duration]) =
-    configured(ClientHandler.PreventiveSearch(duration))
+    configured(ClientParams.PreventiveSearch(duration))
 
   def withSessionTimeout(duration: Duration) =
-    configured(ClientHandler.SessionTimeout(duration))
+    configured(ClientParams.SessionTimeout(duration))
 }
 
 object Zookeeper extends ZookeeperClient(

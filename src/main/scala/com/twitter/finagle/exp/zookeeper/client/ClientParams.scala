@@ -4,7 +4,7 @@ import com.twitter.finagle.Stack
 import com.twitter.util.Duration
 import com.twitter.util.TimeConversions._
 
-case class ClientHandler(
+case class ClientParams(
   autoReconnect: Boolean,
   autoWatchReset: Boolean,
   chroot: String,
@@ -18,7 +18,7 @@ case class ClientHandler(
   canReadOnly: Boolean
   )
 
-object ClientHandler {
+object ClientParams {
   case class AutoReconnect(
     autoReconnect: Boolean = false,
     timeBetweenAttempts: Option[Duration] = None,
@@ -60,7 +60,7 @@ object ClientHandler {
     override def default: SessionTimeout = SessionTimeout()
   }
 
-  def apply(params: Stack.Params): ClientHandler = {
+  def apply(params: Stack.Params): ClientParams = {
     val AutoReconnect(autoreco, tba, tblc, mcr, mra) = params[AutoReconnect]
     val AutoRwServerSearch(tbrs) = params[AutoRwServerSearch]
     val AutoWatchReset(autoWatch) = params[AutoWatchReset]
@@ -69,7 +69,7 @@ object ClientHandler {
     val PreventiveSearch(tbps) = params[PreventiveSearch]
     val SessionTimeout(sessTimeout) = params[SessionTimeout]
 
-    ClientHandler(
+    ClientParams(
       autoreco,
       autoWatch,
       chrt,

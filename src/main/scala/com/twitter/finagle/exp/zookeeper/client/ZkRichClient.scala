@@ -16,7 +16,7 @@ import com.twitter.util._
 class ZkClient(
   dest: String,
   label: Option[String],
-  protected[this] val params: ClientHandler
+  protected[this] val params: ClientParams
   ) extends Closable with ClientManager {
 
   private[finagle] val connectionManager =
