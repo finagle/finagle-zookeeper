@@ -16,9 +16,9 @@ case class Auth(scheme: String, data: Array[Byte]) extends Data {
 }
 
 object Id extends DataDecoder[Id] {
-  private[finagle] def unapply(buf: Buf): Option[(Id, Buf)] = {
-    val BufString(scheme, BufString(id, rem)) = buf
-    Some(Id(scheme, id), rem)
+  def unapply(buf: Buf): Option[(Id, Buf)] = buf match {
+    case BufString(scheme, BufString(id, rem)) => Some(Id(scheme, id), rem)
+    case _ => None
   }
 }
 

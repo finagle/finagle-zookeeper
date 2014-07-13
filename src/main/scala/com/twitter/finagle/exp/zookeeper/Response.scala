@@ -97,121 +97,126 @@ case class WatchEvent(typ: Int, state: Int, path: String) extends Response
  */
 private[finagle]
 object ConnectResponse extends GlobalRepDecoder[ConnectResponse] {
-  def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = {
-    val Buf.U32BE(protocolVersion,
+  def unapply(buf: Buf): Option[(ConnectResponse, Buf)] = buf match {
+    case Buf.U32BE(protocolVersion,
     Buf.U32BE(timeOut,
     Buf.U64BE(sessionId,
     BufArray(passwd,
     BufBool(isRO,
     rem
-    ))))) = buf
-
-    Some(
-      ConnectResponse(
-        protocolVersion,
-        timeOut.milliseconds,
-        sessionId,
-        passwd,
-        Option(isRO).getOrElse(false)),
-      rem)
+    ))))) =>
+      Some(
+        ConnectResponse(
+          protocolVersion,
+          timeOut.milliseconds,
+          sessionId,
+          passwd,
+          Option(isRO).getOrElse(false)),
+        rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object CreateResponse extends GlobalRepDecoder[CreateResponse] {
-  def unapply(buf: Buf): Option[(CreateResponse, Buf)] = {
-    val BufString(path, rem) = buf
-    Some(CreateResponse(path), rem)
+  def unapply(buf: Buf): Option[(CreateResponse, Buf)] = buf match {
+    case BufString(path, rem) => Some(CreateResponse(path), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object Create2Response extends GlobalRepDecoder[Create2Response] {
-  def unapply(buf: Buf): Option[(Create2Response, Buf)] = {
-    val BufString(path, Stat(stat, rem)) = buf
-    Some(Create2Response(path, stat), rem)
+  def unapply(buf: Buf): Option[(Create2Response, Buf)] = buf match {
+    case BufString(path, Stat(stat, rem)) =>
+      Some(Create2Response(path, stat), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object ErrorResponse extends GlobalRepDecoder[ErrorResponse] {
-  def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = {
-    val Buf.U32BE(err, rem) = buf
-    Some(ErrorResponse(
-      ZookeeperException.create("Exception during the transaction:", err)),
-      rem)
+  def unapply(buf: Buf): Option[(ErrorResponse, Buf)] = buf match {
+    case Buf.U32BE(err, rem) =>
+      Some(ErrorResponse(ZookeeperException.create(
+        "Exception during the transaction:", err)), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object ExistsResponse extends GlobalRepDecoder[ExistsResponse] {
-  def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = {
-    val Stat(stat, rem) = buf
-    Some(ExistsResponse(Some(stat), None), rem)
+  def unapply(buf: Buf): Option[(ExistsResponse, Buf)] = buf match {
+    case Stat(stat, rem) => Some(ExistsResponse(Some(stat), None), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object GetACLResponse extends GlobalRepDecoder[GetACLResponse] {
-  def unapply(buf: Buf): Option[(GetACLResponse, Buf)] = {
-    val BufSeqACL(acl, Stat(stat, _)) = buf
-    Some(GetACLResponse(acl, stat), buf)
+  def unapply(buf: Buf): Option[(GetACLResponse, Buf)] = buf match {
+    case BufSeqACL(acl, Stat(stat, _)) => Some(GetACLResponse(acl, stat), buf)
+    case _ => None
   }
 }
 
 private[finagle]
 object GetChildrenResponse extends GlobalRepDecoder[GetChildrenResponse] {
-  def unapply(buf: Buf): Option[(GetChildrenResponse, Buf)] = {
-    val BufSeqString(children, _) = buf
-    Some(GetChildrenResponse(children, None), buf)
+  def unapply(buf: Buf): Option[(GetChildrenResponse, Buf)] = buf match {
+    case BufSeqString(children, _) =>
+      Some(GetChildrenResponse(children, None), buf)
+    case _ => None
   }
 }
 
 private[finagle]
 object GetChildren2Response extends GlobalRepDecoder[GetChildren2Response] {
-  def unapply(buf: Buf): Option[(GetChildren2Response, Buf)] = {
-    val BufSeqString(children, Stat(stat, _)) = buf
-    Some(GetChildren2Response(children, stat, None), buf)
+  def unapply(buf: Buf): Option[(GetChildren2Response, Buf)] = buf match {
+    case BufSeqString(children, Stat(stat, _)) =>
+      Some(GetChildren2Response(children, stat, None), buf)
+    case _ => None
   }
 }
 
 private[finagle]
 object GetDataResponse extends GlobalRepDecoder[GetDataResponse] {
-  def unapply(buf: Buf): Option[(GetDataResponse, Buf)] = {
-    val BufArray(data, Stat(stat, rem)) = buf
-    Some(GetDataResponse(data, stat, None), rem)
+  def unapply(buf: Buf): Option[(GetDataResponse, Buf)] = buf match {
+    case BufArray(data, Stat(stat, rem)) =>
+      Some(GetDataResponse(data, stat, None), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object ReplyHeader extends GlobalRepDecoder[ReplyHeader] {
-  def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = {
-    val Buf.U32BE(xid, Buf.U64BE(zxid, Buf.U32BE(err, rem))) = buf
-    Some(ReplyHeader(xid, zxid, err), rem)
+  def unapply(buf: Buf): Option[(ReplyHeader, Buf)] = buf match {
+    case Buf.U32BE(xid, Buf.U64BE(zxid, Buf.U32BE(err, rem))) =>
+      Some(ReplyHeader(xid, zxid, err), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object SetACLResponse extends GlobalRepDecoder[SetACLResponse] {
-  def unapply(buf: Buf): Option[(SetACLResponse, Buf)] = {
-    val Stat(stat, rem) = buf
-    Some(SetACLResponse(stat), rem)
+  def unapply(buf: Buf): Option[(SetACLResponse, Buf)] = buf match {
+    case Stat(stat, rem) => Some(SetACLResponse(stat), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object SetDataResponse extends GlobalRepDecoder[SetDataResponse] {
-  def unapply(buf: Buf): Option[(SetDataResponse, Buf)] = {
-    val Stat(stat, rem) = buf
-    Some(SetDataResponse(stat), rem)
+  def unapply(buf: Buf): Option[(SetDataResponse, Buf)] = buf match {
+    case Stat(stat, rem) => Some(SetDataResponse(stat), rem)
+    case _ => None
   }
 }
 
 private[finagle]
 object SyncResponse extends GlobalRepDecoder[SyncResponse] {
-  def unapply(buf: Buf): Option[(SyncResponse, Buf)] = {
-    val BufString(path, rem) = buf
-    Some(SyncResponse(path), rem)
+  def unapply(buf: Buf): Option[(SyncResponse, Buf)] = buf match {
+    case BufString(path, rem) => Some(SyncResponse(path), rem)
+    case _ => None
   }
 }
 
@@ -228,8 +233,9 @@ object TransactionResponse extends GlobalRepDecoder[TransactionResponse] {
 
 private[finagle]
 object WatchEvent extends GlobalRepDecoder[WatchEvent] {
-  def unapply(buf: Buf): Option[(WatchEvent, Buf)] = {
-    val Buf.U32BE(typ, Buf.U32BE(state, BufString(path, rem))) = buf
-    Some(new WatchEvent(typ, state, path), rem)
+  def unapply(buf: Buf): Option[(WatchEvent, Buf)] = buf match {
+    case Buf.U32BE(typ, Buf.U32BE(state, BufString(path, rem))) =>
+      Some(new WatchEvent(typ, state, path), rem)
+    case _ => None
   }
 }

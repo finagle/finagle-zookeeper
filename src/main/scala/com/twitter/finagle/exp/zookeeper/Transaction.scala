@@ -24,9 +24,10 @@ private[finagle] case class MultiHeader(typ: Int, state: Boolean, err: Int)
 }
 
 private[finagle] object MultiHeader extends {
-  def unapply(buf: Buf): Option[(MultiHeader, Buf)] = {
-    val Buf.U32BE(typ, BufBool(done, Buf.U32BE(err, rem))) = buf
-    Some(MultiHeader(typ, done, err), rem)
+  def unapply(buf: Buf): Option[(MultiHeader, Buf)] = buf match {
+    case Buf.U32BE(typ, BufBool(done, Buf.U32BE(err, rem))) =>
+      Some(MultiHeader(typ, done, err), rem)
+    case _ => None
   }
 }
 
