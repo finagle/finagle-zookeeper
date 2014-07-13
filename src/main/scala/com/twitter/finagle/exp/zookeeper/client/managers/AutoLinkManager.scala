@@ -56,16 +56,14 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
     checkSession() rescue {
       case exc: SessionMovedException => Future.exception(exc)
       case exc: ZookeeperException =>
-        if (tries < maxReconnectAttempts.get)
-          checkLink(tries + 1)
-            .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
+        if (tries < maxReconnectAttempts.get) checkLink(tries + 1)
+          .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
         else Future.exception(exc)
       case exc: Throwable => Future.exception(exc)
     } before checkConnection() rescue {
       case exc: ZookeeperException =>
-        if (tries < maxReconnectAttempts.get)
-          checkLink(tries + 1)
-            .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
+        if (tries < maxReconnectAttempts.get) checkLink(tries + 1)
+          .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
         else Future.exception(exc)
       case exc: Throwable => Future.exception(exc)
     }
