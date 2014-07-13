@@ -36,7 +36,7 @@ class Session(
   private[finagle] val lastZxid = new AtomicLong(0L)
   private[this] val xid = new AtomicInteger(2)
 
-  def isReadOnly = this.isRO
+  def isReadOnly: Boolean = this.isRO.get()
 
   def id: Long = sessionID
 
@@ -63,6 +63,7 @@ class Session(
     case States.NOT_CONNECTED |
          States.CLOSED |
          States.SESSION_EXPIRED |
+         States.SESSION_MOVED |
          States.CONNECTION_LOSS => true
     case _ => false
   }
@@ -166,20 +167,6 @@ class Session(
     xid.set(2)
     ZkClient.logger.info(
       "Reconnected to session with ID: %d".format(connectResponse.sessionId))
-  }
-
-  /**
-   * Reset session variables to prepare for reconnection
-   *
-   * @return Unit
-   */
-  private[finagle] def reset() {
-    stopPing()
-    currentState.set(States.NOT_CONNECTED)
-    isClosingSession.set(false)
-    isRO.set(false)
-    xid.set(2)
-    this.pingSender = None
   }
 
   private[finagle] def stop() {

@@ -67,7 +67,7 @@ class PreProcessService(
    *
    * @return Future.Done
    */
-  private[finagle] def lockServe(): Future[Unit] = this.synchronized {
+  private[finagle] def lockService(): Future[Unit] = this.synchronized {
     if (permit.isDefined) Future.Done
     else semaphore.acquire() flatMap { perm =>
       permit = Some(perm)
@@ -80,7 +80,7 @@ class PreProcessService(
    * simply by releasing the semaphore permit.
    *
    */
-  private[finagle] def unlockServe(): Unit = this.synchronized {
+  private[finagle] def unlockService(): Unit = this.synchronized {
     if (permit.isDefined) {
       permit.get.release()
       permit = None
@@ -105,7 +105,7 @@ class PreProcessService(
    * @return
    */
   private[this] def isROCheck(req: Request): Try[Unit] = {
-    val isro = sessionManager.session.isRO.get()
+    lazy val isro = sessionManager.session.isRO.get()
 
     def testRO(): Try[Unit] =
       if (isro) actOnRO()
@@ -117,7 +117,6 @@ class PreProcessService(
     }
 
     req match {
-      case req: CheckVersionRequest => testRO()
       case req: CreateRequest => testRO()
       case req: Create2Request => testRO()
       case req: DeleteRequest => testRO()

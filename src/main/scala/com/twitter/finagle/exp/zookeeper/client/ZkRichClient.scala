@@ -677,7 +677,7 @@ class ZkClient(
         path =>
           prependChroot(path, params.chroot)
       }.toSeq
-      val childWatches: Seq[String] = watchManager.getChildWatchers.keySet.map {
+      val childWatches: Seq[String] = watchManager.getChildrenWatchers.keySet.map {
         path =>
           prependChroot(path, params.chroot)
       }.toSeq
