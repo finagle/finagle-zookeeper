@@ -30,7 +30,7 @@ private[finagle] class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer
     read(4) flatMap {
       case Buf.U32BE(len, _) if len < 0 || len >= maxBuffer =>
         // Emptying buffer before throwing
-        buf = buf.slice(len, buf.length)
+        buf = Buf.Empty
         Future.exception(new IOException("Packet len" + len + " is out of range!"))
       case Buf.U32BE(len, _) => read(len)
     }

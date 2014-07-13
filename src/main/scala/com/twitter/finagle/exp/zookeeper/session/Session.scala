@@ -232,7 +232,9 @@ class Session(
 
 object Session {
   type PingSender = () => Future[Unit]
+
   class SessionAlreadyEstablished(msg: String) extends RuntimeException(msg)
+
   class NoSessionEstablished(msg: String) extends RuntimeException(msg)
 
   /**

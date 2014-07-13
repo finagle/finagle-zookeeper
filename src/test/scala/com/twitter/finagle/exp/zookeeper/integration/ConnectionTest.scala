@@ -8,11 +8,8 @@ import com.twitter.io.Buf
 import com.twitter.io.Buf.ByteArray
 import com.twitter.util.{Await, Future}
 import com.twitter.util.TimeConversions._
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 class ConnectionTest extends FunSuite {
   /* Configure your server here */
   val ipAddress: String = "127.0.0.1"
