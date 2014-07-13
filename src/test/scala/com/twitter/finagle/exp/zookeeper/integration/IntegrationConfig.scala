@@ -4,11 +4,8 @@ import java.net.{BindException, ServerSocket}
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.util.Await
 import com.twitter.finagle.exp.zookeeper.ZooKeeper
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
-@RunWith(classOf[JUnitRunner])
 trait IntegrationConfig extends FunSuite{
   val ipAddress: String
   val port: Int
