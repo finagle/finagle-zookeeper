@@ -20,7 +20,7 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    */
   private[this] def actIfRO(): Unit = {
-    if (sessionManager.session.isReadOnly.get()
+    if (sessionManager.session.isRO.get()
       && params.timeBetweenRwSrch.isDefined) {
       startRwSearch()
     }
@@ -72,7 +72,7 @@ with ReadOnlyManager {slf: ZkClient =>
           sessionManager.reinit(conRep, ping) match {
             case Return(unit) =>
               startStateLoop()
-              Future(zkRequestService.unlockServe())
+              Future(zkRequestService.unlockService())
             case Throw(exc) =>
               sessionManager
                 .newSession(conRep, params.sessionTimeout, ping)
@@ -124,8 +124,11 @@ with ReadOnlyManager {slf: ZkClient =>
       case Return(unit) => onConnect(connectReq, actOnEvent)
       case Throw(exc) => connect(connectReq, None, actOnEvent)
     }
-    else connectionManager.hasAvailableConnection flatMap { available =>
-      if (available) onConnect(connectReq, actOnEvent)
+    else {
+      if (connectionManager.hasAvailableServiceFactory) {
+        connectionManager.connection.get.newService() before
+          onConnect(connectReq, actOnEvent)
+      }
       else connectionManager.findAndConnect() before
         connect(connectReq, host, actOnEvent)
     }
@@ -208,7 +211,7 @@ with ReadOnlyManager {slf: ZkClient =>
             reconnectWithSession(Some(server)) before
               Future(connectionManager.hostProvider.removeHost(hostList))
         case None =>
-            Future(connectionManager.hostProvider.removeHost(hostList))
+          Future(connectionManager.hostProvider.removeHost(hostList))
       }
     }
   }
@@ -222,9 +225,9 @@ with ReadOnlyManager {slf: ZkClient =>
   def disconnect(): Future[Unit] =
     if (sessionManager.canCloseSession) {
       stopJob() before {
-        connectionManager.hasAvailableConnection flatMap { available =>
+        connectionManager.hasAvailableService flatMap { available =>
           if (available) {
-            sessionManager.session.isClosingSession.set(true)
+            sessionManager.session.prepareClose()
             val closeReq = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
 
             connectionManager.connection.get.serve(closeReq) transform {
@@ -333,7 +336,7 @@ with ReadOnlyManager {slf: ZkClient =>
     startStateLoop()
     actIfRO()
     connectionManager.hostProvider.startPreventiveSearch()
-    Future(zkRequestService.unlockServe())
+    Future(zkRequestService.unlockService())
   }
 
   /**
@@ -342,7 +345,7 @@ with ReadOnlyManager {slf: ZkClient =>
    * @return Future.Done
    */
   private[finagle] def stopJob(): Future[Unit] =
-    zkRequestService.lockServe() before {
+    zkRequestService.lockService() before {
       stopStateLoop()
       stopRwSearch before
         connectionManager.hostProvider.stopPreventiveSearch

@@ -347,13 +347,12 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
         trans.write(packet.buf) transform {
           case Return(res) => Future(res)
           case Throw(exc) => exc match {
-            case exc: Exception
-              if exc.isInstanceOf[ChannelException]
-                | exc.isInstanceOf[WriteException] =>
-              failDispatcher(exc)
-              Future.exception(new CancelledRequestException(exc))
+            case exc: Exception =>
+              if (exc.isInstanceOf[ChannelException]
+                || exc.isInstanceOf[WriteException])
+                failDispatcher(exc)
 
-            case exc: Exception => Future.exception(new CancelledRequestException(exc))
+              Future.exception(new CancelledRequestException(exc))
           }
         }
       } else Future.exception(new CancelledRequestException)

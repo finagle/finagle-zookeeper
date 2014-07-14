@@ -130,16 +130,28 @@ class ConnectionManager(
     }
 
   /**
-   * Should say if the current connection is valid or not.
+   * Should say if we have a service factory
    *
    * @return Future[Boolean]
    */
-  private[finagle] def hasAvailableConnection: Future[Boolean] = {
+  private[finagle] def hasAvailableServiceFactory: Boolean = {
+    connection match {
+      case Some(connect) =>
+        connect.isServiceFactoryAvailable && connect.isValid.get()
+      case None => false
+    }
+  }
+
+  /**
+   * Should say if we have a valid Service
+   *
+   * @return Future[Boolean]
+   */
+  private[finagle] def hasAvailableService: Future[Boolean] = {
     connection match {
       case Some(connect) =>
         if (connect.isServiceFactoryAvailable
-          && connect.isValid.get())
-          connect.isServiceAvailable
+          && connect.isValid.get()) connect.isServiceAvailable
         else Future(false)
       case None => Future(false)
     }

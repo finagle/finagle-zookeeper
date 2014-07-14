@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
   val isValid = new AtomicBoolean(true)
-  private[this] val service: Future[Service[ReqPacket, RepPacket]] =
+  private[this] var service: Future[Service[ReqPacket, RepPacket]] =
     serviceFactory.apply()
 
   /**
@@ -65,6 +65,12 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
   def isServiceFactoryAvailable: Boolean = serviceFactory.isAvailable
   def isServiceAvailable: Future[Boolean] = service flatMap
     (svc => Future(svc.isAvailable))
+  def newService(): Future[Unit] = this.synchronized {
+    serviceFactory.apply() flatMap { serv =>
+      service = Future(serv)
+      Future.Done
+    }
+  }
   def serve(req: ReqPacket): Future[RepPacket] = service flatMap (_(req))
 }
 
