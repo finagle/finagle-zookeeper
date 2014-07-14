@@ -323,14 +323,9 @@ class ZkClient(
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
           val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
-          val childrenList = res.children map (_.substring(params.chroot.length))
-          val finalRep = GetChildrenResponse(childrenList, Some(watcher))
+          val finalRep = GetChildrenResponse(res.children, Some(watcher))
           Future(finalRep)
-        } else {
-          val childrenList = res.children map (_.substring(params.chroot.length))
-          val finalRep = GetChildrenResponse(childrenList, None)
-          Future(finalRep)
-        }
+        } else Future(rep.asInstanceOf[GetChildrenResponse])
       } else Future.exception(
         ZookeeperException.create("Error while getChildren", rep.err.get))
     }
@@ -358,14 +353,9 @@ class ZkClient(
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
           val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
-          val childrenList = res.children map (_.substring(params.chroot.length))
-          val finalRep = GetChildren2Response(childrenList, res.stat, Some(watcher))
+          val finalRep = GetChildren2Response(res.children, res.stat, Some(watcher))
           Future(finalRep)
-        } else {
-          val childrenList = res.children map (_.substring(params.chroot.length))
-          val finalRep = GetChildren2Response(childrenList, res.stat, None)
-          Future(finalRep)
-        }
+        } else Future(rep.asInstanceOf[GetChildren2Response])
       } else Future.exception(
         ZookeeperException.create("Error while getChildren2", rep.err.get))
     }

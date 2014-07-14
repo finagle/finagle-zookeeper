@@ -1,6 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.watcher
 
 import com.twitter.finagle.exp.zookeeper.WatchEvent
+import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.watcher.Watch.WatcherMapType
 import com.twitter.util.Promise
 import scala.collection.mutable
@@ -141,10 +142,23 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    * @return Unit
    */
   private[finagle] def process(watchEvent: WatchEvent) {
+    val path: String = if (chroot.length > 0) {
+      val serverPath = watchEvent.path
+      if (serverPath == chroot) "/"
+      else if (serverPath.length > chroot.length)
+        watchEvent.path.substring(chroot.length)
+      else {
+        ZkClient.logger.warning("Got server path " + watchEvent.path
+          + " which is too short for chroot path "
+          + chroot)
+        watchEvent.path
+      }
+    } else watchEvent.path
+
     val event = WatchEvent(
       watchEvent.typ,
       watchEvent.state,
-      watchEvent.path.substring(chroot.length))
+      path)
 
     event.typ match {
       case Watch.EventType.NONE =>
