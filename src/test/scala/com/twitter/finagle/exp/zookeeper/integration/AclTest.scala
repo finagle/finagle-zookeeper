@@ -2,9 +2,9 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
-import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth, Ids}
-import com.twitter.finagle.exp.zookeeper.{NodeExistsException, InvalidAclException, NoAuthException}
-import com.twitter.util.{Await, Future}
+import com.twitter.finagle.exp.zookeeper.data.{Id, ACL, Auth, Ids}
+import com.twitter.finagle.exp.zookeeper.{InvalidAclException, NoAuthException, NodeExistsException}
+import com.twitter.util.Await
 import org.scalatest.FunSuite
 
 class AclTest extends FunSuite with IntegrationConfig {
@@ -117,5 +117,75 @@ class AclTest extends FunSuite with IntegrationConfig {
         _ <- client.get.closeService()
       } yield None
     )
+  }
+
+  test("global acl test") {
+    newClient()
+    connect()
+
+    intercept[InvalidAclException] {
+      Await.result {
+        client.get.create("/acltest", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
+      }
+    }
+
+    val acls = Seq[ACL](
+      ACL(Perms.ALL | Perms.ADMIN, Ids.AUTH_IDS),
+      ACL(Perms.ALL | Perms.ADMIN, Id("ip", "127.0.0.1/8"))
+    )
+
+    intercept[InvalidAclException] {
+      Await.result {
+        client.get.create("/acltest", "".getBytes, acls, CreateMode.PERSISTENT)
+      }
+    }
+    Await.result {
+      client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+        client.get.create("/acltest", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
+    }
+
+    disconnect()
+    Await.ready(client.get.closeService())
+
+    newClient()
+    connect()
+
+    Await.result {
+      client.get.addAuth(Auth("digest", "ben:passwd2".getBytes))
+    }
+
+    intercept[NoAuthException] {
+      Await.result {
+        client.get.getData("/acltest")
+      }
+    }
+
+    Await.result {
+      client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+        client.get.getData("/acltest").unit before
+        client.get.setACL("/acltest", Ids.OPEN_ACL_UNSAFE, -1)
+    }
+
+    disconnect()
+    Await.ready(client.get.closeService())
+
+    newClient()
+    connect()
+
+    val rep = Await.result {
+      for {
+        _ <- client.get.getData("/acltest")
+        aclret <- client.get.getACL("/acltest")
+      } yield aclret
+    }
+
+    assert(rep.acl.size === 1)
+    assert(rep.acl === Ids.OPEN_ACL_UNSAFE)
+
+    Await.ready {
+      client.get.delete("/acltest", -1)
+    }
+
+    Await.ready(client.get.closeService())
   }
 }
