@@ -15,20 +15,20 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    * every timeBetweenLinkCheck
    *
    */
-  def startStateLoop(): Unit =
-    if (params.autoReconnect) {
-      require(params.timeBetweenAttempts.isDefined)
-      require(params.timeBetweenLinkCheck.isDefined)
-      require(params.maxConsecutiveRetries.isDefined)
-      require(params.maxReconnectAttempts.isDefined)
+  def startStateLoop(): Unit = {
+    println(autoReconnect)
+    if (autoReconnect) {
+      require(timeBetweenAttempts.isDefined)
+      require(timeBetweenLinkCheck.isDefined)
 
       this.synchronized {
         canCheckLink.set(true)
         if (!CheckLingScheduler.isRunning) {
-          CheckLingScheduler(params.timeBetweenLinkCheck.get)(tryCheckLink())
+          CheckLingScheduler(timeBetweenLinkCheck.get)(tryCheckLink())
         }
       }
     }
+  }
 
   /**
    * Stop the state loop by cancelling its scheduler task
@@ -43,7 +43,7 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    * trying to reconnect.
    */
   private[finagle] def tryCheckLink(): Unit =
-    if (canCheckLink.get()) checkLink()
+    if (canCheckLink.get() && autoReconnect) checkLink()
 
 
   /**
@@ -56,16 +56,16 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
     checkSession() rescue {
       case exc: SessionMovedException => Future.exception(exc)
       case exc: ZookeeperException =>
-        if (tries < params.maxReconnectAttempts.get)
+        if (tries < maxReconnectAttempts)
           checkLink(tries + 1)
-            .delayed(params.timeBetweenAttempts.get)(DefaultTimer.twitter)
+            .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
         else Future.exception(exc)
       case exc: Throwable => Future.exception(exc)
     } before checkConnection() rescue {
       case exc: ZookeeperException =>
-        if (tries < params.maxReconnectAttempts.get)
+        if (tries < maxReconnectAttempts)
           checkLink(tries + 1)
-            .delayed(params.timeBetweenAttempts.get)(DefaultTimer.twitter)
+            .delayed(timeBetweenAttempts.get)(DefaultTimer.twitter)
         else Future.exception(exc)
       case exc: Throwable => Future.exception(exc)
     }
@@ -96,7 +96,7 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    */
   private[this] def checkSession(): Future[Unit] =
     sessionManager.session.state match {
-      case States.CONNECTION_LOSS | States.NOT_CONNECTED =>
+      case States.CONNECTION_LOSS | States.NOT_CONNECTED | States.AUTH_FAILED =>
         ZkClient.logger.warning(("Connection loss with %s," +
           " reconnecting with session...").format(connectionManager.currentHost))
         stopJob() before reconnectWithSession()

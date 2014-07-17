@@ -3,34 +3,43 @@ package com.twitter.finagle.exp.zookeeper.client
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
-import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, ConnectionManager}
-import com.twitter.finagle.exp.zookeeper.data.{Stat, ACL, Auth}
+import com.twitter.finagle.exp.zookeeper.connection.{ConnectionManager, HostUtilities}
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth, Stat}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils
 import com.twitter.finagle.exp.zookeeper.utils.PathUtils._
-import com.twitter.finagle.exp.zookeeper.watcher.Watch.{WatcherType, WatcherMapType}
-import com.twitter.finagle.exp.zookeeper.watcher.{Watcher, Watch, WatcherManager}
+import com.twitter.finagle.exp.zookeeper.watcher.Watch.{WatcherMapType, WatcherType}
+import com.twitter.finagle.exp.zookeeper.watcher.{Watch, Watcher, WatcherManager}
 import com.twitter.logging.Logger
 import com.twitter.util._
 
-class ZkClient(
-  dest: String,
-  label: Option[String],
-  protected[this] val params: ClientParams
-  ) extends Closable with ClientManager {
+trait ZkClient extends Closable with ClientManager {
+  val dest: String
+  val label: Option[String]
+  val canReadOnly: Boolean
+  val chroot: String
+  val sessionTimeout: Duration
+  val autoWatchReset: Boolean
+  val autoReconnect: Boolean
+  val timeBetweenRwSrch: Option[Duration]
+  val timeBetweenPrevSrch: Option[Duration]
+  val maxConsecutiveRetries: Int
+  val maxReconnectAttempts: Int
+  val timeBetweenAttempts: Option[Duration]
+  val timeBetweenLinkCheck: Option[Duration]
 
-  private[finagle] val connectionManager =
+  private[finagle] lazy val connectionManager =
     new ConnectionManager(
       dest,
       label,
-      params.canReadOnly,
-      params.timeBetweenPrevSrch,
-      params.timeBetweenRwSrch)
+      canReadOnly,
+      timeBetweenPrevSrch,
+      timeBetweenRwSrch)
 
-  private[finagle] val sessionManager = new SessionManager(params.canReadOnly)
-  val watchManager: WatcherManager =
-    new WatcherManager(params.chroot, params.autoWatchReset)
-  private[finagle] val zkRequestService =
+  private[finagle] lazy val sessionManager = new SessionManager(canReadOnly)
+  lazy val watchManager: WatcherManager =
+    new WatcherManager(chroot, autoWatchReset)
+  private[finagle] lazy val zkRequestService =
     new PreProcessService(connectionManager, sessionManager, this)
 
   @volatile protected[this] var authInfo: Set[Auth] = Set()
@@ -75,7 +84,7 @@ class ZkClient(
       throw new IllegalArgumentException("No watch registered for this node")
 
     PathUtils.validatePath(path)
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     val req = CheckWatchesRequest(finalPath, watcherType)
 
     zkRequestService(req) flatMap { rep =>
@@ -96,7 +105,7 @@ class ZkClient(
       throw new IllegalArgumentException("No watch registered for this node")
 
     PathUtils.validatePath(watcher.path)
-    val finalPath = prependChroot(watcher.path, params.chroot)
+    val finalPath = prependChroot(watcher.path, chroot)
     val watcherType = watcher.typ match {
       case WatcherMapType.data | WatcherMapType.exists => WatcherType.DATA
       case WatcherMapType.children => WatcherType.CHILDREN
@@ -174,7 +183,7 @@ class ZkClient(
     acl: Seq[ACL],
     createMode: Int): Future[String] = {
 
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
     val req = CreateRequest(finalPath, data, acl, createMode)
@@ -182,7 +191,7 @@ class ZkClient(
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) {
         val finalRep = rep.response.get.asInstanceOf[CreateResponse]
-        Future(finalRep.path.substring(params.chroot.length))
+        Future(finalRep.path.substring(chroot.length))
       } else Future.exception(
         ZookeeperException.create("Error while create", rep.err.get))
     }
@@ -206,7 +215,7 @@ class ZkClient(
     acl: Seq[ACL],
     createMode: Int): Future[Create2Response] = {
 
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
     val req = Create2Request(finalPath, data, acl, createMode)
@@ -214,7 +223,7 @@ class ZkClient(
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) {
         val finalRep = rep.response.get.asInstanceOf[Create2Response]
-        val lastPath = finalRep.path.substring(params.chroot.length)
+        val lastPath = finalRep.path.substring(chroot.length)
         Future(Create2Response(lastPath, finalRep.stat))
       } else Future.exception(
         ZookeeperException.create("Error while create", rep.err.get))
@@ -231,7 +240,7 @@ class ZkClient(
    * @return Future[Unit] or Exception
    */
   def delete(path: String, version: Int): Future[Unit] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = DeleteRequest(finalPath, version)
 
@@ -256,7 +265,7 @@ class ZkClient(
    * @return an ExistsReponse
    */
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = ExistsRequest(finalPath, watch)
 
@@ -289,7 +298,7 @@ class ZkClient(
    * @return Future[GetACLResponse] or Exception
    */
   def getACL(path: String): Future[GetACLResponse] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetACLRequest(finalPath)
 
@@ -314,7 +323,7 @@ class ZkClient(
    * @return Future[GetChildrenResponse] or Exception
    */
   def getChildren(path: String, watch: Boolean = false): Future[GetChildrenResponse] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetChildrenRequest(finalPath, watch)
 
@@ -325,7 +334,7 @@ class ZkClient(
           val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
           val finalRep = GetChildrenResponse(res.children, Some(watcher))
           Future(finalRep)
-        } else Future(rep.asInstanceOf[GetChildrenResponse])
+        } else Future(rep.response.get.asInstanceOf[GetChildrenResponse])
       } else Future.exception(
         ZookeeperException.create("Error while getChildren", rep.err.get))
     }
@@ -344,7 +353,7 @@ class ZkClient(
    * @return Future[GetChildren2Response] or Exception
    */
   def getChildren2(path: String, watch: Boolean = false): Future[GetChildren2Response] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetChildren2Request(finalPath, watch)
 
@@ -355,7 +364,7 @@ class ZkClient(
           val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
           val finalRep = GetChildren2Response(res.children, res.stat, Some(watcher))
           Future(finalRep)
-        } else Future(rep.asInstanceOf[GetChildren2Response])
+        } else Future(rep.response.get.asInstanceOf[GetChildren2Response])
       } else Future.exception(
         ZookeeperException.create("Error while getChildren2", rep.err.get))
     }
@@ -402,7 +411,7 @@ class ZkClient(
    * @return Future[GetDataResponse] or Exception
    */
   def getData(path: String, watch: Boolean = false): Future[GetDataResponse] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetDataRequest(finalPath, watch)
 
@@ -514,7 +523,7 @@ class ZkClient(
     local: Boolean
     ): Future[RepPacket] = {
     PathUtils.validatePath(path)
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
 
     val req = opCode match {
       case OpCode.CHECK_WATCHES => CheckWatchesRequest(finalPath, watcherType)
@@ -602,7 +611,7 @@ class ZkClient(
    * @return the new znode stat
    */
   def setACL(path: String, acl: Seq[ACL], version: Int): Future[Stat] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     ACL.check(acl)
     val req = SetACLRequest(finalPath, acl, version)
@@ -637,7 +646,7 @@ class ZkClient(
     require(data.size < 1048576,
       "The maximum allowable size of the data array is 1 MB (1,048,576 bytes)")
 
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = SetDataRequest(finalPath, data, version)
 
@@ -657,19 +666,19 @@ class ZkClient(
    * @return Future[Unit] or Exception
    */
   private[finagle] def setWatches(): Future[Unit] = {
-    if (params.autoWatchReset) {
+    if (autoWatchReset) {
       val relativeZxid: Long = sessionManager.session.lastZxid.get
       val dataWatches: Seq[String] = watchManager.getDataWatchers.keySet.map {
         path =>
-          prependChroot(path, params.chroot)
+          prependChroot(path, chroot)
       }.toSeq
       val existsWatches: Seq[String] = watchManager.getExistsWatchers.keySet.map {
         path =>
-          prependChroot(path, params.chroot)
+          prependChroot(path, chroot)
       }.toSeq
       val childWatches: Seq[String] = watchManager.getChildrenWatchers.keySet.map {
         path =>
-          prependChroot(path, params.chroot)
+          prependChroot(path, chroot)
       }.toSeq
 
       if (dataWatches.nonEmpty || existsWatches.nonEmpty || childWatches.nonEmpty) {
@@ -703,7 +712,7 @@ class ZkClient(
    * @return the synchronized znode's path
    */
   def sync(path: String): Future[String] = {
-    val finalPath = prependChroot(path, params.chroot)
+    val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = SyncRequest(finalPath)
 
@@ -711,7 +720,7 @@ class ZkClient(
       rep =>
         if (rep.err.get == 0) {
           val res = rep.response.get.asInstanceOf[SyncResponse]
-          val finalRep = SyncResponse(res.path.substring(params.chroot.length))
+          val finalRep = SyncResponse(res.path.substring(chroot.length))
           Future(finalRep.path)
         } else Future.exception(
           ZookeeperException.create("Error while sync", rep.err.get))
@@ -735,7 +744,7 @@ class ZkClient(
    * @return Future[TransactionResponse] or Exception
    */
   def transaction(opList: Seq[OpRequest]): Future[TransactionResponse] = {
-    Transaction.prepareAndCheck(opList, params.chroot) match {
+    Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>
         val req = new TransactionRequest(res)
 
@@ -743,7 +752,7 @@ class ZkClient(
           rep =>
             if (rep.err.get == 0) {
               val res = rep.response.get.asInstanceOf[TransactionResponse]
-              val finalOpList = Transaction.formatPath(res.responseList, params.chroot)
+              val finalOpList = Transaction.formatPath(res.responseList, chroot)
               Future(TransactionResponse(finalOpList))
             } else Future.exception(
               ZookeeperException.create("Error while transaction", rep.err.get))
@@ -754,5 +763,35 @@ class ZkClient(
 }
 
 object ZkClient {
+  def apply(
+    autowatchReset: Boolean,
+    autoRecon: Boolean,
+    canBeReadOnly: Boolean,
+    chrootPath: String,
+    hostList: String,
+    maxConsecRetries: Int,
+    maxReconAttempts: Int,
+    serviceLabel: Option[String],
+    sessTimeout: Duration,
+    timeBtwnAttempts: Option[Duration],
+    timeBtwnLinkCheck: Option[Duration],
+    timeBtwnRwSrch: Option[Duration],
+    timeBtwnPrevSrch: Option[Duration]
+    ): ZkClient = new ZkClient {
+    override val dest: String = hostList
+    val label: Option[String] = serviceLabel
+    val autoReconnect: Boolean = autoRecon
+    val autoWatchReset: Boolean = autowatchReset
+    val canReadOnly: Boolean = canBeReadOnly
+    val chroot: String = chrootPath
+    val maxConsecutiveRetries: Int = maxConsecRetries
+    val maxReconnectAttempts: Int = maxReconAttempts
+    val sessionTimeout: Duration = sessTimeout
+    val timeBetweenRwSrch: Option[Duration] = timeBtwnRwSrch
+    val timeBetweenAttempts: Option[Duration] = timeBtwnAttempts
+    val timeBetweenLinkCheck: Option[Duration] = timeBtwnLinkCheck
+    val timeBetweenPrevSrch: Option[Duration] = timeBtwnPrevSrch
+  }
+
   private[finagle] val logger = Logger("Finagle-zookeeper")
 }

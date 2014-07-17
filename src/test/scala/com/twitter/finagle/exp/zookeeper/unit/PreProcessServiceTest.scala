@@ -25,10 +25,11 @@ import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.mock.MockitoSugar
 
+@RunWith(classOf[JUnitRunner])
 class PreProcessServiceTest extends FunSuite with MockitoSugar {
   trait HelperTrait {
     val con = mock[Connection]
-    val conMgnr = new ConnectionManager("127.0.0.1:2181", false, None, None)
+    val conMgnr = new ConnectionManager("127.0.0.1:2181", None, false, None, None)
     conMgnr.connection = Some(con)
     val sessMngr = new SessionManager(false)
     val autoMngr = mock[AutoLinkManager]

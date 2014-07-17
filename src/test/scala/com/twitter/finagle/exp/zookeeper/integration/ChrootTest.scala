@@ -1,39 +1,27 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
+import java.util
+
 import com.twitter.finagle.exp.zookeeper.Zookeeper
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids
-import com.twitter.util.TimeConversions._
-import com.twitter.util.{Await, Duration}
-import java.util
+import com.twitter.util.Await
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class ChrootTest extends FunSuite with IntegrationConfig {
   test("Chroot works") {
-    val ipAddress: String = "127.0.0.1"
-    val port: Int = 2181
-    val timeOut: Duration = 3000.milliseconds
     val clientWCh = Some(
       Zookeeper
-        .withCanReadOnly()
-        .withAutoWatchReset()
-        .withAutoReconnect(Some(1.minute), Some(30.seconds), Some(10), Some(5))
-        .withAutoRwServerSearch(Some(1.minute))
-        .withAutoWatchReset()
-        .withChroot("/ch1")
-        .withPreventiveSearch(Some(1.minute))
-        .withSessionTimeout(timeOut)
+        .withAutoReconnect()
+        .withZkConfiguration(chroot = "/ch1")
         .newRichClient(ipAddress + ":" + port)
     )
     val client = Some(
       Zookeeper
-        .withCanReadOnly()
-        .withAutoWatchReset()
-        .withAutoReconnect(Some(1.minute), Some(30.seconds), Some(10), Some(5))
-        .withAutoRwServerSearch(Some(1.minute))
-        .withAutoWatchReset()
-        .withPreventiveSearch(Some(1.minute))
-        .withSessionTimeout(timeOut)
+        .withAutoReconnect()
         .newRichClient(ipAddress + ":" + port)
     )
 
@@ -48,7 +36,7 @@ class ChrootTest extends FunSuite with IntegrationConfig {
     Await.ready(clientWCh.get.connect())
 
     val rep = for {
-      createW <- clientWCh.get.create(
+      _ <- clientWCh.get.create(
         "/ch2",
         "hello".getBytes,
         Ids.OPEN_ACL_UNSAFE,
@@ -58,20 +46,20 @@ class ChrootTest extends FunSuite with IntegrationConfig {
       existsW <- clientWCh.get.exists("/ch2", true)
       getChildren <- client.get.getChildren("/ch1", true)
       getChildrenW <- clientWCh.get.getChildren("/", true)
-      setData <- client.get.setData("/ch1", "HELLO".getBytes, -1)
-      setDataW <- clientWCh.get.setData("/ch2", "HELLO1".getBytes, -1)
+      _ <- client.get.setData("/ch1", "HELLO".getBytes, -1)
+      _ <- clientWCh.get.setData("/ch2", "HELLO1".getBytes, -1)
       getData <- client.get.getData("/ch1", false)
       getData2 <- client.get.getData("/ch1/ch2", false)
       getDataW <- clientWCh.get.getData("/ch2", false)
-      deleteW <- clientWCh.get.delete("/ch2", -1)
-      delete <- client.get.delete("/ch1", -1)
-    } yield (createW, exists, exists2, existsW, getChildren,
-        getChildrenW, setData, setDataW, getData,
-        getData2, getDataW, deleteW, delete)
+      _ <- clientWCh.get.delete("/ch2", -1)
+      _ <- client.get.delete("/ch1", -1)
+    } yield (exists, exists2, existsW, getChildren,
+        getChildrenW, getData,
+        getData2, getDataW)
 
-    val (createW, exists, exists2, existsW, getChildren,
-    getChildrenW, setData, setDataW, getData,
-    getData2, getDataW, deleteW, delete) = Await.result(rep)
+    val (exists, exists2, existsW, getChildren,
+    getChildrenW, getData,
+    getData2, getDataW) = Await.result(rep)
 
     assert(exists.stat.isDefined)
     assert(exists.watcher.isDefined)

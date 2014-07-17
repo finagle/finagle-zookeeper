@@ -21,7 +21,7 @@ with ReadOnlyManager {slf: ZkClient =>
    */
   private[this] def actIfRO(): Unit = {
     if (sessionManager.session.isRO.get()
-      && params.timeBetweenRwSrch.isDefined) {
+      && timeBetweenRwSrch.isDefined) {
       startRwSearch()
     }
   }
@@ -38,7 +38,7 @@ with ReadOnlyManager {slf: ZkClient =>
       sessionManager.session.currentState.set(States.CLOSED)
       Future.exception(new ConnectionFailed("Session timeout <= 0"))
     } else {
-      sessionManager.newSession(conRep, params.sessionTimeout, ping)
+      sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession() before startJob()
     }
   }
@@ -64,7 +64,7 @@ with ReadOnlyManager {slf: ZkClient =>
         if (conRep.isRO) {
           sessionManager.reinit(conRep, ping) rescue {
             case exc: Throwable =>
-              Return(sessionManager.newSession(conRep, params.sessionTimeout, ping))
+              Return(sessionManager.newSession(conRep, sessionTimeout, ping))
           }
           configureNewSession() before startJob()
         }
@@ -75,7 +75,7 @@ with ReadOnlyManager {slf: ZkClient =>
               Future(zkRequestService.unlockService())
             case Throw(exc) =>
               sessionManager
-                .newSession(conRep, params.sessionTimeout, ping)
+                .newSession(conRep, sessionTimeout, ping)
               configureNewSession() before startJob()
           }
         }
@@ -100,7 +100,7 @@ with ReadOnlyManager {slf: ZkClient =>
       sessionManager.session.currentState.set(States.NOT_CONNECTED)
       reconnectWithoutSession(host, tries + 1)
     } else {
-      sessionManager.newSession(conRep, params.sessionTimeout, ping)
+      sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession()
       startJob()
     }
@@ -130,7 +130,7 @@ with ReadOnlyManager {slf: ZkClient =>
           onConnect(connectReq, actOnEvent)
       }
       else connectionManager.findAndConnect() before
-        connect(connectReq, host, actOnEvent)
+        onConnect(connectReq, actOnEvent)
     }
 
   /**
@@ -257,7 +257,7 @@ with ReadOnlyManager {slf: ZkClient =>
    */
   def newSession(host: Option[String]): Future[Unit] =
     if (sessionManager.canCreateSession) {
-      val connectReq = sessionManager.buildConnectRequest(params.sessionTimeout)
+      val connectReq = sessionManager.buildConnectRequest(sessionTimeout)
       stopJob() before connect(connectReq, host, actOnConnect)
     } else Future.exception(
       new SessionAlreadyEstablished(
@@ -276,7 +276,7 @@ with ReadOnlyManager {slf: ZkClient =>
     requestBuilder: => ConnectRequest,
     actOnEvent: (Option[String], Int) => ConnectResponseBehaviour
     ): Future[Unit] =
-    if (sessionManager.canReconnect && tries < params.maxConsecutiveRetries.get) {
+    if (sessionManager.canReconnect && tries < maxConsecutiveRetries) {
       stopJob() before connect(
         requestBuilder,
         host,
@@ -322,7 +322,7 @@ with ReadOnlyManager {slf: ZkClient =>
     reconnect(
       host,
       tries,
-      sessionManager.buildConnectRequest(params.sessionTimeout),
+      sessionManager.buildConnectRequest(sessionTimeout),
       actOnReconnectWithoutSession)
 
   /**

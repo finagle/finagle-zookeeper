@@ -7,8 +7,11 @@ import com.twitter.finagle.exp.zookeeper.session.Session
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.util.TimeConversions._
 import com.twitter.util.{Future, Throw}
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class SessionTest extends FunSuite {
   test("should init correctly") {
     val session = new Session(

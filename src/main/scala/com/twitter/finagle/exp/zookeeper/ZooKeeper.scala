@@ -2,11 +2,13 @@ package com.twitter.finagle.exp.zookeeper
 
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.PipeliningDispatcher
-import com.twitter.finagle.exp.zookeeper.client.{ClientParams, ZkClient, ZkDispatcher}
+import com.twitter.finagle.exp.zookeeper.client.Params.{AutoReconnect, ZkConfiguration}
+import com.twitter.finagle.exp.zookeeper.client.{Params, ZkClient, ZkDispatcher}
 import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport, ZookeeperTransporter}
 import com.twitter.finagle.{Client, Name, ServiceFactory, Stack}
 import com.twitter.io.Buf
 import com.twitter.util.Duration
+import com.twitter.util.TimeConversions._
 import org.jboss.netty.buffer.ChannelBuffer
 
 /**
@@ -23,11 +25,45 @@ import org.jboss.netty.buffer.ChannelBuffer
  */
 trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket] =>
   val params: Stack.Params
-  def newRichClient(dest: String): ZkClient =
-    new ZkClient(dest, None, ClientParams(params))
+  def newRichClient(dest: String, label: String): ZkClient = {
+    val ZkConfiguration(autoWatch, canRO, chRoot, sessTime) = params[ZkConfiguration]
+    val AutoReconnect(autoReco, autoRw, prevS, tba, tblc, mcr, mra) = params[AutoReconnect]
+    ZkClient(
+      autowatchReset = autoWatch,
+      autoRecon = autoReco,
+      canBeReadOnly = canRO,
+      chrootPath = chRoot,
+      hostList = dest,
+      maxConsecRetries = mcr,
+      maxReconAttempts = mra,
+      serviceLabel = Some(label),
+      sessTimeout = sessTime,
+      timeBtwnAttempts = tba,
+      timeBtwnLinkCheck = tblc,
+      timeBtwnRwSrch = autoRw,
+      timeBtwnPrevSrch = prevS
+    )
+  }
 
-  def newRichClient(dest: String, label: String): ZkClient =
-    new ZkClient(dest, Some(label), ClientParams(params))
+  def newRichClient(dest: String): ZkClient = {
+    val ZkConfiguration(autoWatch, canRO, chRoot, sessTime) = params[ZkConfiguration]
+    val AutoReconnect(autoReco, autoRw, prevS, tba, tblc, mcr, mra) = params[AutoReconnect]
+    ZkClient(
+      autowatchReset = autoWatch,
+      autoRecon = autoReco,
+      canBeReadOnly = canRO,
+      chrootPath = chRoot,
+      hostList = dest,
+      maxConsecRetries = mcr,
+      maxReconAttempts = mra,
+      serviceLabel = None,
+      sessTimeout = sessTime,
+      timeBtwnAttempts = tba,
+      timeBtwnLinkCheck = tblc,
+      timeBtwnRwSrch = autoRw,
+      timeBtwnPrevSrch = prevS
+    )
+  }
 }
 
 object ZookeeperStackClient
@@ -48,41 +84,41 @@ object ZookeeperStackClient
 class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer])
   extends StackClientLike[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer, ZookeeperClient](client)
   with ZookeeperRichClient {
-  override val params = client.params
+  val params = client.params
   protected def newInstance(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, ChannelBuffer]) =
     new ZookeeperClient(client)
 
   def withAutoReconnect(
-    timeBetweenAttempts: Option[Duration],
-    timeBetweenLinkCheck: Option[Duration],
-    maxConsecutiveRetries: Option[Int],
-    maxReconnectAttempts: Option[Int]
+    autoReconnect: Boolean = true,
+    autoRwServerSearch: Option[Duration] = Some(1.minute),
+    preventiveSearch: Option[Duration] = Some(10.minutes),
+    timeBetweenAttempts: Option[Duration] = Some(30.seconds),
+    timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
+    maxConsecutiveRetries: Int = 10,
+    maxReconnectAttempts: Int = 5
     ) =
-    configured(ClientParams.AutoReconnect(
+    configured(Params.AutoReconnect(
       true,
+      autoRwServerSearch,
+      preventiveSearch,
       timeBetweenAttempts,
       timeBetweenLinkCheck,
       maxConsecutiveRetries,
       maxReconnectAttempts
     ))
 
-  def withAutoRwServerSearch(duration: Option[Duration]) =
-    configured(ClientParams.AutoRwServerSearch(duration))
-
-  def withAutoWatchReset() =
-    configured(ClientParams.AutoWatchReset(true))
-
-  def withCanReadOnly() =
-    configured(ClientParams.CanReadOnly(true))
-
-  def withChroot(path: String): ZookeeperClient =
-    configured(ClientParams.Chroot(path))
-
-  def withPreventiveSearch(duration: Option[Duration]) =
-    configured(ClientParams.PreventiveSearch(duration))
-
-  def withSessionTimeout(duration: Duration) =
-    configured(ClientParams.SessionTimeout(duration))
+  def withZkConfiguration(
+    autoWatchReset: Boolean = true,
+    canReadOnly: Boolean = true,
+    chroot: String = "",
+    sessionTimeout: Duration = 3000.milliseconds
+    ) =
+    configured(Params.ZkConfiguration(
+      autoWatchReset,
+      canReadOnly,
+      chroot,
+      sessionTimeout
+    ))
 }
 
 object Zookeeper extends ZookeeperClient(

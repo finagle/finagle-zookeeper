@@ -2,11 +2,14 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
-import com.twitter.finagle.exp.zookeeper.data.{Id, ACL, Auth, Ids}
+import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth, Id, Ids}
 import com.twitter.finagle.exp.zookeeper.{InvalidAclException, NoAuthException, NodeExistsException}
 import com.twitter.util.Await
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class AclTest extends FunSuite with IntegrationConfig {
   test("Basic add auth") {
     newClient()

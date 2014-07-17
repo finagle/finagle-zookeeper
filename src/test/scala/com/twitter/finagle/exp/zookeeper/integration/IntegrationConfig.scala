@@ -2,15 +2,18 @@ package com.twitter.finagle.exp.zookeeper.integration
 
 import com.twitter.finagle.exp.zookeeper.Zookeeper
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
-import com.twitter.util.Await
+import com.twitter.util.{Duration, Await}
 import com.twitter.util.TimeConversions._
 import java.net.{BindException, ServerSocket}
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
-trait IntegrationConfig extends FunSuite{
-  val ipAddress: String
-  val port: Int
-  val timeOut: Long
+@RunWith(classOf[JUnitRunner])
+trait IntegrationConfig extends FunSuite {
+  val ipAddress: String = "127.0.0.1"
+  val port: Int = 2181
+  val timeOut: Duration = 3000.milliseconds
 
   def isPortAvailable: Boolean = try {
     val socket = new ServerSocket(port)
@@ -28,12 +31,7 @@ trait IntegrationConfig extends FunSuite{
       if (!isPortAvailable)
         Some(
           Zookeeper
-            .withCanReadOnly()
-            .withAutoWatchReset()
-            .withAutoReconnect(Some(1.minute),Some(30.seconds), Some(10), Some(5))
-            .withAutoRwServerSearch(Some(1.minute))
-            .withAutoWatchReset()
-            .withPreventiveSearch(Some(1.minute))
+            .withZkConfiguration(sessionTimeout = timeOut)
             .newRichClient(ipAddress + ":" + port)
         )
       else
@@ -41,6 +39,6 @@ trait IntegrationConfig extends FunSuite{
     }
   }
 
-  def connect() { Await.ready(client.get.connect()) }
-  def disconnect() { Await.ready(client.get.closeSession()) }
+  def connect() = { Await.result(client.get.connect()) }
+  def disconnect() = { Await.result(client.get.closeSession()) }
 }

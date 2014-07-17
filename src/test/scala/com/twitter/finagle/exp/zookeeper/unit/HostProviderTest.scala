@@ -1,8 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
 import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, HostProvider}
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class HostProviderTest extends FunSuite {
   test("should add some hosts"){
     val hostProvider = new HostProvider("127.0.0.1:2181", true, None, None)

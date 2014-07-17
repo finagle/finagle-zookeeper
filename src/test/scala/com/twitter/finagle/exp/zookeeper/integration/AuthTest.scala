@@ -1,11 +1,14 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
-import com.twitter.finagle.exp.zookeeper.{NoAuthException, AuthFailedException}
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
-import com.twitter.finagle.exp.zookeeper.data.{Ids, Auth}
+import com.twitter.finagle.exp.zookeeper.data.{Auth, Ids}
+import com.twitter.finagle.exp.zookeeper.{AuthFailedException, NoAuthException}
 import com.twitter.util.Await
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class AuthTest extends FunSuite with IntegrationConfig {
   test("Bad Auth Notifies Watch") {
     newClient()

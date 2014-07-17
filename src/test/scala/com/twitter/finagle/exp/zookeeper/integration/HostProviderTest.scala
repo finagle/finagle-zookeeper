@@ -1,9 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class HostProviderTest extends FunSuite {
-
   test("should test a host") {
 
   }

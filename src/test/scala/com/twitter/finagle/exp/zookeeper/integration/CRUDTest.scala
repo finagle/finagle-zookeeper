@@ -9,16 +9,8 @@ import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class CRUDTest extends FunSuite with IntegrationConfig {
-  /* Configure your server here */
-  val ipAddress: String = "127.0.0.1"
-  val port: Int = 2181
-  val timeOut: Long = 1000
-
-  test("Server is up") {
-    assert(isPortAvailable === false)
-  }
-
   test("Client connection") {
     newClient()
     val connect = client.get.connect()

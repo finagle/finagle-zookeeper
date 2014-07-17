@@ -47,6 +47,7 @@ class DispatchingTest extends FunSuite with MockitoSugar {
 
     val connectionManager = new ConnectionManager(
       "127.0.0.1:2181",
+      None,
       false,
       None,
       None)

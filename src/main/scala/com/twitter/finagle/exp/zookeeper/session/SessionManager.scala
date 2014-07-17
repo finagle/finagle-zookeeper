@@ -112,7 +112,9 @@ class SessionManager(canBeRo: Boolean) {
         ZkClient.logger.warning("Session %d has expired".format(session.id))
       case -115 =>
         session.currentState.set(States.AUTH_FAILED)
-        ZkClient.logger.warning("Authentication to server has failed")
+        session.stop()
+        ZkClient.logger.warning("Authentication to server has failed." +
+          "Connection closed by server.")
       case -118 => session.currentState.set(States.SESSION_MOVED)
         session.stop()
         ZkClient.logger.warning("Session has moved to another server")
@@ -144,7 +146,11 @@ class SessionManager(canBeRo: Boolean) {
           session.currentState.set(States.CONNECTED)
           ZkClient.logger.info("Server is now in Read-Write mode")
         }
-      case 4 => session.currentState.set(States.AUTH_FAILED)
+      case 4 =>
+        session.currentState.set(States.AUTH_FAILED)
+        session.stop()
+        ZkClient.logger.warning("Authentication to server has failed." +
+          "Connection closed by server.")
       case 5 =>
         session.isRO.compareAndSet(false, true)
         if (session.currentState.get != States.CONNECTED_READONLY) {

@@ -7,9 +7,12 @@ import com.twitter.finagle.exp.zookeeper.{WatchEvent, ReplyHeader, ConnectRespon
 import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
 import com.twitter.util.Future
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import com.twitter.util.TimeConversions._
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class SessionManagerTest extends FunSuite {
   test("should build a good connectRequest") {
     val sessionManager = new SessionManager(true)

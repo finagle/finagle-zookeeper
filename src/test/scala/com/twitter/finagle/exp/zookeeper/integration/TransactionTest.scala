@@ -1,21 +1,15 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
+import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.data.Ids
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.util.Await
+import org.junit.runner.RunWith
 import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 
+@RunWith(classOf[JUnitRunner])
 class TransactionTest extends FunSuite with IntegrationConfig {
-  /* Configure your server here */
-  val ipAddress: String = "127.0.0.1"
-  val port: Int = 2181
-  val timeOut: Long = 1000
-
-  test("Server is up") {
-    assert(isPortAvailable === false)
-  }
-
   test("Small create Transaction works") {
     newClient()
     connect()
