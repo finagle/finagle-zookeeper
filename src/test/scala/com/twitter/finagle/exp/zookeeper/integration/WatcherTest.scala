@@ -1,9 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.integration
 
+import com.twitter.finagle.exp.zookeeper.Zookeeper
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids
 import com.twitter.finagle.exp.zookeeper.watcher.Watch
-import com.twitter.util.Await
+import com.twitter.finagle.exp.zookeeper.watcher.Watch.{EventState, EventType}
+import com.twitter.util.{Await, Future}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
@@ -144,246 +146,139 @@ class WatcherTest extends IntegrationConfig {
   }
 
   test("complete watcher test") {
-    /*
-    ZooKeeper zk = createClient(new CountdownWatcher(), hostPort);
-        try {
-            MyWatcher watchers[] = new MyWatcher[100];
-            MyWatcher watchers2[] = new MyWatcher[watchers.length];
-            for (int i = 0; i < watchers.length; i++) {
-                watchers[i] = new MyWatcher();
-                watchers2[i] = new MyWatcher();
-                zk.create("/foo-" + i, ("foodata" + i).getBytes(),
-                        Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-            }
-            Stat stat = new Stat();
+    newClient()
+    connect()
 
-            //
-            // test get/exists with single set of watchers
-            //   get all, then exists all
-            //
-            for (int i = 0; i < watchers.length; i++) {
-                Assert.assertNotNull(zk.getData("/foo-" + i, watchers[i], stat));
-            }
-            for (int i = 0; i < watchers.length; i++) {
-                Assert.assertNotNull(zk.exists("/foo-" + i, watchers[i]));
-            }
-            // trigger the watches
-            for (int i = 0; i < watchers.length; i++) {
-                zk.setData("/foo-" + i, ("foodata2-" + i).getBytes(), -1);
-                zk.setData("/foo-" + i, ("foodata3-" + i).getBytes(), -1);
-            }
-            for (int i = 0; i < watchers.length; i++) {
-                WatchedEvent event =
-                    watchers[i].events.poll(10, TimeUnit.SECONDS);
-                Assert.assertEquals("/foo-" + i, event.getPath());
-                Assert.assertEquals(EventType.NodeDataChanged, event.getType());
-                Assert.assertEquals(KeeperState.SyncConnected, event.getState());
-
-                // small chance that an unexpected message was delivered
-                //  after this check, but we would catch that next time
-                //  we check events
-                Assert.assertEquals(0, watchers[i].events.size());
-            }
-
-            //
-            // test get/exists with single set of watchers
-            //  get/exists together
-            //
-            for (int i = 0; i < watchers.length; i++) {
-                Assert.assertNotNull(zk.getData("/foo-" + i, watchers[i], stat));
-                Assert.assertNotNull(zk.exists("/foo-" + i, watchers[i]));
-            }
-            // trigger the watches
-            for (int i = 0; i < watchers.length; i++) {
-                zk.setData("/foo-" + i, ("foodata4-" + i).getBytes(), -1);
-                zk.setData("/foo-" + i, ("foodata5-" + i).getBytes(), -1);
-            }
-            for (int i = 0; i < watchers.length; i++) {
-                WatchedEvent event =
-                    watchers[i].events.poll(10, TimeUnit.SECONDS);
-                Assert.assertEquals("/foo-" + i, event.getPath());
-                Assert.assertEquals(EventType.NodeDataChanged, event.getType());
-                Assert.assertEquals(KeeperState.SyncConnected, event.getState());
-
-                // small chance that an unexpected message was delivered
-                //  after this check, but we would catch that next time
-                //  we check events
-                Assert.assertEquals(0, watchers[i].events.size());
-            }
-
-            //
-            // test get/exists with two sets of watchers
-            //
-            for (int i = 0; i < watchers.length; i++) {
-                Assert.assertNotNull(zk.getData("/foo-" + i, watchers[i], stat));
-                Assert.assertNotNull(zk.exists("/foo-" + i, watchers2[i]));
-            }
-            // trigger the watches
-            for (int i = 0; i < watchers.length; i++) {
-                zk.setData("/foo-" + i, ("foodata6-" + i).getBytes(), -1);
-                zk.setData("/foo-" + i, ("foodata7-" + i).getBytes(), -1);
-            }
-            for (int i = 0; i < watchers.length; i++) {
-                WatchedEvent event =
-                    watchers[i].events.poll(10, TimeUnit.SECONDS);
-                Assert.assertEquals("/foo-" + i, event.getPath());
-                Assert.assertEquals(EventType.NodeDataChanged, event.getType());
-                Assert.assertEquals(KeeperState.SyncConnected, event.getState());
-
-                // small chance that an unexpected message was delivered
-                //  after this check, but we would catch that next time
-                //  we check events
-                Assert.assertEquals(0, watchers[i].events.size());
-
-                // watchers2
-                WatchedEvent event2 =
-                    watchers2[i].events.poll(10, TimeUnit.SECONDS);
-                Assert.assertEquals("/foo-" + i, event2.getPath());
-                Assert.assertEquals(EventType.NodeDataChanged, event2.getType());
-                Assert.assertEquals(KeeperState.SyncConnected, event2.getState());
-
-                // small chance that an unexpected message was delivered
-                //  after this check, but we would catch that next time
-                //  we check events
-                Assert.assertEquals(0, watchers2[i].events.size());
-            }
-
-        } finally {
-            if (zk != null) {
-                zk.close();
-            }
+    val ret = Await.result {
+      Future.collect {
+        0 until 100 map { i =>
+          for {
+            _ <- client.get.create(
+              "/foo-" + i, ("foodata" + i).getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT
+            )
+            getdata <- client.get.getData("/foo-" + i, true)
+            exists <- client.get.exists("/foo-" + i, true)
+            setdata <- client.get.setData("/foo-" + i, ("foodata2-" + i).getBytes, -1)
+            setdata2 <- client.get.setData("/foo-" + i, ("foodata3-" + i).getBytes, -1)
+          } yield (getdata, exists, setdata, setdata2)
         }
+      }
     }
-     */
-  }
 
-  test("child watcher auto reset with chroot") {
-    /*
-    public void testChildWatcherAutoResetWithChroot() throws Exception {
-        ZooKeeper zk1 = createClient();
-
-        zk1.create("/ch1", null, Ids.OPEN_ACL_UNSAFE,
-                    CreateMode.PERSISTENT);
-
-        MyWatcher watcher = new MyWatcher();
-        ZooKeeper zk2 = createClient(watcher, hostPort + "/ch1");
-        zk2.getChildren("/", true );
-
-        // this call shouldn't trigger any error or watch
-        zk1.create("/youdontmatter1", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-
-        // this should trigger the watch
-        zk1.create("/ch1/youshouldmatter1", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        WatchedEvent e = watcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/", e.getPath());
-
-        MyWatcher childWatcher = new MyWatcher();
-        zk2.getChildren("/", childWatcher);
-
-        stopServer();
-        watcher.waitForDisconnected(3000);
-        startServer();
-        watcher.waitForConnected(3000);
-
-        // this should trigger the watch
-        zk1.create("/ch1/youshouldmatter2", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        e = childWatcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/", e.getPath());
+    ret map { grpRep =>
+      val (getdata, exists, stat, stat2) = grpRep
+      assert(getdata.watcher.get.event.isDefined)
+      assert(Await.result(getdata.watcher.get.event).typ === EventType.NODE_DATA_CHANGED)
+      assert(Await.result(getdata.watcher.get.event).state === EventState.SYNC_CONNECTED)
+      assert(exists.watcher.get.event.isDefined)
+      assert(Await.result(exists.watcher.get.event).typ === EventType.NODE_DATA_CHANGED)
+      assert(Await.result(exists.watcher.get.event).state === EventState.SYNC_CONNECTED)
     }
-     */
+
+    Await.result {
+      Future.collect {
+        0 until 100 map { i =>
+          for {
+            _ <- client.get.delete("/foo-" + i, -1)
+          } yield None
+        }
+      }
+    }
+
+    disconnect()
+    Await.result(client.get.closeService())
   }
 
   test("auto reset with chroot") {
-    /*
-    public void testDefaultWatcherAutoResetWithChroot() throws Exception {
-        ZooKeeper zk1 = createClient();
+    newClient()
+    connect()
 
-        zk1.create("/ch1", null, Ids.OPEN_ACL_UNSAFE,
-                    CreateMode.PERSISTENT);
-
-        MyWatcher watcher = new MyWatcher();
-        ZooKeeper zk2 = createClient(watcher, hostPort + "/ch1");
-        zk2.getChildren("/", true );
-
-        // this call shouldn't trigger any error or watch
-        zk1.create("/youdontmatter1", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-
-        // this should trigger the watch
-        zk1.create("/ch1/youshouldmatter1", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        WatchedEvent e = watcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/", e.getPath());
-
-        zk2.getChildren("/", true );
-
-        stopServer();
-        watcher.waitForDisconnected(3000);
-        startServer();
-        watcher.waitForConnected(3000);
-
-        // this should trigger the watch
-        zk1.create("/ch1/youshouldmatter2", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        e = watcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/", e.getPath());
+    Await.ready {
+      for {
+        _ <- client.get.create("/ch1", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT)
+      } yield None
     }
-     */
+
+    val client2 = Zookeeper
+      .withZkConfiguration(true, true, "/ch1")
+      .newRichClient(ipAddress + ":" + port)
+
+    Await.ready(client2.connect())
+    val watcherF = Await.result(client2.getChildren("/", true)).watcher.get
+
+    Await.ready {
+      for {
+        _ <- client.get.create(
+          "/youdontmatter", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT
+        )
+        _ <- client.get.create(
+          "/ch1/youdontmatter", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT
+        )
+      } yield None
+    }
+
+    val watcher = Await.result(watcherF.event)
+    assert(watcher.typ === EventType.NODE_CHILDREN_CHANGED)
+    assert(watcher.path === "/")
+
+    Await.ready {
+      for {
+        _ <- client.get.delete("/ch1/youdontmatter", -1)
+        _ <- client.get.delete("/ch1", -1)
+        _ <- client.get.delete("/youdontmatter", -1)
+      } yield None
+    }
+
+    Await.ready(client2.disconnect())
+    Await.ready(client2.closeService())
+    disconnect()
+    Await.result(client.get.closeService())
   }
 
   test("deep auto reset with chroot") {
-    /*
-  public void testDeepChildWatcherAutoResetWithChroot() throws Exception {
-        ZooKeeper zk1 = createClient();
+    newClient()
+    connect()
 
-        zk1.create("/ch1", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        zk1.create("/ch1/here", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        zk1.create("/ch1/here/we", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        zk1.create("/ch1/here/we/are", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-
-        MyWatcher watcher = new MyWatcher();
-        ZooKeeper zk2 = createClient(watcher, hostPort + "/ch1/here/we");
-        zk2.getChildren("/are", true );
-
-        // this should trigger the watch
-        zk1.create("/ch1/here/we/are/now", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        WatchedEvent e = watcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/are", e.getPath());
-
-        MyWatcher childWatcher = new MyWatcher();
-        zk2.getChildren("/are", childWatcher);
-
-        stopServer();
-        watcher.waitForDisconnected(3000);
-        startServer();
-        watcher.waitForConnected(3000);
-
-        // this should trigger the watch
-        zk1.create("/ch1/here/we/are/again", null, Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT);
-        e = childWatcher.events.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-        Assert.assertNotNull(e);
-        Assert.assertEquals(EventType.NodeChildrenChanged, e.getType());
-        Assert.assertEquals("/are", e.getPath());
+    Await.ready {
+      for {
+        _ <- client.get.create("/ch1", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT)
+        _ <- client.get.create("/ch1/here", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT)
+        _ <- client.get.create("/ch1/here/we", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT)
+        _ <- client.get.create("/ch1/here/we/are", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT)
+      } yield None
     }
-     */
+
+    val client2 = Zookeeper
+      .withZkConfiguration(true, true, "/ch1/here/we")
+      .newRichClient(ipAddress + ":" + port)
+
+    Await.ready(client2.connect())
+    val watcherF = Await.result(client2.getChildren("/are", true)).watcher.get
+
+    Await.ready {
+      client.get.create(
+        "/ch1/here/we/are/now", "".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT
+      )
+    }
+
+    val watcher = Await.result(watcherF.event)
+    assert(watcher.typ === Watch.EventType.NODE_CHILDREN_CHANGED)
+    assert(watcher.path === "/are")
+    assert(watcherF.path === "/are")
+
+    Await.ready {
+      for {
+        _ <- client.get.delete("/ch1/here/we/are/now", -1)
+        _ <- client.get.delete("/ch1/here/we/are", -1)
+        _ <- client.get.delete("/ch1/here/we", -1)
+        _ <- client.get.delete("/ch1/here", -1)
+        _ <- client.get.delete("/ch1", -1)
+      } yield None
+    }
+
+    Await.ready(client2.disconnect())
+    Await.ready(client2.closeService())
+    disconnect()
+    Await.result(client.get.closeService())
   }
 }

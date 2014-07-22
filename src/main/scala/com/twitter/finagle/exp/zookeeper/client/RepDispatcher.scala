@@ -315,7 +315,7 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
       reqRecord: RequestRecord,
       buf: Buf,
       responseDecoder: Buf => Try[(T, Buf)]
-      ): Future[ResponsePacket] =
+    ): Future[ResponsePacket] =
 
       ReplyHeader(buf) match {
         case Return((header, rem)) =>

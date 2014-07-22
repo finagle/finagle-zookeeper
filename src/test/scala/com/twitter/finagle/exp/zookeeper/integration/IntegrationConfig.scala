@@ -31,6 +31,7 @@ trait IntegrationConfig extends FunSuite {
       if (!isPortAvailable)
         Some(
           Zookeeper
+            .withAutoReconnect()
             .withZkConfiguration(sessionTimeout = timeOut)
             .newRichClient(ipAddress + ":" + port)
         )

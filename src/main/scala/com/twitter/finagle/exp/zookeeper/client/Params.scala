@@ -10,8 +10,7 @@ object Params {
     canReadOnly: Boolean,
     chroot: String,
     sessionTimeout: Duration
-    )
-
+  )
   implicit object ZkConfiguration extends Stack.Param[ZkConfiguration] {
     def default: ZkConfiguration =
       ZkConfiguration(true, true, "", 3000.milliseconds)
@@ -25,8 +24,7 @@ object Params {
     timeBetweenLinkCheck: Option[Duration],
     maxConsecutiveRetries: Int,
     maxReconnectAttempts: Int
-    )
-
+  )
   implicit object AutoReconnect extends Stack.Param[AutoReconnect] {
     def default: AutoReconnect = AutoReconnect(
       autoReconnect = false,

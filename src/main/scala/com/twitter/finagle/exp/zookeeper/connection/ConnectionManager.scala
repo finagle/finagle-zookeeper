@@ -17,7 +17,7 @@ class ConnectionManager(
   canBeRo: Boolean,
   timeForPreventive: Option[Duration],
   timeForRoMode: Option[Duration]
-  ) {
+) {
 
   @volatile var connection: Option[Connection] = None
   val isInitiated = new AtomicBoolean(false)
@@ -122,7 +122,8 @@ class ConnectionManager(
       case Return(available) =>
         if (available) {
           addHosts(host)
-          Future(connect(host))
+          connect(host)
+          Future.Done
         }
         else Future.exception(new ServerNotAvailable(
           "%s is not available for connection".format(host)))
@@ -165,9 +166,8 @@ class ConnectionManager(
   def initConnectionManager(): Future[Unit] =
     if (!isInitiated.get())
       hostProvider.findServer() flatMap { server =>
-        connection = Some(new Connection(newServiceFactory(server)))
+        connect(server)
         hostProvider.startPreventiveSearch()
-        isInitiated.set(true)
         Future.Unit
       }
     else Future.exception(
@@ -185,14 +185,14 @@ class ConnectionManager(
   def removeAndFind(hostList: String): Future[String] = {
     val hostsToDelete = HostUtilities.formatHostList(hostList)
     hostsToDelete map HostUtilities.testIpAddress
-    currentHost match {
+    activeHost match {
       case Some(activHost) =>
         if (hostsToDelete.contains(activHost)) {
           val newList = hostProvider.serverList filterNot (hostsToDelete.contains(_))
           hostProvider.findServer(Some(newList))
         } else Future(activHost)
 
-      case None => Future(activeHost.get)
+      case None => Future("")
     }
   }
 }

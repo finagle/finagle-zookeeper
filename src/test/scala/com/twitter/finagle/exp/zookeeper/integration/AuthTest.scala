@@ -65,6 +65,8 @@ class AuthTest extends FunSuite with IntegrationConfig {
         _ <- client.get.setACL("/path1", Ids.READ_ACL_UNSAFE, -1)
         _ <- client.get.create("/path1/foo", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
         _ <- client.get.setACL("/path1", Ids.OPEN_ACL_UNSAFE, -1)
+        _ <- client.get.delete("/path1/foo", -1)
+        _ <- client.get.delete("/path1", -1)
       } None
     }
 

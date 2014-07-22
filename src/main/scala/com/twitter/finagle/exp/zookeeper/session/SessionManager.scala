@@ -177,7 +177,6 @@ class SessionManager(canBeRo: Boolean) {
     conReq: ConnectResponse,
     pinger: PingSender
     ): Try[Unit] = {
-    session.stop()
     session.reinit(conReq, pinger)
   }
 }

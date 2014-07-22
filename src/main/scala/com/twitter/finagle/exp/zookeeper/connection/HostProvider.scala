@@ -365,9 +365,7 @@ private[finagle] class HostProvider(
 }
 
 object HostUtilities {
-  class NoServerFound(msg: String) extends RuntimeException(msg)
   class ServerNotAvailable(msg: String) extends RuntimeException(msg)
-
 
   /**
    * Format original server list by splitting on ',' character

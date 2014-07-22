@@ -189,6 +189,7 @@ class AclTest extends FunSuite with IntegrationConfig {
       client.get.delete("/acltest", -1)
     }
 
+    disconnect()
     Await.ready(client.get.closeService())
   }
 }

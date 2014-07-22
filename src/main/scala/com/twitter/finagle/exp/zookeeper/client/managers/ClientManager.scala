@@ -70,9 +70,7 @@ with ReadOnlyManager {slf: ZkClient =>
         }
         else {
           sessionManager.reinit(conRep, ping) match {
-            case Return(unit) =>
-              startStateLoop()
-              Future(zkRequestService.unlockService())
+            case Return(unit) => startJob()
             case Throw(exc) =>
               sessionManager
                 .newSession(conRep, sessionTimeout, ping)
@@ -95,7 +93,7 @@ with ReadOnlyManager {slf: ZkClient =>
   private[this] def actOnReconnectWithoutSession(
     host: Option[String],
     tries: Int)
-    (conRep: ConnectResponse): Future[Unit] = {
+      (conRep: ConnectResponse): Future[Unit] = {
     if (conRep.timeOut <= 0.milliseconds) {
       sessionManager.session.currentState.set(States.NOT_CONNECTED)
       reconnectWithoutSession(host, tries + 1)
@@ -119,7 +117,7 @@ with ReadOnlyManager {slf: ZkClient =>
     connectReq: => ConnectRequest,
     host: Option[String],
     actOnEvent: ConnectResponseBehaviour
-    ): Future[Unit] =
+  ): Future[Unit] =
     if (host.isDefined) connectionManager.testAndConnect(host.get) transform {
       case Return(unit) => onConnect(connectReq, actOnEvent)
       case Throw(exc) => connect(connectReq, None, actOnEvent)
@@ -143,7 +141,7 @@ with ReadOnlyManager {slf: ZkClient =>
   private[this] def onConnect(
     connectReq: => ConnectRequest,
     actOnEvent: ConnectResponseBehaviour
-    ): Future[Unit] = {
+  ): Future[Unit] = {
     sessionManager.session.currentState.set(States.CONNECTING)
     configureDispatcher() before
       connectionManager.connection.get.serve(
@@ -170,7 +168,8 @@ with ReadOnlyManager {slf: ZkClient =>
   def changeHost(host: Option[String] = None): Future[Unit] =
     if (host.isDefined)
       connectionManager.hostProvider.testOrFind(host.get) flatMap { server =>
-        reconnectWithSession(Some(server))
+        connectionManager.close() before
+          reconnectWithSession(Some(server))
       }
     else {
       connectionManager.hostProvider.seenRwServer match {
@@ -275,7 +274,7 @@ with ReadOnlyManager {slf: ZkClient =>
     tries: Int = 0,
     requestBuilder: => ConnectRequest,
     actOnEvent: (Option[String], Int) => ConnectResponseBehaviour
-    ): Future[Unit] =
+  ): Future[Unit] =
     if (sessionManager.canReconnect && tries < maxConsecutiveRetries) {
       stopJob() before connect(
         requestBuilder,
@@ -299,7 +298,7 @@ with ReadOnlyManager {slf: ZkClient =>
   private[finagle] def reconnectWithSession(
     host: Option[String] = None,
     tries: Int = 0
-    ): Future[Unit] =
+  ): Future[Unit] =
 
     reconnect(
       host,
@@ -317,7 +316,7 @@ with ReadOnlyManager {slf: ZkClient =>
   private[finagle] def reconnectWithoutSession(
     host: Option[String] = None,
     tries: Int = 0
-    ): Future[Unit] =
+  ): Future[Unit] =
 
     reconnect(
       host,

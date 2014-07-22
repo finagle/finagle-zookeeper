@@ -16,7 +16,6 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    *
    */
   def startStateLoop(): Unit = {
-    println(autoReconnect)
     if (autoReconnect) {
       require(timeBetweenAttempts.isDefined)
       require(timeBetweenLinkCheck.isDefined)
