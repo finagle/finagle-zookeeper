@@ -60,7 +60,7 @@ object ACL extends DataDecoder[ACL] {
       val ip = addr.split("/")
       if (ip.length > 1)
         require(ip(1).toInt >= 0 && ip(1).toInt <= 32,
-        "network significant bits should be between 0 and 32")
+          "network significant bits should be between 0 and 32")
       val parts = ip(0).split('.')
       if (parts.length != 4) {
         throw new IllegalArgumentException(

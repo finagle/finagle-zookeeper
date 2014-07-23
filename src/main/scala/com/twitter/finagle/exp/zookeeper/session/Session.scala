@@ -27,7 +27,7 @@ class Session(
   var negotiateTimeout: Duration = 0.milliseconds,
   var isRO: AtomicBoolean = new AtomicBoolean(false),
   var pingSender: Option[PingSender] = None
-  ) {
+) {
 
   private[finagle]
   var currentState = new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)

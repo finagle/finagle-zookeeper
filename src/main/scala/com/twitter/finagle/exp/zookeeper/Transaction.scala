@@ -45,7 +45,7 @@ private[finagle] object Transaction {
   def decode(
     results: Seq[OpResult],
     buf: Buf
-    ): (Seq[OpResult], Buf) = {
+  ): (Seq[OpResult], Buf) = {
 
     val MultiHeader(header, opBuf) = buf
     if (header.state) (results, opBuf)
@@ -89,7 +89,7 @@ private[finagle] object Transaction {
   def prepareAndCheck(
     opList: Seq[OpRequest],
     chroot: String
-    ): Try[Seq[OpRequest]] = {
+  ): Try[Seq[OpRequest]] = {
 
     Try.collect(opList map {
       case op: CreateRequest =>

@@ -62,7 +62,7 @@ private[finagle] case class ConfigureRequest(
   connectionManager: ConnectionManager,
   sessionManagr: SessionManager,
   watchManagr: WatcherManager
-  ) extends Request {
+) extends Request {
 
   override val opCode: Option[Int] = None
   def buf: Buf = Buf.Empty
@@ -75,7 +75,7 @@ private[finagle] case class ConnectRequest(
   sessionId: Long,
   passwd: Array[Byte],
   canBeRO: Boolean
-  ) extends Request {
+) extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.CREATE_SESSION)
   def buf: Buf = Buf.Empty
@@ -92,7 +92,7 @@ case class CreateRequest(
   data: Array[Byte],
   aclList: Seq[ACL],
   createMode: Int
-  ) extends Request with OpRequest {
+) extends Request with OpRequest {
 
   override val opCode: Option[Int] = Some(OpCode.CREATE)
   def buf: Buf = Buf.Empty
@@ -107,7 +107,7 @@ case class Create2Request(
   data: Array[Byte],
   aclList: Seq[ACL],
   createMode: Int
-  ) extends Request with OpRequest {
+) extends Request with OpRequest {
 
   override val opCode: Option[Int] = Some(OpCode.CREATE2)
   def buf: Buf = Buf.Empty
@@ -173,7 +173,7 @@ private[finagle] case class ReconfigRequest(
   leavingServers: String,
   newMembers: String,
   curConfigId: Long
-  ) extends Request {
+) extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.RECONFIG)
   def buf: Buf = Buf.Empty
@@ -186,7 +186,7 @@ private[finagle] case class ReconfigRequest(
 private[finagle] case class RemoveWatchesRequest(
   path: String,
   typ: Int
-  ) extends Request {
+) extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.REMOVE_WATCHES)
   def buf: Buf = Buf.Empty
@@ -216,7 +216,7 @@ case class SetDataRequest(
   path: String,
   data: Array[Byte],
   version: Int
-  ) extends Request with OpRequest {
+) extends Request with OpRequest {
 
   override val opCode: Option[Int] = Some(OpCode.SET_DATA)
   def buf: Buf = Buf.Empty
@@ -231,7 +231,7 @@ private[finagle] case class SetWatchesRequest(
   dataWatches: Seq[String],
   existWatches: Seq[String],
   childWatches: Seq[String]
-  ) extends Request {
+) extends Request {
 
   override val opCode: Option[Int] = Some(OpCode.SET_WATCHES)
   def buf: Buf = Buf.Empty

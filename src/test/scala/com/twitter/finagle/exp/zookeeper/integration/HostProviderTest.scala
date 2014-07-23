@@ -66,7 +66,7 @@ class HostProviderTest extends FunSuite with IntegrationConfig {
   test("should test a server with isro request") {
     new HelperTrait {
       val ret = Await.result {
-        hostProvider.withIsroRequest(ipAddress+":"+port)
+        hostProvider.withIsroRequest(ipAddress + ":" + port)
       }
       assert(ret === ipAddress + ":" + port)
     }
@@ -75,7 +75,7 @@ class HostProviderTest extends FunSuite with IntegrationConfig {
   test("should test a server with connect request") {
     new HelperTrait {
       val ret = Await.result {
-        hostProvider.withConnectRequest(ipAddress+":"+port)
+        hostProvider.withConnectRequest(ipAddress + ":" + port)
       }
       assert(ret === ipAddress + ":" + port)
     }

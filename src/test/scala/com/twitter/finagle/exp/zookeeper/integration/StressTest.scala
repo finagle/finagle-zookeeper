@@ -66,7 +66,7 @@ class StressTest extends FunSuite with IntegrationConfig {
     Await.ready(client.get.closeService())
   }
 
-  test("change host test"){
+  test("change host test") {
     newClient()
     connect()
 

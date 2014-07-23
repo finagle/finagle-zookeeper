@@ -76,7 +76,7 @@ object ZookeeperStackClient
   override def newClient(
     dest: Name,
     label: String
-    ): ServiceFactory[ReqPacket, RepPacket] = {
+  ): ServiceFactory[ReqPacket, RepPacket] = {
     super.newClient(dest, label)
   }
 }
@@ -96,7 +96,7 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, C
     timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
     maxConsecutiveRetries: Int = 10,
     maxReconnectAttempts: Int = 5
-    ) =
+  ) =
     configured(Params.AutoReconnect(
       true,
       autoRwServerSearch,
@@ -112,7 +112,7 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, C
     canReadOnly: Boolean = true,
     chroot: String = "",
     sessionTimeout: Duration = 3000.milliseconds
-    ) =
+  ) =
     configured(Params.ZkConfiguration(
       autoWatchReset,
       canReadOnly,

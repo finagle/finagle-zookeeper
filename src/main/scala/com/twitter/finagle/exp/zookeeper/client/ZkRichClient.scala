@@ -463,7 +463,7 @@ trait ZkClient extends Closable with ClientManager {
     leavingServers: String,
     newMembers: String,
     fromConfig: Long
-    ): Future[GetDataResponse] = {
+  ): Future[GetDataResponse] = {
 
     HostUtilities.formatAndTest(joiningServers)
     HostUtilities.formatAndTest(leavingServers)
@@ -521,7 +521,7 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     watcherType: Int,
     local: Boolean
-    ): Future[RepPacket] = {
+  ): Future[RepPacket] = {
     PathUtils.validatePath(path)
     val finalPath = prependChroot(path, chroot)
 
@@ -545,7 +545,7 @@ trait ZkClient extends Closable with ClientManager {
   def removeWatches(
     watcher: Watcher,
     local: Boolean
-    ): Future[Unit] = {
+  ): Future[Unit] = {
     if (!watchManager.isWatcherDefined(watcher))
       throw new IllegalArgumentException("No watch registered for this node")
 
@@ -584,7 +584,7 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     watcherType: Int,
     local: Boolean
-    ): Future[Unit] =
+  ): Future[Unit] =
     removeWatches(OpCode.REMOVE_WATCHES, path, watcherType, local) flatMap { rep =>
       if (rep.err.get == 0) {
         watchManager.removeWatchers(path, watcherType)
@@ -777,7 +777,7 @@ object ZkClient {
     timeBtwnLinkCheck: Option[Duration],
     timeBtwnRwSrch: Option[Duration],
     timeBtwnPrevSrch: Option[Duration]
-    ): ZkClient = new ZkClient {
+  ): ZkClient = new ZkClient {
     override val dest: String = hostList
     val label: Option[String] = serviceLabel
     val autoReconnect: Boolean = autoRecon

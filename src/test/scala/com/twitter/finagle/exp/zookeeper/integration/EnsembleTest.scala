@@ -6,15 +6,15 @@ import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class EnsembleTest extends FunSuite with IntegrationConfig {
-  test("change host"){
+  test("change host") {
 
   }
 
-  test("add hosts"){
+  test("add hosts") {
 
   }
 
-  test("remove hosts"){
+  test("remove hosts") {
 
   }
 }

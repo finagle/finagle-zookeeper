@@ -176,7 +176,7 @@ class SessionManager(canBeRo: Boolean) {
   def reinit(
     conReq: ConnectResponse,
     pinger: PingSender
-    ): Try[Unit] = {
+  ): Try[Unit] = {
     session.reinit(conReq, pinger)
   }
 }

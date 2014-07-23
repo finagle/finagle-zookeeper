@@ -20,7 +20,7 @@ class PreProcessService(
   connectionManager: ConnectionManager,
   sessionManager: SessionManager,
   linkChecker: AutoLinkManager
-  ) extends Service[Request, RepPacket] {
+) extends Service[Request, RepPacket] {
 
   // todo use raiseWithin for requests timeout
   private[this] val semaphore = new AsyncSemaphore(1)

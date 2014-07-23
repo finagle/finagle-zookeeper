@@ -43,7 +43,7 @@ case class ConnectResponse(
   sessionId: Long,
   passwd: Array[Byte],
   isRO: Boolean
-  ) extends Response
+) extends Response
 
 case class CreateResponse(path: String) extends Response with OpResult
 
@@ -54,7 +54,7 @@ case class Create2Response(
 case class ExistsResponse(
   stat: Option[Stat],
   watcher: Option[Watcher]
-  ) extends Response
+) extends Response
 
 case class ErrorResponse(exception: ZookeeperException) extends OpResult
 
@@ -65,19 +65,19 @@ case class GetACLResponse(acl: Seq[ACL], stat: Stat) extends Response
 case class GetChildrenResponse(
   children: Seq[String],
   watcher: Option[Watcher]
-  ) extends Response
+) extends Response
 
 case class GetChildren2Response(
   children: Seq[String],
   stat: Stat,
   watcher: Option[Watcher]
-  ) extends Response
+) extends Response
 
 case class GetDataResponse(
   data: Array[Byte],
   stat: Stat,
   watcher: Option[Watcher]
-  ) extends Response
+) extends Response
 
 case class SetACLResponse(stat: Stat) extends Response
 

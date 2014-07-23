@@ -17,7 +17,7 @@ private[finagle] class HostProvider(
   canBeRO: Boolean,
   timeBetweenPreventiveSearch: Option[Duration],
   timeBetweenRwServerSearch: Option[Duration]
-  ) {
+) {
 
   type TestMethod = String => Future[String]
   val canSearchRwServer = new AtomicBoolean(false)

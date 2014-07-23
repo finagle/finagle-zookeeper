@@ -18,7 +18,7 @@ import org.scalatest.junit.JUnitRunner
 import org.scalatest.mock.MockitoSugar
 
 @RunWith(classOf[JUnitRunner])
-class BufTransportTest extends FunSuite with MockitoSugar{
+class BufTransportTest extends FunSuite with MockitoSugar {
   trait TestHelper {
     val deleteReq = DeleteRequest("/zookeeper/node", -1)
     val cbTransport = mock[Transport[ChannelBuffer, ChannelBuffer]]
@@ -88,7 +88,7 @@ class BufTransportTest extends FunSuite with MockitoSugar{
   test("should convert 2 rep from ChannelBuffer to buf") {
     new TestHelper {
       when(cbTransport.read()) thenReturn {
-        val bytes = new Array[Byte](deleteReq.buf.length*2)
+        val bytes = new Array[Byte](deleteReq.buf.length * 2)
         Buf.Empty
           .concat(deleteReq.buf)
           .concat(deleteReq.buf)

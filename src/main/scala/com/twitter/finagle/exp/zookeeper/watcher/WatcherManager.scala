@@ -35,7 +35,7 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     map: mutable.HashMap[String, Set[Watcher]],
     typ: Int,
     path: String
-    ): Watcher = {
+  ): Watcher = {
     val watcher = new Watcher(path, typ, Promise[WatchEvent]())
 
     map synchronized {
@@ -239,7 +239,7 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     def removeFromMap(
       map: mutable.HashMap[String, Set[Watcher]],
       watcher: Watcher
-      ) {
+    ) {
       map synchronized {
         map.get(watcher.path) match {
           case Some(watchers) =>
