@@ -24,6 +24,8 @@ Every request returns a *twitter.util.Future* (see [Effective Scala](http://twit
 
 * [Watcher manager](https://github.com/finagle/finagle-zookeeper/wiki/5.-Watcher-manager)
 
+### [Scaladoc](http://finagle.github.io/finagle-zookeeper/#package)
+
 ### Client creation ( more details [here](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient) )
 ```scala
   val client = ZooKeeper.newRichClient("127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181")
