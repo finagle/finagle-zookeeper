@@ -1,4 +1,4 @@
-# finagle-zookeeper
+# finagle-zookeeper [![Build Status](https://travis-ci.org/finagle/finagle-zookeeper.svg?branch=travis-ci)](https://travis-ci.org/finagle/finagle-zookeeper)
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
@@ -12,10 +12,19 @@ finagle-zookeeper provides basic tools to communicate with a Zookeeper server as
 Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
 [Finagle documentation](https://twitter.github.io/scala_school/finagle.html#Future) and [Scaladoc](http://twitter.github.io/util/util-core/target/doc/main/api/com/twitter/util/Future.html))
 
-Here is the list of commands supported by version 0.1 :
+### [Wiki](https://github.com/finagle/finagle-zookeeper/wiki)
 
+* [How to create a ZkClient ?](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient)
 
-### Client creation
+* [AutoReconnect feature](https://github.com/finagle/finagle-zookeeper/wiki/2.-AutoReconnect-(Automatic-Reconnection))
+
+* [About host management](https://github.com/finagle/finagle-zookeeper/wiki/3.-Host-management)
+
+* [Session](https://github.com/finagle/finagle-zookeeper/wiki/4.-Session)
+
+* [Watcher manager](https://github.com/finagle/finagle-zookeeper/wiki/5.-Watcher-manager)
+
+### Client creation ( more details [here](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient) )
 ```scala
   val client = ZooKeeper.newRichClient("127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181")
 ```
