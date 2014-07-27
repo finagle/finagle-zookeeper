@@ -13,14 +13,19 @@ object Params {
   )
   implicit object ZkConfiguration extends Stack.Param[ZkConfiguration] {
     def default: ZkConfiguration =
-      ZkConfiguration(true, true, "", 3000.milliseconds)
+      ZkConfiguration(
+        autoWatchReset = true,
+        canReadOnly = true,
+        chroot = "",
+        sessionTimeout = 3000.milliseconds
+      )
   }
 
   case class AutoReconnect(
     autoReconnect: Boolean,
     autoRwServerSearch: Option[Duration],
     preventiveSearch: Option[Duration],
-    timeBetweenAttempts: Option[Duration],
+    timeBetweenAttempts: Duration,
     timeBetweenLinkCheck: Option[Duration],
     maxConsecutiveRetries: Int,
     maxReconnectAttempts: Int
@@ -30,7 +35,7 @@ object Params {
       autoReconnect = false,
       autoRwServerSearch = None,
       preventiveSearch = None,
-      timeBetweenAttempts = None,
+      timeBetweenAttempts = Duration.Bottom,
       timeBetweenLinkCheck = None,
       maxConsecutiveRetries = 1,
       maxReconnectAttempts = 1

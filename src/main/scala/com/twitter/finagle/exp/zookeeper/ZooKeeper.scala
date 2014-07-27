@@ -89,10 +89,9 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket, ChannelBuffer, C
     new ZookeeperClient(client)
 
   def withAutoReconnect(
-    autoReconnect: Boolean = true,
     autoRwServerSearch: Option[Duration] = Some(1.minute),
     preventiveSearch: Option[Duration] = Some(10.minutes),
-    timeBetweenAttempts: Option[Duration] = Some(30.seconds),
+    timeBetweenAttempts: Duration = 30.seconds,
     timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
     maxConsecutiveRetries: Int = 10,
     maxReconnectAttempts: Int = 5

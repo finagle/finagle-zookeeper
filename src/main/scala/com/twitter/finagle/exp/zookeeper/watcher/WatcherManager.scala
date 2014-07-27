@@ -13,16 +13,16 @@ import scala.collection.mutable
  * @param chroot default user chroot
  */
 private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
-  val dataWatches: mutable.HashMap[String, Set[Watcher]] =
+  val dataWatchers: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
-  val existsWatches: mutable.HashMap[String, Set[Watcher]] =
+  val existsWatchers: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
-  val childrenWatches: mutable.HashMap[String, Set[Watcher]] =
+  val childrenWatchers: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
 
-  def getDataWatchers = this.synchronized(dataWatches)
-  def getExistsWatchers = this.synchronized(existsWatches)
-  def getChildrenWatchers = this.synchronized(childrenWatches)
+  def getDataWatchers = this.synchronized(dataWatchers)
+  def getExistsWatchers = this.synchronized(existsWatchers)
+  def getChildrenWatchers = this.synchronized(childrenWatchers)
 
   /**
    * Should register a new watcher in the corresponding map
@@ -52,9 +52,9 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    */
   def clearWatchers() {
     this.synchronized {
-      dataWatches.clear()
-      existsWatches.clear()
-      childrenWatches.clear()
+      dataWatchers.clear()
+      existsWatchers.clear()
+      childrenWatchers.clear()
     }
   }
 
@@ -68,24 +68,24 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
   def isWatcherDefined(path: String, watcherType: Int): Boolean = {
     watcherType match {
       case Watch.WatcherType.CHILDREN =>
-        childrenWatches.synchronized {
-          childrenWatches.get(path).isDefined
+        childrenWatchers.synchronized {
+          childrenWatchers.get(path).isDefined
         }
 
       case Watch.WatcherType.DATA =>
-        dataWatches.synchronized {
-          dataWatches.get(path).isDefined
-        } || existsWatches.synchronized {
-          existsWatches.get(path).isDefined
+        dataWatchers.synchronized {
+          dataWatchers.get(path).isDefined
+        } || existsWatchers.synchronized {
+          existsWatchers.get(path).isDefined
         }
 
       case Watch.WatcherType.ANY =>
-        childrenWatches.synchronized {
-          childrenWatches.get(path).isDefined
-        } || dataWatches.synchronized {
-          dataWatches.get(path).isDefined
-        } || existsWatches.synchronized {
-          existsWatches.get(path).isDefined
+        childrenWatchers.synchronized {
+          childrenWatchers.get(path).isDefined
+        } || dataWatchers.synchronized {
+          dataWatchers.get(path).isDefined
+        } || existsWatchers.synchronized {
+          existsWatchers.get(path).isDefined
         }
     }
   }
@@ -99,16 +99,16 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
   def isWatcherDefined(watcher: Watcher): Boolean = {
     watcher.typ match {
       case Watch.WatcherMapType.data =>
-        dataWatches.synchronized {
-          dataWatches.get(watcher.path).isDefined
+        dataWatchers.synchronized {
+          dataWatchers.get(watcher.path).isDefined
         }
       case Watch.WatcherMapType.exists =>
-        existsWatches.synchronized {
-          existsWatches.get(watcher.path).isDefined
+        existsWatchers.synchronized {
+          existsWatchers.get(watcher.path).isDefined
         }
       case Watch.WatcherMapType.`children` =>
-        childrenWatches.synchronized {
-          childrenWatches.get(watcher.path).isDefined
+        childrenWatchers.synchronized {
+          childrenWatchers.get(watcher.path).isDefined
         }
     }
   }
@@ -166,16 +166,16 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
           if (!autoWatchReset) clearWatchers()
 
       case Watch.EventType.NODE_CREATED | Watch.EventType.NODE_DATA_CHANGED =>
-        findAndSatisfy(dataWatches, event)
-        findAndSatisfy(existsWatches, event)
+        findAndSatisfy(dataWatchers, event)
+        findAndSatisfy(existsWatchers, event)
 
       case Watch.EventType.NODE_DELETED =>
-        findAndSatisfy(dataWatches, event)
-        findAndSatisfy(existsWatches, event)
-        findAndSatisfy(childrenWatches, event)
+        findAndSatisfy(dataWatchers, event)
+        findAndSatisfy(existsWatchers, event)
+        findAndSatisfy(childrenWatchers, event)
 
       case Watch.EventType.NODE_CHILDREN_CHANGED =>
-        findAndSatisfy(childrenWatches, event)
+        findAndSatisfy(childrenWatchers, event)
 
       case _ => throw new RuntimeException(
         "Unsupported Watch.EventType came during WatchedEvent processing")
@@ -191,9 +191,9 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    */
   private[finagle] def registerWatcher(path: String, mapType: Int): Watcher = {
     mapType match {
-      case Watch.WatcherMapType.data => addWatcher(dataWatches, WatcherMapType.data, path)
-      case Watch.WatcherMapType.exists => addWatcher(existsWatches, WatcherMapType.exists, path)
-      case Watch.WatcherMapType.`children` => addWatcher(childrenWatches, WatcherMapType.children, path)
+      case Watch.WatcherMapType.data => addWatcher(dataWatchers, WatcherMapType.data, path)
+      case Watch.WatcherMapType.exists => addWatcher(existsWatchers, WatcherMapType.exists, path)
+      case Watch.WatcherMapType.`children` => addWatcher(childrenWatchers, WatcherMapType.children, path)
     }
   }
 
@@ -217,16 +217,16 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
 
     watcherType match {
       case Watch.WatcherType.CHILDREN =>
-        removeAllWatchers(childrenWatches, path)
+        removeAllWatchers(childrenWatchers, path)
 
       case Watch.WatcherType.DATA =>
-        removeAllWatchers(dataWatches, path)
-        removeAllWatchers(existsWatches, path)
+        removeAllWatchers(dataWatchers, path)
+        removeAllWatchers(existsWatchers, path)
 
       case Watch.WatcherType.ANY =>
-        removeAllWatchers(childrenWatches, path)
-        removeAllWatchers(dataWatches, path)
-        removeAllWatchers(existsWatches, path)
+        removeAllWatchers(childrenWatchers, path)
+        removeAllWatchers(dataWatchers, path)
+        removeAllWatchers(existsWatchers, path)
     }
   }
 
@@ -252,9 +252,9 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     }
 
     watcher.typ match {
-      case Watch.WatcherMapType.data => removeFromMap(dataWatches, watcher)
-      case Watch.WatcherMapType.exists => removeFromMap(existsWatches, watcher)
-      case Watch.WatcherMapType.children => removeFromMap(childrenWatches, watcher)
+      case Watch.WatcherMapType.data => removeFromMap(dataWatchers, watcher)
+      case Watch.WatcherMapType.exists => removeFromMap(existsWatchers, watcher)
+      case Watch.WatcherMapType.children => removeFromMap(childrenWatchers, watcher)
     }
   }
 }

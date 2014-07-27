@@ -25,7 +25,7 @@ trait ZkClient extends Closable with ClientManager {
   val timeBetweenPrevSrch: Option[Duration]
   val maxConsecutiveRetries: Int
   val maxReconnectAttempts: Int
-  val timeBetweenAttempts: Option[Duration]
+  val timeBetweenAttempts: Duration
   val timeBetweenLinkCheck: Option[Duration]
 
   private[finagle] lazy val connectionManager =
@@ -37,7 +37,7 @@ trait ZkClient extends Closable with ClientManager {
       timeBetweenRwSrch)
 
   private[finagle] lazy val sessionManager = new SessionManager(canReadOnly)
-  lazy val watchManager: WatcherManager =
+  lazy val watcherManager: WatcherManager =
     new WatcherManager(chroot, autoWatchReset)
   private[finagle] lazy val zkRequestService =
     new PreProcessService(connectionManager, sessionManager, this)
@@ -60,7 +60,7 @@ trait ZkClient extends Closable with ClientManager {
         authInfo += auth
         Future.Unit
       } else if (rep.err.get == -115) {
-        watchManager.process(
+        watcherManager.process(
           WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
         Future.exception(
           ZookeeperException.create("Error while addAuth", rep.err.get))
@@ -80,7 +80,7 @@ trait ZkClient extends Closable with ClientManager {
    * @since 3.5.0
    */
   def checkWatches(path: String, watcherType: Int): Future[Unit] = {
-    if (!watchManager.isWatcherDefined(path, watcherType))
+    if (!watcherManager.isWatcherDefined(path, watcherType))
       throw new IllegalArgumentException("No watch registered for this node")
 
     PathUtils.validatePath(path)
@@ -101,7 +101,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit] if the watcher is ok, or else ZooKeeperException
    */
   def checkWatcher(watcher: Watcher): Future[Unit] = {
-    if (!watchManager.isWatcherDefined(watcher))
+    if (!watcherManager.isWatcherDefined(watcher))
       throw new IllegalArgumentException("No watch registered for this node")
 
     PathUtils.validatePath(watcher.path)
@@ -161,7 +161,7 @@ trait ZkClient extends Closable with ClientManager {
     val req = ReqPacket(None, Some(ConfigureRequest(
       connectionManager,
       sessionManager,
-      watchManager
+      watcherManager
     )))
     connectionManager.connection.get.serve(req).unit
   }
@@ -273,14 +273,14 @@ trait ZkClient extends Closable with ClientManager {
       rep.response match {
         case Some(response: ExistsResponse) =>
           if (watch) {
-            val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.exists)
+            val watcher = watcherManager.registerWatcher(path, Watch.WatcherMapType.exists)
             val finalRep = ExistsResponse(response.stat, Some(watcher))
             Future(finalRep)
           } else Future(response)
 
         case None =>
           if (rep.err.get == -101 && watch) {
-            val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.exists)
+            val watcher = watcherManager.registerWatcher(path, Watch.WatcherMapType.exists)
             Future(ExistsResponse(None, Some(watcher)))
           } else Future.exception(
             ZookeeperException.create("Error while exists", rep.err.get))
@@ -331,7 +331,7 @@ trait ZkClient extends Closable with ClientManager {
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildrenResponse]
         if (watch) {
-          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
+          val watcher = watcherManager.registerWatcher(path, Watch.WatcherMapType.children)
           val finalRep = GetChildrenResponse(res.children, Some(watcher))
           Future(finalRep)
         } else Future(rep.response.get.asInstanceOf[GetChildrenResponse])
@@ -361,7 +361,7 @@ trait ZkClient extends Closable with ClientManager {
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetChildren2Response]
         if (watch) {
-          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.children)
+          val watcher = watcherManager.registerWatcher(path, Watch.WatcherMapType.children)
           val finalRep = GetChildren2Response(res.children, res.stat, Some(watcher))
           Future(finalRep)
         } else Future(rep.response.get.asInstanceOf[GetChildren2Response])
@@ -389,7 +389,7 @@ trait ZkClient extends Closable with ClientManager {
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watch = watchManager.registerWatcher(ZookeeperDefs.CONFIG_NODE, Watch.WatcherMapType.data)
+          val watch = watcherManager.registerWatcher(ZookeeperDefs.CONFIG_NODE, Watch.WatcherMapType.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watch))
           Future(finalRep)
         } else Future(res)
@@ -419,7 +419,7 @@ trait ZkClient extends Closable with ClientManager {
       if (rep.err.get == 0) {
         val res = rep.response.get.asInstanceOf[GetDataResponse]
         if (watch) {
-          val watcher = watchManager.registerWatcher(path, Watch.WatcherMapType.data)
+          val watcher = watcherManager.registerWatcher(path, Watch.WatcherMapType.data)
           val finalRep = GetDataResponse(res.data, res.stat, Some(watcher))
           Future(finalRep)
         } else Future(res)
@@ -493,7 +493,7 @@ trait ZkClient extends Closable with ClientManager {
       connectionManager.connection.get.serve(req) flatMap { rep =>
         if (rep.err.get == 0) Future.Unit
         else if (rep.err.get == -115) {
-          watchManager.process(
+          watcherManager.process(
             WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, ""))
           Future.exception(
             ZookeeperException.create("Error while addAuth", rep.err.get))
@@ -546,7 +546,7 @@ trait ZkClient extends Closable with ClientManager {
     watcher: Watcher,
     local: Boolean
   ): Future[Unit] = {
-    if (!watchManager.isWatcherDefined(watcher))
+    if (!watcherManager.isWatcherDefined(watcher))
       throw new IllegalArgumentException("No watch registered for this node")
 
     val watcherType = watcher.typ match {
@@ -555,12 +555,12 @@ trait ZkClient extends Closable with ClientManager {
     }
     removeWatches(OpCode.CHECK_WATCHES, watcher.path, watcherType, local) flatMap { rep =>
       if (rep.err.get == 0) {
-        watchManager.removeWatcher(watcher)
+        watcherManager.removeWatcher(watcher)
         Future.Unit
       }
       else {
         if (local) {
-          watchManager.removeWatcher(watcher)
+          watcherManager.removeWatcher(watcher)
           Future.Done
         }
         else Future.exception(
@@ -587,12 +587,12 @@ trait ZkClient extends Closable with ClientManager {
   ): Future[Unit] =
     removeWatches(OpCode.REMOVE_WATCHES, path, watcherType, local) flatMap { rep =>
       if (rep.err.get == 0) {
-        watchManager.removeWatchers(path, watcherType)
+        watcherManager.removeWatchers(path, watcherType)
         Future.Unit
       }
       else {
         if (local) {
-          watchManager.removeWatchers(path, watcherType)
+          watcherManager.removeWatchers(path, watcherType)
           Future.Done
         }
         else Future.exception(
@@ -668,15 +668,15 @@ trait ZkClient extends Closable with ClientManager {
   private[finagle] def setWatches(): Future[Unit] = {
     if (autoWatchReset) {
       val relativeZxid: Long = sessionManager.session.lastZxid.get
-      val dataWatches: Seq[String] = watchManager.getDataWatchers.keySet.map {
+      val dataWatches: Seq[String] = watcherManager.getDataWatchers.keySet.map {
         path =>
           prependChroot(path, chroot)
       }.toSeq
-      val existsWatches: Seq[String] = watchManager.getExistsWatchers.keySet.map {
+      val existsWatches: Seq[String] = watcherManager.getExistsWatchers.keySet.map {
         path =>
           prependChroot(path, chroot)
       }.toSeq
-      val childWatches: Seq[String] = watchManager.getChildrenWatchers.keySet.map {
+      val childWatches: Seq[String] = watcherManager.getChildrenWatchers.keySet.map {
         path =>
           prependChroot(path, chroot)
       }.toSeq
@@ -700,7 +700,7 @@ trait ZkClient extends Closable with ClientManager {
       } else
         Future.Done
     } else {
-      watchManager.clearWatchers()
+      watcherManager.clearWatchers()
       Future.Done
     }
   }
@@ -773,7 +773,7 @@ object ZkClient {
     maxReconAttempts: Int,
     serviceLabel: Option[String],
     sessTimeout: Duration,
-    timeBtwnAttempts: Option[Duration],
+    timeBtwnAttempts: Duration,
     timeBtwnLinkCheck: Option[Duration],
     timeBtwnRwSrch: Option[Duration],
     timeBtwnPrevSrch: Option[Duration]
@@ -788,7 +788,7 @@ object ZkClient {
     val maxReconnectAttempts: Int = maxReconAttempts
     val sessionTimeout: Duration = sessTimeout
     val timeBetweenRwSrch: Option[Duration] = timeBtwnRwSrch
-    val timeBetweenAttempts: Option[Duration] = timeBtwnAttempts
+    val timeBetweenAttempts: Duration = timeBtwnAttempts
     val timeBetweenLinkCheck: Option[Duration] = timeBtwnLinkCheck
     val timeBetweenPrevSrch: Option[Duration] = timeBtwnPrevSrch
   }

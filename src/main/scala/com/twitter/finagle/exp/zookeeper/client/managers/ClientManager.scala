@@ -221,7 +221,7 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    * @return Future.Done or Exception
    */
-  def disconnect(): Future[Unit] =
+  private[finagle] def disconnect(): Future[Unit] =
     if (sessionManager.canCloseSession) {
       stopJob() before {
         connectionManager.hasAvailableService flatMap { available =>
@@ -232,7 +232,7 @@ with ReadOnlyManager {slf: ZkClient =>
             connectionManager.connection.get.serve(closeReq) transform {
               case Return(closeRep) =>
                 if (closeRep.err.get == 0) {
-                  watchManager.clearWatchers()
+                  watcherManager.clearWatchers()
                   sessionManager.session.close()
                   Future.Done
                 } else Future.exception(
@@ -254,7 +254,7 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    * @return Future.Done or Exception
    */
-  def newSession(host: Option[String]): Future[Unit] =
+  private[finagle] def newSession(host: Option[String]): Future[Unit] =
     if (sessionManager.canCreateSession) {
       val connectReq = sessionManager.buildConnectRequest(sessionTimeout)
       stopJob() before connect(connectReq, host, actOnConnect)
