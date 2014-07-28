@@ -81,12 +81,12 @@ class AuthTest extends FunSuite with IntegrationConfig {
     val rep = Await.result {
       for {
         _ <- client.get.addAuth(Auth("digest", "pat:pass".getBytes))
-        create <- client.get.create("/path1", "h".getBytes, Ids.CREATOR_ALL_ACL,
+        create <- client.get.create("/path10", "h".getBytes, Ids.CREATOR_ALL_ACL,
           CreateMode.PERSISTENT)
       } yield create
     }
 
-    assert(rep === "/path1")
+    assert(rep === "/path10")
     disconnect()
     Await.ready(client.get.closeService())
 
@@ -95,7 +95,7 @@ class AuthTest extends FunSuite with IntegrationConfig {
 
     intercept[NoAuthException] {
       Await.result {
-        client.get.getData("/path1")
+        client.get.getData("/path10")
       }
     }
 
@@ -108,7 +108,7 @@ class AuthTest extends FunSuite with IntegrationConfig {
     intercept[NoAuthException] {
       Await.result {
         client.get.addAuth(Auth("digest", "pat:pass2".getBytes)) before
-          client.get.getData("/path1")
+          client.get.getData("/path10")
       }
     }
 
@@ -121,7 +121,7 @@ class AuthTest extends FunSuite with IntegrationConfig {
     intercept[NoAuthException] {
       Await.result {
         client.get.addAuth(Auth("digest", "super:test2".getBytes)) before
-          client.get.getData("/path1")
+          client.get.getData("/path10")
       }
     }
 
@@ -133,7 +133,7 @@ class AuthTest extends FunSuite with IntegrationConfig {
 
     Await.result {
       client.get.addAuth(Auth("digest", "pat:pass".getBytes)) before
-        client.get.getData("/path1").unit before client.get.delete("/path1", -1)
+        client.get.getData("/path10").unit before client.get.delete("/path10", -1)
     }
 
     disconnect()
