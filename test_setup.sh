@@ -24,4 +24,3 @@ EOF
 echo "Finished installing Zookeeper"
 echo "Starting ZooKeeper"
 ../bin/zkServer.sh start
-../bin/zkServer.sh status
