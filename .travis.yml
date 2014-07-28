@@ -9,7 +9,7 @@ jdk:
   - openjdk7
 
 script:
-  - "sbt ++$TRAVIS_SCALA_VERSION test-only com.twitter.finagle.exp.zookeeper.unit.*"
+  - "sbt ++$TRAVIS_SCALA_VERSION test"
   
 before_install:
   - sudo chmod +x test_setup.sh
