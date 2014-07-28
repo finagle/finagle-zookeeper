@@ -1,6 +1,20 @@
 language: scala
 scala:
+  - 2.10.3
   - 2.10.4
 
+jdk:
+  - oraclejdk7
+  - openjdk6
+  - openjdk7
+
+script:
+  - "sbt ++$TRAVIS_SCALA_VERSION test"
+  
+before_install:
+  - sudo chmod +x test_setup.sh
+  - sudo ./test_setup.sh
+
 notifications:
+  irc: "chat.freenode.net#finagle-zookeeper"
   email: false
