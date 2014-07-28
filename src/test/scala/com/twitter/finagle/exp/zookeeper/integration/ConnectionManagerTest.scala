@@ -29,6 +29,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === false)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -41,6 +42,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === true)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -52,6 +54,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === true)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -63,6 +66,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === true)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -74,6 +78,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
             connectionManager.testAndConnect("3.4.5.6:7777")
         }
       }
+      Await.result(connectionManager.close())
     }
   }
 
@@ -84,11 +89,13 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === true)
+      Await.result(connectionManager.close())
       val ret2 = Await.result {
         connectionManager.close() before
           connectionManager.hasAvailableService
       }
       assert(ret2 === false)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -99,6 +106,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
           connectionManager.hasAvailableService
       }
       assert(ret === true)
+      Await.result(connectionManager.close())
     }
   }
 
@@ -110,6 +118,7 @@ class ConnectionManagerTest extends FunSuite with IntegrationConfig {
             connectionManager.removeAndFind(ipAddress + ":" + port)
         }
       }
+      Await.result(connectionManager.close())
     }
   }
 }

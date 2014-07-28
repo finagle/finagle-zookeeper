@@ -12,6 +12,7 @@ import org.scalatest.junit.JUnitRunner
 class StressTest extends FunSuite with IntegrationConfig {
 
   test("watcher test") {
+    pending
     newClient()
     connect()
 
@@ -56,6 +57,7 @@ class StressTest extends FunSuite with IntegrationConfig {
   }
 
   test("connect-disconnect test") {
+    pending
     newClient()
 
     for (i <- 0 until 500) {
@@ -67,6 +69,7 @@ class StressTest extends FunSuite with IntegrationConfig {
   }
 
   test("change host test") {
+    pending
     newClient()
     connect()
 

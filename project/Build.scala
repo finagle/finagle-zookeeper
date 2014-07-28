@@ -20,7 +20,8 @@ object finaglezk extends Build {
     organization := "com.twitter.finagle",
     version := FinVersion,
     crossScalaVersions := Seq("2.9.2", "2.10.4"),
-    logLevel := Level.Debug
+    logLevel := Level.Debug,
+    parallelExecution := false
   )
 
   lazy val root = Project(id = "finagle-zk",
