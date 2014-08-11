@@ -4,8 +4,7 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids
 import com.twitter.finagle.exp.zookeeper.integration.quorum.QuorumIntegrationConfig
 import com.twitter.finagle.exp.zookeeper.watcher.Watch
-import com.twitter.finagle.exp.zookeeper.watcher.Watch.{EventState, EventType}
-import com.twitter.util.{Await, Future}
+import com.twitter.util.Await
 import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
@@ -145,51 +144,4 @@ class WatcherTest extends FunSuite with QuorumIntegrationConfig {
     disconnectClients()
     closeServices()
   }
-
-  test("complete watcher test") {
-    pending
-    newClients()
-    connectClients()
-
-    val ret = Await.result {
-      Future.collect {
-        0 until 100 map { i =>
-          for {
-            _ <- client1.get.create(
-              "/foo-" + i, ("foodata" + i).getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT
-            )
-            getdata <- client3.get.getData("/foo-" + i, true)
-            exists <- client2.get.exists("/foo-" + i, true)
-            setdata <- client1.get.setData("/foo-" + i, ("foodata2-" + i).getBytes, -1)
-            setdata2 <- client2.get.setData("/foo-" + i, ("foodata3-" + i).getBytes, -1)
-          } yield (getdata, exists, setdata, setdata2)
-        }
-      }
-    }
-
-    ret map { grpRep =>
-      val (getdata, exists, stat, stat2) = grpRep
-      assert(getdata.watcher.get.event.isDefined)
-      assert(Await.result(getdata.watcher.get.event).typ === EventType.NODE_DATA_CHANGED)
-      assert(Await.result(getdata.watcher.get.event).state === EventState.SYNC_CONNECTED)
-      assert(exists.watcher.get.event.isDefined)
-      assert(Await.result(exists.watcher.get.event).typ === EventType.NODE_DATA_CHANGED)
-      assert(Await.result(exists.watcher.get.event).state === EventState.SYNC_CONNECTED)
-    }
-
-    Await.result {
-      Future.collect {
-        0 until 100 map { i =>
-          for {
-            _ <- client3.get.delete("/foo-" + i, -1)
-          } yield None
-        }
-      }
-    }
-
-    disconnectClients()
-    closeServices()
-  }
-
-
 }
