@@ -12,6 +12,7 @@ script:
   - "sbt ++$TRAVIS_SCALA_VERSION test"
   
 before_install:
+  - sudo apt-get install ivy
   - sudo chmod +x test_setup.sh
   - sudo ./test_setup.sh
 
