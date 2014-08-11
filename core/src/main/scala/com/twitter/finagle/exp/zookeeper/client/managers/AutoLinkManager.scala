@@ -78,8 +78,11 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
     connectionManager.connection match {
       case Some(connect) =>
         if (!connect.isValid.get()) {
-          ZkClient.logger.warning(("Connection to %s has failed," +
-            " reconnecting with session...").format(connectionManager.currentHost))
+          ZkClient.logger.warning(
+            s"Connection to ${
+              connectionManager.currentHost.getOrElse("")
+            } has failed, reconnecting with session..."
+          )
           stopJob() before reconnectWithSession().unit
         }
         else Future.Done
@@ -108,9 +111,11 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
           "Session has moved to another server"))
 
       case States.SESSION_EXPIRED =>
-        ZkClient.logger.warning(("Session with %s has expired," +
-          " reconnecting without session...")
-          .format(connectionManager.currentHost))
+        ZkClient.logger.warning(
+          s"Session with ${
+            connectionManager.currentHost.getOrElse("Unknown host")
+          } has expired, reconnecting without session..."
+        )
         stopJob() before reconnectWithoutSession().unit
 
       case _ => Future.Done
