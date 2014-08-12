@@ -1,18 +1,18 @@
-# finagle-zookeeper [![Build Status](https://travis-ci.org/finagle/finagle-zookeeper.svg?branch=master)](https://travis-ci.org/finagle/finagle-zookeeper)
+## finagle-zookeeper [![Build Status](https://travis-ci.org/finagle/finagle-zookeeper.svg?branch=master)](https://travis-ci.org/finagle/finagle-zookeeper)
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
 *Note: this is a Google Summer of Code 2014 project, mentored by Twitter, see [the mailing list](https://groups.google.com/forum/?hl=en#!topic/finaglers/GlLXNOvdSVg) for more details.*
 
-### Client
+##### Client
 - `Client` is based on Finagle 6 client model.
 
-### Commands
+##### Commands
 
 Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
 [Finagle documentation](https://twitter.github.io/scala_school/finagle.html#Future) and [Scaladoc](http://twitter.github.io/util/util-core/target/doc/main/api/com/twitter/util/Future.html))
 
-### [Wiki](https://github.com/finagle/finagle-zookeeper/wiki)
+##### [Wiki](https://github.com/finagle/finagle-zookeeper/wiki) [Scaladoc](http://finagle.github.io/finagle-zookeeper/#package)
 
 * [How to create a ZkClient ?](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient)
 
@@ -24,15 +24,14 @@ Every request returns a *twitter.util.Future* (see [Effective Scala](http://twit
 
 * [Watcher manager](https://github.com/finagle/finagle-zookeeper/wiki/5.-Watcher-manager)
 
-### [Scaladoc](http://finagle.github.io/finagle-zookeeper/#package)
 
-### Client creation ( more details [here](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient) )
+##### Client creation ( more details [here](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient) )
 ```scala
   val client = ZooKeeper.newRichClient("127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181")
 ```
 - `127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181` is a String representing the server list, separated by a comma
 
-### Connection
+##### Connection
 ```scala
 val connect = client.connect
     connect onSuccess {
@@ -44,12 +43,12 @@ val connect = client.connect
     }
 ```
 
-### Disconnect
+##### Disconnect
 ```
 client.disconnect
 ```
 
-### First request
+##### First request
 Example of request with sequential composition :
 ```scala
 val res = for {
@@ -60,14 +59,14 @@ val res = for {
     } yield (acl)
 ```
 
-### Create
+##### Create
 ```scala
 val create = client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
 ```
-- `/zookeeper/hello` : String the node that you want to create
-- `"HELLO".getBytes` : Array[Byte] the data associated to this node
+- `/zookeeper/hello` : the node that you want to create
+- `"HELLO".getBytes` : the data associated to this node
 - `Ids.OPEN_ACL_UNSAFE` : default integrated ACL (world:anyone)
-- `CreateMode.EPHEMERAL` : Int the creation mode
+- `CreateMode.EPHEMERAL` : the creation mode
 
 Return value `Future[String]` representing the path you have just created
 
@@ -77,88 +76,97 @@ Return value `Future[String]` representing the path you have just created
 - `CreateMode.EPHEMERAL_SEQUENTIAL` ephemeral and sequential mode
 
 
-### Delete
+##### Delete
 ```scala
 _ <- client.delete("/zookeeper/test", -1)
 ```
-- `/zookeeper/test` : String the node that you want to delete
-- `-1` : Int corresponding version of your data (-1 if you don't care)
+- `/zookeeper/test` : the node that you want to delete
+- `-1` : current version of the node (-1 if you don't care)
 
 Return value `Future[Unit]`
 
-### Exists
+##### Exists
 ```scala
 _ <- client.exists("/zookeeper/test", false)
 ```
-- `/zookeeper/test` : String the node that you want to test
-- `false` : Boolean if you want to set a watch or not on this node
+- `/zookeeper/test` : the node that you want to test
+- `false` : Boolean if you don't want to set a watch this node
 
-Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Watcher])`
+Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Watcher])`, watch
+will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
+it will be `None`.
 
-### Get ACL
+
+##### Get ACL
 ```scala
 client.getACL("/zookeeper")
 ```
-- `/zookeeper` : String the node from which you want to retrieve ACL
+- `/zookeeper` : the node from which you want to retrieve the ACL
 
 Return value `Future[GetACLResponse]` `GetACLResponse(acl: Array[ACL], stat: Stat)`
 
-### Set ACL
+##### Set ACL
 ```scala
 client.setACL("/zookeeper/test", Ids.OPEN_ACL_UNSAFE, -1)
 ```
-- `/zookeeper/test` : String the node that you want to set
+- `/zookeeper/test` : the node that you want to update
 - `Ids.OPEN_ACL_UNSAFE` : default integrated ACL (world:anyone)
-- `-1` : Int corresponding version of your data (-1 if you don't care)
+- `-1` : current node's version (-1 if you don't care)
 
 Return value `Future[Stat]`
 
-### Get children
+##### Get children
 ```scala
 client.getChildren("/zookeeper", false)
 ```
-- `/zookeeper` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node
+- `/zookeeper` : the node that you want to get
+- `false` : if you don't want to set a watch on this node
 
 Return value `Future[GetChildrenResponse]` `GetChildrenResponse(children: Seq[String], watch: Option[Watcher])`
+, watch will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
+  it will be `None`.
 
-### Get children2
+##### Get children2
 ```scala
 client.getChildren2("/zookeeper", false)
 ```
-- `/zookeeper` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node
+- `/zookeeper` : the node that you want to get
+- `false` : if you don't want to set a watch on this node
 
-Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[String], stat: Stat, watch: Option[Watcher])`
+Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[String],
+stat: Stat, watch: Option[Watcher])`, watch will be composed of `Some(watcher:Watcher)`
+if you previously asked to set a watch on the node, otherwise it will be `None`.
 
-### Get Data
+##### Get Data
 ```scala
 client.getData("/zookeeper/test", false)
 ```
-- `/zookeeper/test` : String the node that you want to get
-- `false` : Boolean if you want to set a watch on this node
+- `/zookeeper/test` : the node that you want to get
+- `false` : if you don't want to set a watch on this node
 
-Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat: Stat, watch: Option[Watcher])`
+Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat: Stat, watch: Option[Watcher])`,
+watch will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
+it will be `None`.
 
-### Set Data
+##### Set Data
 ```scala
 client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 ```
-- `/zookeeper/test` : String the node that you want to set
-- `"CHANGE".getBytes` : Array[Byte] data that you want to set on this node
-- `-1` : Int corresponding version of your data (-1 if you don't care)
+- `/zookeeper/test` : the node that you want to update
+- `"CHANGE".getBytes` : the data that you want to set on this node
+- `-1` : current node's version (-1 if you don't care)
 
 Return value `Future[Stat]`
 
-### Sync
+##### Sync
 ```scala
 client.sync("/zookeeper")
 ```
-- `/zookeeper` : String the node that you want to sync
+- `/zookeeper` : the node that you want to sync
 
 Return value `Future[String]`
 
-### Transaction
+##### Transaction
 
 ```scala
 val opList = Seq(
