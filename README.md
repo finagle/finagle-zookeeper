@@ -1,4 +1,4 @@
-## finagle-zookeeper [![Build Status](https://travis-ci.org/finagle/finagle-zookeeper.svg?branch=master)](https://travis-ci.org/finagle/finagle-zookeeper)
+## Finagle-ZooKeeper [![Build Status](https://travis-ci.org/finagle/finagle-zookeeper.svg?branch=master)](https://travis-ci.org/finagle/finagle-zookeeper)
 
 finagle-zookeeper provides basic tools to communicate with a Zookeeper server asynchronously.
 
