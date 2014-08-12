@@ -1,19 +1,20 @@
 language: scala
 scala:
-  - 2.10.3
   - 2.10.4
 
 jdk:
   - oraclejdk7
-  - openjdk6
   - openjdk7
 
 script:
-  - "sbt ++$TRAVIS_SCALA_VERSION test"
+  - "sbt runTests"
   
 before_install:
-  - sudo chmod +x test_setup.sh
-  - sudo ./test_setup.sh
+  - sudo apt-get install ivy
+  - sudo chmod +x integrationTesting/src/main/resources/scripts/runQuorumMode.sh
+  - sudo chmod +x integrationTesting/src/main/resources/scripts/runStandaloneMode.sh
+  - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanQuorumMode.sh
+  - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanStandaloneMode.sh
 
 notifications:
   irc: "chat.freenode.net#finagle-zookeeper"
