@@ -138,7 +138,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
       ACL(Perms.ALL | Perms.ADMIN, Id("ip", "127.0.0.1/8"))
     )
 
-    intercept[InvalidAclException] {
+    intercept[IllegalArgumentException] {
       Await.result {
         client.get.create("/acltest", "".getBytes, acls, CreateMode.PERSISTENT)
       }
