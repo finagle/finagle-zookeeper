@@ -39,14 +39,14 @@ object IntegrationTest {
         ("sh "
           + System.getProperty("user.dir")
           + "/integrationTesting/src/main/resources/scripts/runQuorumMode.sh "
-          + version + " " + URL
+          + s"$version $URL"
           ).!!
 
       case "standalone" =>
         ("sh "
           + System.getProperty("user.dir")
           + "/integrationTesting/src/main/resources/scripts/runStandaloneMode.sh "
-          + version + " " + URL
+          + s"$version $URL"
           ).!!
     }
   }
@@ -77,14 +77,12 @@ object IntegrationTest {
   ): Initialize[Task[Unit]] = {
     val commandsTasks = commands map { command =>
       testRunner.toTask(
-        s" com.twitter.finagle.exp.zookeeper.integration.$mode.command."
-          + command
+        s" com.twitter.finagle.exp.zookeeper.integration.$mode.command.$command"
       )
     }
     val extrasTasks = extras map { extra =>
       testRunner.toTask(
-        s" com.twitter.finagle.exp.zookeeper.integration.$mode.extra."
-          + extra
+        s" com.twitter.finagle.exp.zookeeper.integration.$mode.extra.$extra"
       )
     }
 

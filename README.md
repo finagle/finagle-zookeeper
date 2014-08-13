@@ -63,7 +63,7 @@ val res = for {
   _ <- client.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
   _ <- client.exists("/zookeeper/test", true)
   _ <- client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
-  } yield (acl)
+} yield (acl)
 ```
 
 ##### Create
@@ -184,11 +184,11 @@ Return value `Future[String]`
 
 ```scala
 val opList = Seq(
-      CreateRequest(
-        "/zookeeper/hello", "TRANS".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL),
-      SetDataRequest("/zookeeper/hello", "changing".getBytes, -1),
-      DeleteRequest("/zookeeper/hell", -1)
-    )
+  CreateRequest(
+    "/zookeeper/hello", "TRANS".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL),
+  SetDataRequest("/zookeeper/hello", "changing".getBytes, -1),
+  DeleteRequest("/zookeeper/hell", -1)
+  )
 ```
 A transaction can be composed by one or more OpRequests :
 ```scala

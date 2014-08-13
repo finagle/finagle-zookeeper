@@ -78,6 +78,7 @@ trait ZkClient extends Closable with ClientManager {
   /**
    * Checks if the watches on a znode for a specified watcher type are still
    * available on the server side.
+   * Not released until v3.5.0
    *
    * @param path the path to the znode
    * @param watcherType the watcher type (children, data, any)
@@ -105,6 +106,7 @@ trait ZkClient extends Closable with ClientManager {
 
   /**
    * Checks if a watcher event is still not triggered.
+   * Not released until v3.5.0
    *
    * @param watcher a watcher to test
    * @return Future[Unit] if the watcher is ok, or else ZooKeeperException
@@ -145,7 +147,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit] or Exception
    */
   def close(deadline: Time): Future[Unit] =
-    stopJob() before connectionManager.close(deadline)
+    stopJob() ensure connectionManager.close(deadline)
 
   /**
    * Closes the session and stops background jobs.
@@ -422,6 +424,7 @@ trait ZkClient extends Closable with ClientManager {
   /**
    * Return the last committed configuration (as known to the server to which
    * the client is connected) and the stat of the configuration.
+   * Not released until v3.5.0
    *
    * If the watch is true and the call is successful (no exception is
    * thrown), a watch will be left on the configuration node. The watch
@@ -514,6 +517,7 @@ trait ZkClient extends Closable with ClientManager {
 
   /**
    * Reconfigure - add/remove servers. Return the new configuration.
+   * Not released until v3.5.0
    *
    * @param joiningServers a comma separated list of servers being added
    *                       (incremental reconfiguration)
@@ -614,6 +618,7 @@ trait ZkClient extends Closable with ClientManager {
 
   /**
    * For the given znode path, removes the specified watcher.
+   * Not released until v3.5.0
    *
    * @param watcher the watcher to be removed
    * @param local whether watches can be removed locally when there is no
@@ -621,7 +626,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit]
    * @since 3.5.0
    */
-  def removeWatches(
+  private[this] def removeWatches(
     watcher: Watcher,
     local: Boolean
   ): Future[Unit] = {
@@ -657,7 +662,7 @@ trait ZkClient extends Closable with ClientManager {
 
   /**
    * For the given znode path, removes all the registered watchers of given
-   * watcherType.
+   * watcherType. Not released until v3.5.0
    *
    * @param path the node path
    * @param watcherType the watcher type (children, data, any)
@@ -666,7 +671,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit]
    * @since 3.5.0
    */
-  def removeAllWatches(
+  private[this] def removeAllWatches(
     path: String,
     watcherType: Int,
     local: Boolean
