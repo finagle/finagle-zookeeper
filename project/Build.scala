@@ -32,7 +32,7 @@ object finaglezk extends Build {
 
   lazy val buildSettings = Seq(
     name := "finagle-ZooKeeper",
-    organization := "com.twitter.finagle",
+    organization := "com.twitter",
     version := clientVersion,
     crossScalaVersions := Seq("2.9.2", "2.10.4")
   )
