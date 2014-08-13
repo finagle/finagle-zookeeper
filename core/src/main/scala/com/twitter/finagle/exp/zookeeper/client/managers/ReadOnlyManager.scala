@@ -45,7 +45,7 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
    *
    * @return Future.Done
    */
-  def startRwSearch: Future[Unit] =
+  def startRwSearch(): Future[Unit] =
     if (canSearch.getAndSet(false)) findAndConnectRwServer()
     else Future.Done
 
@@ -54,7 +54,7 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
    *
    * @return Future.Done
    */
-  def stopRwSearch: Future[Unit] =
+  def stopRwSearch(): Future[Unit] =
     if (!canSearch.getAndSet(true))
       connectionManager.hostProvider.stopRwServerSearch()
     else Future.Done

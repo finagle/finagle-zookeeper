@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.connection
 
+import com.google.common.net.InetAddresses
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
@@ -10,6 +11,7 @@ import com.twitter.io.Buf.ByteArray
 import com.twitter.util._
 import com.twitter.util.TimeConversions._
 import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.util.Random
 
 private[finagle] class HostProvider(
@@ -378,11 +380,25 @@ object HostUtilities {
   }
 
   def testIpAddress(address: String) {
-    val addressAndPort = address.split(":")
-    if (addressAndPort.size != 2)
+    val ind = address.lastIndexOf(":")
+    val ip = address.take(ind)
+    val port = address.takeRight(address.length - (ind + 1))
+
+    if (ind == 0)
       throw new IllegalArgumentException(
-        "Address %s does not respect this format x.x.x.x:port".format(address))
-    else ACL.ipToBytes(addressAndPort(0))
+        s"Address $address does not respect this format ip:port")
+    else {
+      if (!testIP(ip))
+        throw new IllegalArgumentException("IP address is malformed")
+    }
+  }
+
+  def testIP(ip: String): Boolean = {
+    try {
+      InetAddresses.forString(ip)
+      true
+    }
+    catch { case exc: Exception => false }
   }
 
   /**

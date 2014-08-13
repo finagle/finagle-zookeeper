@@ -19,8 +19,6 @@ class ConnectionTest extends FunSuite {
   val port: Int = 2181
   val timeOut: Long = 1000
 
-  // TODO Test ping, close, request without connection
-  // TODO Test multiple connection
   test("Server is in rw mode") {
     val client = BufClient.newSimpleClient(ipAddress + ":" + port)
     val service = client.apply()

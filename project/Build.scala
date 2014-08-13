@@ -27,6 +27,7 @@ object finaglezk extends Build {
     "org.scalatest" %% "scalatest" % "2.2.0",
     "com.twitter" %% "finagle-core" % finagleVersion,
     "junit" % "junit" % "4.11",
+    "com.google.guava" % "guava" % "17.0",
     "org.mockito" % "mockito-all" % "1.9.5" % "test"
   )
 

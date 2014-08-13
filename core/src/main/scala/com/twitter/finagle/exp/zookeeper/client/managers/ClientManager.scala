@@ -20,11 +20,12 @@ with ReadOnlyManager {slf: ZkClient =>
    * is defined.
    *
    */
-  private[this] def actIfRO() {
+  private[this] def actIfRO(): Future[Unit] = {
     if (sessionManager.session.isRO.get()
       && timeBetweenRwSrch.isDefined) {
       startRwSearch()
     }
+    else Future.Done
   }
 
   /**
@@ -186,7 +187,7 @@ with ReadOnlyManager {slf: ZkClient =>
 
       connectionManager.hostProvider.findServer(Some(newList)) flatMap { srv =>
         connectionManager.close() before reconnectWithSession(Some(srv))
-      } rescue{ case exc =>
+      } rescue { case exc =>
         Future(connectionManager.currentHost.getOrElse(""))
       }
     }
@@ -214,11 +215,9 @@ with ReadOnlyManager {slf: ZkClient =>
       case Some(currentHost) =>
         if (hostsToRemove.contains(currentHost)) {
           connectionManager.findAndConnect(Some(newList)) flatMap { _ =>
-              connectionManager.hostProvider.serverList_=(newList)
-              Future.Done
-          } rescue {
-            case exc => Future.Done
-          }
+            connectionManager.hostProvider.serverList_=(newList)
+            Future.Done
+          } rescue { case exc => Future.Done }
         }
         else {
           connectionManager.hostProvider.serverList_=(newList)
@@ -348,9 +347,9 @@ with ReadOnlyManager {slf: ZkClient =>
    */
   private[finagle] def startJob(): Future[Unit] = {
     startStateLoop()
-    actIfRO()
     connectionManager.hostProvider.startPreventiveSearch()
-    Future(zkRequestService.unlockService())
+    actIfRO() before
+      Future(zkRequestService.unlockService())
   }
 
   /**

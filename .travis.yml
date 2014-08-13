@@ -10,12 +10,10 @@ script:
   - "sbt runTests"
   
 before_install:
-  - sudo apt-get install ivy
   - sudo chmod +x integrationTesting/src/main/resources/scripts/runQuorumMode.sh
   - sudo chmod +x integrationTesting/src/main/resources/scripts/runStandaloneMode.sh
   - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanQuorumMode.sh
   - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanStandaloneMode.sh
 
 notifications:
-  irc: "chat.freenode.net#finagle-zookeeper"
   email: false

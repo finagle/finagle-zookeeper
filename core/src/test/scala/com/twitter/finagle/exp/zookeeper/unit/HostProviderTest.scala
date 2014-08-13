@@ -1,6 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.unit
 
-import com.twitter.finagle.exp.zookeeper.connection.{HostUtilities, HostProvider}
+import com.twitter.finagle.exp.zookeeper.connection.{HostProvider, HostUtilities}
 import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
@@ -35,5 +35,10 @@ class HostProviderTest extends FunSuite {
       "192.168.0.10:2181", "192.168.0.4:2181", "192.168.0.3:2181")
     val seq2 = HostUtilities.shuffleSeq(seq)
     assert(seq != seq2)
+  }
+
+  test("Test IPv6") {
+    HostUtilities.testIpAddress("2001:cdba:0000:0000:0000:0000:3257:9652:2181")
+    HostUtilities.testIpAddress("2607:f0d0:1002:51::4:2181")
   }
 }

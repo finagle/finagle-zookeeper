@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.data
 
+import com.twitter.finagle.exp.zookeeper.connection.HostUtilities
 import com.twitter.io.Buf
 
 case class ACL(perms: Int, id: Id) extends Data {
@@ -9,7 +10,6 @@ case class ACL(perms: Int, id: Id) extends Data {
 }
 
 object ACL extends DataDecoder[ACL] {
-
   def apply(perm: Int, scheme: String, id: String): ACL =
     new ACL(perm, new Id(scheme, id))
   def apply(perm: Int, id: String) = parseACL(id + perm)(0)
@@ -39,7 +39,11 @@ object ACL extends DataDecoder[ACL] {
             throw new IllegalArgumentException(
               "ACL: digest malformed exception")
 
-        case "ip" => ipToBytes(acl.id.data)
+        case "ip" =>
+          if (!HostUtilities.testIP(acl.id.data))
+            throw new IllegalArgumentException(
+              "ACL: IP is malformed")
+
         case _ => throw new IllegalArgumentException(
           "ACL scheme not supported")
       }
@@ -47,46 +51,6 @@ object ACL extends DataDecoder[ACL] {
   }
 
   def check(acl: ACL): Unit = check(Seq(acl))
-
-  /**
-   * Check IP address
-   * @param addr the IP address
-   * @return Array[Byte] or Exception
-   */
-  private[finagle] def ipToBytes(addr: String): Array[Byte] = {
-    // TODO implement for ipv6
-
-    def ipv4ToBytes(addr: String): Array[Byte] = {
-      val ip = addr.split("/")
-      if (ip.length > 1)
-        require(ip(1).toInt >= 0 && ip(1).toInt <= 32,
-          "network significant bits should be between 0 and 32")
-      val parts = ip(0).split('.')
-      if (parts.length != 4) {
-        throw new IllegalArgumentException(
-          "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
-      }
-      val b = new Array[Byte](4)
-
-      for (i <- 0 until 4) {
-        try {
-          val v: Int = parts(i).toInt
-          if (v >= 0 && v <= 255) {
-            b(i) = v.toByte
-          }
-          else throw new IllegalArgumentException(
-            "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
-        }
-        catch {
-          case exc: Exception => throw new IllegalArgumentException(
-            "IP malformed exception (IP format: x.x.x.x with 0 <= x <= 255)")
-        }
-      }
-      b
-    }
-    ipv4ToBytes(addr)
-  }
-
 
   /**
    * ACL list from a String
