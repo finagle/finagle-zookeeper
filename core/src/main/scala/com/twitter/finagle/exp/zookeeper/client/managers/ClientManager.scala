@@ -69,7 +69,8 @@ with ReadOnlyManager {slf: ZkClient =>
             case exc: Throwable =>
               Return(sessionManager.newSession(conRep, sessionTimeout, ping))
           }
-          configureNewSession() before startJob() before Future(host.getOrElse(""))
+          configureNewSession() before startJob() before
+            Future(host.getOrElse(""))
         }
         else {
           sessionManager.reinit(conRep, ping) match {
@@ -152,7 +153,8 @@ with ReadOnlyManager {slf: ZkClient =>
         ReqPacket(None, Some(connectReq))
       ) transform {
       case Return(connectResponse) =>
-        val finalRep = connectResponse.response.get.asInstanceOf[ConnectResponse]
+        val finalRep =
+          connectResponse.response.get.asInstanceOf[ConnectResponse]
         actOnEvent(finalRep)
 
       case Throw(exc: Throwable) =>
@@ -197,7 +199,8 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    * @param hostList hosts to add
    */
-  def addHosts(hostList: String): Unit = connectionManager.hostProvider.addHost(hostList)
+  def addHosts(hostList: String): Unit =
+    connectionManager.hostProvider.addHost(hostList)
 
   /**
    * Should remove some hosts from the host list
@@ -241,7 +244,10 @@ with ReadOnlyManager {slf: ZkClient =>
         connectionManager.hasAvailableService flatMap { available =>
           if (available) {
             sessionManager.session.prepareClose()
-            val closeReq = ReqPacket(Some(RequestHeader(1, OpCode.CLOSE_SESSION)), None)
+            val closeReq = ReqPacket(
+              Some(RequestHeader(1, OpCode.CLOSE_SESSION))
+              , None
+            )
 
             connectionManager.connection.get.serve(closeReq) transform {
               case Return(closeRep) =>
@@ -250,16 +256,24 @@ with ReadOnlyManager {slf: ZkClient =>
                   sessionManager.session.close()
                   Future.Done
                 } else Future.exception(
-                  ZookeeperException.create("Error while closing session", closeRep.err.get))
+                  ZookeeperException.create(
+                    "Error while closing session",
+                    closeRep.err.get
+                  )
+                )
 
               case Throw(exc: Throwable) => Future.exception(exc)
             }
           } else Future.exception(
-            new NoConnectionAvailable("connection not available during close session"))
+            new NoConnectionAvailable(
+              "connection not available during close session"
+            )
+          )
         }
       }
     } else Future.exception(
-      new NoSessionEstablished("client is not connected to server")) ensure stopJob()
+      new NoSessionEstablished("client is not connected to server")
+    ) ensure stopJob()
 
   /**
    * Should find a suitable server and connect to.

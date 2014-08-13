@@ -38,7 +38,9 @@ class SessionManager(canBeRo: Boolean) {
    * @param sessionTimeout an optional timeout for the session
    * @return a customized ConnectResponse
    */
-  def buildReconnectRequest(sessionTimeout: Option[Duration] = None): ConnectRequest = {
+  def buildReconnectRequest(
+    sessionTimeout: Option[Duration] = None
+  ): ConnectRequest = {
     val sessionId = if (session.hasFakeSessionId.get) 0
     else session.id
     val sessTimeout = sessionTimeout getOrElse session.diseredTimeout

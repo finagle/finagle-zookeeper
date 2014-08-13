@@ -96,8 +96,8 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket])
     timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
     maxConsecutiveRetries: Int = 10,
     maxReconnectAttempts: Int = 5
-  ) =
-    configured(Params.AutoReconnect(
+  ) = configured(
+    Params.AutoReconnect(
       true,
       autoRwServerSearch,
       preventiveSearch,
@@ -105,28 +105,32 @@ class ZookeeperClient(client: StackClient[ReqPacket, RepPacket])
       timeBetweenLinkCheck,
       maxConsecutiveRetries,
       maxReconnectAttempts
-    ))
+    )
+  )
 
   def withZkConfiguration(
     autoWatchReset: Boolean = true,
     canReadOnly: Boolean = true,
     chroot: String = "",
     sessionTimeout: Duration = 3000.milliseconds
-  ) =
-    configured(Params.ZkConfiguration(
+  ) = configured(
+    Params.ZkConfiguration(
       autoWatchReset,
       canReadOnly,
       chroot,
       sessionTimeout
-    ))
+    )
+  )
 }
 
 object Zookeeper extends ZookeeperClient(
-  ZookeeperStackClient
-    .configured(DefaultPool.Param(
-    low = 0, high = 1, bufferSize = 0,
-    idleTime = Duration.Top,
-    maxWaiters = Int.MaxValue))
+  ZookeeperStackClient.configured(
+    DefaultPool.Param(
+      low = 0, high = 1, bufferSize = 0,
+      idleTime = Duration.Top,
+      maxWaiters = Int.MaxValue
+    )
+  )
 )
 
 /**
@@ -139,7 +143,9 @@ private[finagle] object SimpleClient extends DefaultClient[Buf, Buf](
   name = "isroClient",
   endpointer = Bridge[Buf, Buf, Buf, Buf](
     NettyTrans(_, _) map { new BufTransport(_) },
-    newDispatcher = new PipeliningDispatcher(_)))
+    newDispatcher = new PipeliningDispatcher(_)
+  )
+)
 
 private[finagle] object BufClient extends Client[Buf, Buf] {
   override def newClient(dest: Name, label: String): ServiceFactory[Buf, Buf] =

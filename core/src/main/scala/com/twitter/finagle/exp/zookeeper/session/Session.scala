@@ -30,16 +30,15 @@ class Session(
 ) {
 
   private[finagle]
-  var currentState = new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)
+  var currentState =
+    new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)
   private[finagle] val isClosingSession = new AtomicBoolean(false)
   private[finagle] var hasFakeSessionId = new AtomicBoolean(true)
   private[finagle] val lastZxid = new AtomicLong(0L)
   private[this] val xid = new AtomicInteger(2)
 
   def isReadOnly: Boolean = this.isRO.get()
-
   def id: Long = sessionID
-
   def password: Array[Byte] = sessionPassword
 
   /**
@@ -47,11 +46,8 @@ class Session(
    * if no response at (lastRequestTime) + 2/3 of timeout
    */
   private[this] def pingTimeout: Duration = negotiateTimeout * 1 / 3
-
   def diseredTimeout: Duration = sessionTimeout
-
   def negotiatedTimeout: Duration = negotiateTimeout
-
   def state: States.ConnectionState = currentState.get()
 
   /**
@@ -145,7 +141,8 @@ class Session(
    */
   private[finagle] def reinit(
     connectResponse: ConnectResponse,
-    pingSender: PingSender): Try[Unit] = Try {
+    pingSender: PingSender
+  ): Try[Unit] = Try {
     assert(connectResponse.sessionId == sessionID)
     assert(util.Arrays.equals(connectResponse.passwd, password))
 
@@ -166,7 +163,7 @@ class Session(
     startPing()
     xid.set(2)
     ZkClient.logger.info(
-      "Reconnected to session with ID: %d".format(connectResponse.sessionId))
+      s"Reconnected to session with ID: ${connectResponse.sessionId}")
   }
 
   private[finagle] def stop() {

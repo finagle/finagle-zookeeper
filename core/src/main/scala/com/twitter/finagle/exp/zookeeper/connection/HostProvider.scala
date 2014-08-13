@@ -4,14 +4,12 @@ import com.google.common.net.InetAddresses
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
-import com.twitter.finagle.exp.zookeeper.data.ACL
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.io.Buf
 import com.twitter.io.Buf.ByteArray
-import com.twitter.util._
 import com.twitter.util.TimeConversions._
+import com.twitter.util._
 import java.util.concurrent.atomic.AtomicBoolean
-
 import scala.util.Random
 
 private[finagle] class HostProvider(
@@ -24,7 +22,8 @@ private[finagle] class HostProvider(
   type TestMethod = String => Future[String]
   val canSearchRwServer = new AtomicBoolean(false)
   var hasStoppedRwServerSearch = Promise[Unit]()
-  private[this] var hostList: Seq[String] = HostUtilities.shuffleSeq(HostUtilities.formatHostList(dest))
+  private[this] var hostList: Seq[String] =
+    HostUtilities.shuffleSeq(HostUtilities.formatHostList(dest))
   var seenRwServer: Option[String] = None
   var seenRoServer: Option[String] = None
 
@@ -105,10 +104,12 @@ private[finagle] class HostProvider(
             // Found a RO mode server
             case Some(server) => Future(server)
             case None => Future.exception(
-              NoServerFound("No server available for connection"))
+              NoServerFound("No server available for connection")
+            )
           }
         } else Future.exception(
-          NoServerFound("No RW server available for connection"))
+          NoServerFound("No RW server available for connection")
+        )
 
       // isro is maybe request not supported or not allowed
       // will search by connecting to server directly
@@ -122,7 +123,8 @@ private[finagle] class HostProvider(
       hasStoppedRwServerSearch = Promise()
       findRwServer(timeBetweenRwServerSearch.get)
     } else Future.exception(
-      new RuntimeException("RW mode server search in progress"))
+      new RuntimeException("RW mode server search in progress")
+    )
   }
 
   def stopRwServerSearch(): Future[Unit] = {
@@ -141,7 +143,9 @@ private[finagle] class HostProvider(
    * @return address of an available RW server
    */
   def findRwServer(timeInterval: Duration): Future[String] =
-    scanHostList(HostUtilities.shuffleSeq(hostList))(withIsroRequest) transform {
+    scanHostList(
+      HostUtilities.shuffleSeq(hostList)
+    )(withIsroRequest) transform {
       // Found a RW server, best choice
       case Return(server) =>
         canSearchRwServer.set(false)
@@ -156,7 +160,8 @@ private[finagle] class HostProvider(
         else {
           hasStoppedRwServerSearch.setDone()
           Future.exception(
-            new RuntimeException("RW mode server search interrupted"))
+            new RuntimeException("RW mode server search interrupted")
+          )
         }
     }
 
@@ -191,7 +196,9 @@ private[finagle] class HostProvider(
    * @return Future.Done when the action is completed
    */
   def preventiveRwServerSearch(): Future[Unit] =
-    scanHostList(HostUtilities.shuffleSeq(hostList))(withIsroRequest) transform {
+    scanHostList(
+      HostUtilities.shuffleSeq(hostList)
+    )(withIsroRequest) transform {
       case Return(server) => Future.Done
       case Throw(exc) =>
         scanHostList(hostList)(withConnectRequest).unit rescue {
@@ -229,9 +236,9 @@ private[finagle] class HostProvider(
     // using BufClient to send unframed requests
     val client = BufClient.newSimpleClient(host)
     // sending "isro" request
-    val rep = client.apply() flatMap (_.apply(
-      ByteArray("isro".getBytes)
-    ))
+    val rep = client.apply() flatMap {
+      _.apply(ByteArray("isro".getBytes))
+    }
 
     rep transform {
       case Return(buf) =>
@@ -239,24 +246,25 @@ private[finagle] class HostProvider(
         // this is a RW mode server ( connected to majority )
         if (str == "rw") {
           seenRwServer = Some(host)
-          ZkClient.logger.info("Found Rw server at %s".format(host))
+          ZkClient.logger.info(s"Found Rw server at $host")
           Future(host)
         }
         // this is a RO mode server ( not connected to quorum )
         else if (str == "ro") {
           seenRoServer = Some(host)
-          ZkClient.logger.info("Found Ro server at %s".format(host))
-          Future.exception(NoRwServerFound("This is a RO mode server"))
+          ZkClient.logger.info(s"Found Ro server at $host")
+          Future.exception(NoRwServerFound("Found only one server in RO mode"))
         }
         else Future.exception(
-          NoRwServerFound("No server found with isro request"))
+          NoRwServerFound("No server found with isro request")
+        )
 
       // isro request not supported by server (server version < 3.4.0)
       case Throw(exc) =>
         Future.exception(
           CouldNotConnect("Could not connect to server : " + host)
-            .initCause(exc))
-
+            .initCause(exc)
+        )
     } ensure client.close()
   }
   /**
@@ -275,7 +283,6 @@ private[finagle] class HostProvider(
     def close(): Future[Unit] = service flatMap {
       svc => svc.close() before client.close()
     }
-
     def serve(buf: Buf): Future[Buf] = service flatMap (_.apply(buf))
 
     val connectRequest = ReqPacket(
@@ -296,7 +303,8 @@ private[finagle] class HostProvider(
 
     // sending a connect request and then a close request
     val rep = serve(
-      Buf.U32BE(connectRequest.buf.length).concat(connectRequest.buf)) flatMap { rep =>
+      Buf.U32BE(connectRequest.buf.length)
+        .concat(connectRequest.buf)) flatMap { rep =>
       serve(Buf.U32BE(closeRequest.buf.length).concat(closeRequest.buf))
       val Buf.U32BE(_, rem) = rep
       ConnectResponse(rem) match {
@@ -310,23 +318,25 @@ private[finagle] class HostProvider(
         case Return(conRep: ConnectResponse) =>
           if (conRep.isRO) {
             seenRoServer = Some(host)
-            ZkClient.logger.info("Found Ro server at %s".format(host))
+            ZkClient.logger.info(s"Found Ro server at $host")
           }
           else {
             seenRwServer = Some(host)
-            ZkClient.logger.info("Found Rw server at %s".format(host))
+            ZkClient.logger.info(s"Found Rw server at $host")
           }
           Future(host)
         case Throw(exc: Throwable) => Future.exception(
-          CouldNotConnect("Could not connect to server : " + host)
-            .initCause(exc))
+          CouldNotConnect(s"Could not connect to server : $host")
+            .initCause(exc)
+        )
       } ensure close()
     }
     catch {
       case exc: Throwable =>
         Future.exception(
-          CouldNotConnect("Could not connect to server : " + host)
-            .initCause(exc))
+          CouldNotConnect(s"Could not connect to server : $host")
+            .initCause(exc)
+        )
     }
   }
 
@@ -382,11 +392,11 @@ object HostUtilities {
   def testIpAddress(address: String) {
     val ind = address.lastIndexOf(":")
     val ip = address.take(ind)
-    val port = address.takeRight(address.length - (ind + 1))
 
     if (ind == 0)
       throw new IllegalArgumentException(
-        s"Address $address does not respect this format ip:port")
+        s"Address $address does not respect this format ip:port"
+      )
     else {
       if (!testIP(ip))
         throw new IllegalArgumentException("IP address is malformed")

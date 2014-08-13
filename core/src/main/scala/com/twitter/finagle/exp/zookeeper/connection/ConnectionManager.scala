@@ -22,7 +22,8 @@ class ConnectionManager(
   @volatile var connection: Option[Connection] = None
   val isInitiated = new AtomicBoolean(false)
   private[this] var activeHost: Option[String] = None
-  private[finagle] val hostProvider = new HostProvider(dest, canBeRo, timeForPreventive, timeForRoMode)
+  private[finagle] val hostProvider =
+    new HostProvider(dest, canBeRo, timeForPreventive, timeForRoMode)
 
   type SearchMethod = String => Future[ServiceFactory[ReqPacket, RepPacket]]
 
@@ -79,7 +80,7 @@ class ConnectionManager(
     connection = Some(new Connection(newServiceFactory(server)))
     isInitiated.set(true)
 
-    ZkClient.logger.info("Now connected to %s".format(server))
+    ZkClient.logger.info(s"Now connected to $server")
   }
 
   /**

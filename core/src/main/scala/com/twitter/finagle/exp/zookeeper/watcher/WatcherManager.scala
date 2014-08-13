@@ -10,9 +10,13 @@ import scala.collection.mutable
  * WatcherManager is used to manage watches by keeping in memory the map
  * of active watches.
  *
- * @param chroot default user chroot
+ * @param chroot default user chrooted path
+ * @param autoWatchReset reset watches on reconnection
  */
-private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
+private[finagle] class WatcherManager(
+  chroot: String,
+  autoWatchReset: Boolean
+) {
   val dataWatchers: mutable.HashMap[String, Set[Watcher]] =
     mutable.HashMap()
   val existsWatchers: mutable.HashMap[String, Set[Watcher]] =
@@ -191,9 +195,12 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
    */
   private[finagle] def registerWatcher(path: String, mapType: Int): Watcher = {
     mapType match {
-      case Watch.WatcherMapType.data => addWatcher(dataWatchers, WatcherMapType.data, path)
-      case Watch.WatcherMapType.exists => addWatcher(existsWatchers, WatcherMapType.exists, path)
-      case Watch.WatcherMapType.`children` => addWatcher(childrenWatchers, WatcherMapType.children, path)
+      case Watch.WatcherMapType.data =>
+        addWatcher(dataWatchers, WatcherMapType.data, path)
+      case Watch.WatcherMapType.exists =>
+        addWatcher(existsWatchers, WatcherMapType.exists, path)
+      case Watch.WatcherMapType.`children` =>
+        addWatcher(childrenWatchers, WatcherMapType.children, path)
     }
   }
 
@@ -206,7 +213,8 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
   def removeWatchers(path: String, watcherType: Int) {
     def removeAllWatchers(
       map: mutable.HashMap[String, Set[Watcher]],
-      path: String) {
+      path: String
+    ) {
       map synchronized {
         map.remove(path)
       }
@@ -252,9 +260,12 @@ private[finagle] class WatcherManager(chroot: String, autoWatchReset: Boolean) {
     }
 
     watcher.typ match {
-      case Watch.WatcherMapType.data => removeFromMap(dataWatchers, watcher)
-      case Watch.WatcherMapType.exists => removeFromMap(existsWatchers, watcher)
-      case Watch.WatcherMapType.children => removeFromMap(childrenWatchers, watcher)
+      case Watch.WatcherMapType.data =>
+        removeFromMap(dataWatchers, watcher)
+      case Watch.WatcherMapType.exists =>
+        removeFromMap(existsWatchers, watcher)
+      case Watch.WatcherMapType.children =>
+        removeFromMap(childrenWatchers, watcher)
     }
   }
 }

@@ -13,22 +13,23 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
    * @return Future.Done
    */
   private[this] def findAndConnectRwServer(): Future[Unit] = {
-    ZkClient.logger.info("Client has started looking for a Read-Write server in background.")
+    ZkClient.logger.info(
+      "Client has started looking for a Read-Write server in background.")
     connectionManager.hostProvider.startRwServerSearch() transform {
       case Return(server) =>
         if (sessionManager.session.isRO.get() && canSearch.get()) {
           if (sessionManager.session.hasFakeSessionId.get) {
             ZkClient.logger.info(
-              ("Client has found a Read-Write server" +
-                " at %s, now reconnecting to it" +
-                " without session.").format(server))
+              "Client has found a Read-Write server" +
+                s" at $server, now reconnecting to it" +
+                " without session.")
             reconnectWithoutSession(Some(server)).unit
           }
           else {
             ZkClient.logger.info(
-              ("Client has found a Read-Write server" +
-                " at %s, now reconnecting to it" +
-                " with session.").format(server))
+              "Client has found a Read-Write server" +
+                s" at $server, now reconnecting to it" +
+                " with session.")
             reconnectWithSession(Some(server)).unit
           }
         } else Future.Done

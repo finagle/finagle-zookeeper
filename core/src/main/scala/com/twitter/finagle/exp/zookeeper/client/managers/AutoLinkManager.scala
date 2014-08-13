@@ -17,8 +17,6 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    */
   def startStateLoop(): Unit = {
     if (autoReconnect) {
-      require(timeBetweenLinkCheck.isDefined)
-
       this.synchronized {
         canCheckLink.set(true)
         if (!CheckLingScheduler.isRunning) {
@@ -97,7 +95,9 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
    */
   private[this] def checkSession(): Future[Unit] =
     sessionManager.session.state match {
-      case States.CONNECTION_LOSS | States.NOT_CONNECTED | States.AUTH_FAILED =>
+      case States.CONNECTION_LOSS
+           | States.NOT_CONNECTED
+           | States.AUTH_FAILED =>
         ZkClient.logger.warning(
           s"Connection loss with ${
             connectionManager.currentHost.getOrElse("Unknown host")

@@ -11,7 +11,11 @@ import com.twitter.util.Promise
  * @param typ watchManager map type (child, data, exists)
  * @param event a Future[WatchEvent)
  */
-case class Watcher(path: String, private[finagle] val typ: Int, event: Promise[WatchEvent])
+case class Watcher(
+  path: String,
+  private[finagle] val typ: Int,
+  event: Promise[WatchEvent]
+)
 
 private[finagle] object Watch {
   object EventType {
