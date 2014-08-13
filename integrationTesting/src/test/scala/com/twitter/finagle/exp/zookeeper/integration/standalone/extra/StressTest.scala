@@ -54,7 +54,7 @@ class StressTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("connect-disconnect test") {
@@ -66,7 +66,7 @@ class StressTest extends FunSuite with StandaloneIntegrationConfig {
       disconnect()
     }
 
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("change host test") {
@@ -79,6 +79,6 @@ class StressTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 }

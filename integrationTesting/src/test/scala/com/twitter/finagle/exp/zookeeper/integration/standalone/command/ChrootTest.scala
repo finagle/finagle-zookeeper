@@ -86,7 +86,7 @@ class ChrootTest extends FunSuite with StandaloneIntegrationConfig {
     Await.ready(clientWCh.get.closeSession())
     Await.ready(client.get.closeSession())
 
-    Await.ready(clientWCh.get.closeService())
-    Await.ready(client.get.closeService())
+    Await.ready(clientWCh.get.close())
+    Await.ready(client.get.close())
   }
 }

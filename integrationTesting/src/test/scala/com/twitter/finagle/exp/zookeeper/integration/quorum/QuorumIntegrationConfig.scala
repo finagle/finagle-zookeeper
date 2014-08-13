@@ -78,8 +78,8 @@ trait QuorumIntegrationConfig extends FunSuite {
 
   def closeServices() {
     Await.ready{
-      client1.get.closeService() before client2.get.closeService() before
-        client3.get.closeService()
+      client1.get.close() before client2.get.close() before
+        client3.get.close()
     }
   }
 }

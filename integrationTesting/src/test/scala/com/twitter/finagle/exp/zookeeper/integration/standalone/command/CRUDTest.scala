@@ -19,7 +19,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
 
     Thread.sleep(500)
 
-    val disconnect = client.get.closeSession() before client.get.closeService()
+    val disconnect = client.get.closeSession() before client.get.close()
     Await.ready(disconnect)
   }
 
@@ -40,7 +40,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, SetData, GetData, Exists, Sync") {
@@ -65,7 +65,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._4 === "/zookeeper")
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
 
@@ -84,7 +84,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._2.acl.contains(ACL(Perms.ALL, "world", "anyone")))
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Create Ephemeral and Persistent Nodes") {
@@ -101,7 +101,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._2 === "/zookeeper/persistentNode")
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Create 2 same ephemeral nodes should throw an exception") {
@@ -118,7 +118,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Ephemeral node should not exists") {
@@ -135,7 +135,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Persistent node should still exists") {
@@ -154,7 +154,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Update persistent node") {
@@ -169,7 +169,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret.dataLength === "CHANGE IS GOOD1".getBytes.length)
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Add Children to persistent node") {
@@ -187,7 +187,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._2 === "/zookeeper/persistentNode/secondChild")
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Add 8 sequential nodes") {
@@ -208,7 +208,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     Await.result(res)
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("GetChildren and GetChildren2 on persistent node") {
@@ -226,7 +226,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._2.stat.numChildren === 10)
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Delete persistent node and children") {
@@ -244,7 +244,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
 
     Await.result(ret)
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("Persistent node and children should not exist") {
@@ -260,6 +260,6 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 }

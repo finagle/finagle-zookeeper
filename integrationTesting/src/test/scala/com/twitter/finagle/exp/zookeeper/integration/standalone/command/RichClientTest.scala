@@ -18,7 +18,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
 
     intercept[NoAuthException] {
       Await.result {
-        client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+        client.get.addAuth("digest", "ben:passwd".getBytes) before
           client.get.create("/ben", "".getBytes, Ids.READ_ACL_UNSAFE, CreateMode.PERSISTENT).unit before
           client.get.create("/ben/2", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
       }
@@ -33,24 +33,24 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
     newClient()
     connect()
 
     intercept[NoAuthException] {
       Await.result {
-        client.get.addAuth(Auth("digest", "ben:passwd2".getBytes)) before
+        client.get.addAuth("digest", "ben:passwd2".getBytes) before
           client.get.getData("/ben2")
       }
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
     newClient()
     connect()
 
     Await.result {
-      client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+      client.get.addAuth("digest", "ben:passwd".getBytes) before
         client.get.getData("/ben2")
     }
 
@@ -59,7 +59,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("rich client test") {
@@ -175,7 +175,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("large node") {
@@ -189,7 +189,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("create fails") {
@@ -228,7 +228,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     createFails("a")
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("delete with children") {
@@ -252,7 +252,7 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("getChildren test 1") {
@@ -298,6 +298,6 @@ class RichClientTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 }

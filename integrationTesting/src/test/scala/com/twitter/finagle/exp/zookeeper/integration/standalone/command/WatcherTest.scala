@@ -32,7 +32,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, getData with watches , SetData") {
@@ -55,7 +55,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, getChildren with watches , delete child") {
@@ -80,7 +80,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, getChildren2 with watches , delete child") {
@@ -105,7 +105,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, getChildren(watcher on parent) exists(watcher on child) , delete child") {
@@ -143,7 +143,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("complete watcher test") {
@@ -187,7 +187,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("auto reset with chroot") {
@@ -231,9 +231,9 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     Await.ready(client2.disconnect())
-    Await.ready(client2.closeService())
+    Await.ready(client2.close())
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 
   test("deep auto reset with chroot") {
@@ -278,8 +278,8 @@ class WatcherTest extends StandaloneIntegrationConfig {
     }
 
     Await.ready(client2.disconnect())
-    Await.ready(client2.closeService())
+    Await.ready(client2.close())
     disconnect()
-    Await.result(client.get.closeService())
+    Await.result(client.get.close())
   }
 }

@@ -16,11 +16,11 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     newClient()
     connect()
 
-    client.get.addAuth(Auth("digest", "pat:test".getBytes))
+    client.get.addAuth("digest", "pat:test".getBytes)
     client.get.setACL("/", Ids.CREATOR_ALL_ACL, -1)
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("acl count") {
@@ -35,7 +35,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     )
 
     val rep = for {
-      _ <- client.get.addAuth(Auth("digest", "pat:test".getBytes))
+      _ <- client.get.addAuth("digest", "pat:test".getBytes)
       _ <- client.get.setACL("/", Ids.CREATOR_ALL_ACL, -1)
       _ <- client.get.create("/path", "hello".getBytes, acls, CreateMode.EPHEMERAL)
       acl <- client.get.getACL("/path")
@@ -44,7 +44,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     assert(Await.result(rep).acl.size === 2)
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("root acl is correct") {
@@ -53,14 +53,14 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
 
     Await.ready(
       for {
-        _ <- client.get.addAuth(Auth("digest", "pat:test".getBytes))
+        _ <- client.get.addAuth("digest", "pat:test".getBytes)
         _ <- client.get.setACL("/", Ids.CREATOR_ALL_ACL, -1)
         _ <- client.get.getData("/")
       } yield None
     )
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
 
     newClient()
     connect()
@@ -73,7 +73,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
         CreateMode.PERSISTENT))
     }
 
-    Await.result(client.get.addAuth(Auth("digest", "world:anyone".getBytes)))
+    Await.result(client.get.addAuth("digest", "world:anyone".getBytes))
 
     intercept[NoAuthException] {
       Await.result(client.get.create("/apps", "hello".getBytes, Ids.CREATOR_ALL_ACL,
@@ -85,7 +85,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
 
     Await.result(
       for {
-        _ <- client.get.addAuth(Auth("digest", "pat:test".getBytes))
+        _ <- client.get.addAuth("digest", "pat:test".getBytes)
         _ <- client.get.getData("/")
         _ <- client.get.create("/apps", "hello".getBytes, Ids.CREATOR_ALL_ACL,
           CreateMode.PERSISTENT)
@@ -111,14 +111,14 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     Await.ready(
       for {
         _ <- client.get.delete("/apps", -1)
-        _ <- client.get.addAuth(Auth("digest", "world:anyone".getBytes))
+        _ <- client.get.addAuth("digest", "world:anyone".getBytes)
         _ <- client.get.create(
           "/apps", "hello".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
         _ <- client.get.closeSession()
         _ <- client.get.connect()
         _ <- client.get.delete("/apps", -1)
         _ <- client.get.closeSession()
-        _ <- client.get.closeService()
+        _ <- client.get.close()
       } yield None
     )
   }
@@ -144,18 +144,18 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
       }
     }
     Await.result {
-      client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+      client.get.addAuth("digest", "ben:passwd".getBytes) before
         client.get.create("/acltest", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
 
     newClient()
     connect()
 
     Await.result {
-      client.get.addAuth(Auth("digest", "ben:passwd2".getBytes))
+      client.get.addAuth("digest", "ben:passwd2".getBytes)
     }
 
     intercept[NoAuthException] {
@@ -165,13 +165,13 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     Await.result {
-      client.get.addAuth(Auth("digest", "ben:passwd".getBytes)) before
+      client.get.addAuth("digest", "ben:passwd".getBytes) before
         client.get.getData("/acltest").unit before
         client.get.setACL("/acltest", Ids.OPEN_ACL_UNSAFE, -1)
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
 
     newClient()
     connect()
@@ -191,6 +191,6 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     }
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 }

@@ -28,7 +28,7 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(1).asInstanceOf[CreateResponse].path === "/zookeeper/world")
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create and delete") {
@@ -46,7 +46,7 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(0).asInstanceOf[CreateResponse].path === "/zookeeper/hello")
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create , set and delete with error") {
@@ -68,7 +68,7 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(2).asInstanceOf[ErrorResponse].exception.isInstanceOf[NoNodeException])
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, checkVersion") {
@@ -88,7 +88,7 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(1).isInstanceOf[EmptyResponse])
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, set and checkVersion") {
@@ -110,7 +110,7 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(2).isInstanceOf[EmptyResponse])
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("Create, set(x12), checkVersion and delete") {
@@ -143,6 +143,6 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(finalRep.responseList(13).isInstanceOf[EmptyResponse])
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 }

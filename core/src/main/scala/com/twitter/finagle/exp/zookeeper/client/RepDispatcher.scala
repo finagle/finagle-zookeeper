@@ -14,7 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 
 class RepDispatcher(trans: Transport[Buf, Buf]) {
-  sealed case class ResponsePacket(header: Option[ReplyHeader], body: Option[Response])
+  sealed case class ResponsePacket(
+    header: Option[ReplyHeader],
+    body: Option[Response]
+  )
   sealed case class RequestRecord(opCode: Int, xid: Option[Int])
 
   /**
@@ -26,7 +29,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
    * encoder - creates a complete Packet from a request
    * decoder - creates a response from a Buffer
    */
-  private[this] val processedReq = new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
+  private[this] val processedReq =
+    new mutable.SynchronizedQueue[(RequestRecord, Promise[RepPacket])]
 
   private[this] var connectionManager: Option[ConnectionManager] = None
   private[this] var sessionManager: Option[SessionManager] = None
@@ -50,7 +54,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
             if (processedReq.size > 0) Some(processedReq.front) else None
 
           decoder.read(currentReq, buffer) onFailure { exc =>
-            // If this exception is associated to a request, then propagate to the promise
+            // If this exception is associated to a request,
+            // then propagate to the promise
             currentReq match {
               case Some((rec, p)) =>
                 p.setException(exc)
@@ -124,7 +129,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
           case ReqPacket(None, Some(req: ConnectRequest)) =>
             RequestRecord(OpCode.CREATE_SESSION, None)
         }
-        // The request is about to be written, so we add it to the queue of pending request
+        // The request is about to be written
+        // so we add it to the queue of pending request
         val p = new Promise[RepPacket]()
 
         synchronized {
@@ -144,15 +150,16 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
    * @param reqRecord expected request details
    * @param repHeader freshly decoded ReplyHeader
    */
-  def checkAssociation(reqRecord: RequestRecord, repHeader: ReplyHeader): Unit = {
+  def checkAssociation(
+    reqRecord: RequestRecord,
+    repHeader: ReplyHeader
+  ): Unit = {
     if (reqRecord.xid.isDefined)
       if (reqRecord.xid.get != repHeader.xid)
         throw new ZkDispatchingException("wrong association")
-
   }
 
   class Reader(trans: Transport[Buf, Buf]) {
-
     /**
      * This function will try to decode the buffer depending if a request
      * is waiting for a response or not.

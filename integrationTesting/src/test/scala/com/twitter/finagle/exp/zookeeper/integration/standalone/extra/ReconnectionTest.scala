@@ -36,7 +36,7 @@ class ReconnectionTest extends FunSuite with StandaloneIntegrationConfig {
     assert(ret._4 === "/zookeeper")
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("connect-disconnect tests") {
@@ -47,7 +47,7 @@ class ReconnectionTest extends FunSuite with StandaloneIntegrationConfig {
       disconnect()
     }
 
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 
   test("auth failed reconnection") {
@@ -55,7 +55,7 @@ class ReconnectionTest extends FunSuite with StandaloneIntegrationConfig {
     connect()
 
     intercept[AuthFailedException] {
-      Await.result(client.get.addAuth(Auth("FOO", "BAR".getBytes)))
+      Await.result(client.get.addAuth("FOO", "BAR".getBytes))
     }
 
     val rep = Await.result {
@@ -64,7 +64,7 @@ class ReconnectionTest extends FunSuite with StandaloneIntegrationConfig {
 
     assert(rep === "/hello")
 
-    val disconnect = client.get.closeSession() before client.get.closeService()
+    val disconnect = client.get.closeSession() before client.get.close()
     Await.ready(disconnect)
   }
 }

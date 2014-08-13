@@ -34,13 +34,11 @@ Every request returns a *twitter.util.Future* (see [Effective Scala](http://twit
 ##### Connection
 ```scala
 val connect = client.connect
-    connect onSuccess {
-      a =>
-        logger.info("Connected to zookeeper server: " + client.adress)
-    } onFailure {
-      e =>
-        logger.severe("Connect Error")
-    }
+connect onSuccess { _ =>
+  logger.info("Connected to zookeeper server: " + client.adress)
+} onFailure { exc =>
+  logger.severe("Connect Error")
+}
 ```
 
 ##### Disconnect
@@ -48,20 +46,29 @@ val connect = client.connect
 client.disconnect
 ```
 
+Return value `Future[Unit]`
+
+##### Close the service
+```
+client.close()
+```
+
+Return value `Future[Unit]`
+
 ##### First request
 Example of request with sequential composition :
 ```scala
 val res = for {
-      acl <- client.getACL("/zookeeper")
-      _ <- client.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
-      _ <- client.exists("/zookeeper/test", true)
-      _ <- client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
-    } yield (acl)
+  acl <- client.getACL("/zookeeper")
+  _ <- client.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+  _ <- client.exists("/zookeeper/test", true)
+  _ <- client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
+  } yield (acl)
 ```
 
 ##### Create
 ```scala
-val create = client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
 ```
 - `/zookeeper/hello` : the node that you want to create
 - `"HELLO".getBytes` : the data associated to this node
@@ -78,7 +85,7 @@ Return value `Future[String]` representing the path you have just created
 
 ##### Delete
 ```scala
-_ <- client.delete("/zookeeper/test", -1)
+client.delete("/zookeeper/test", -1)
 ```
 - `/zookeeper/test` : the node that you want to delete
 - `-1` : current version of the node (-1 if you don't care)
@@ -87,7 +94,7 @@ Return value `Future[Unit]`
 
 ##### Exists
 ```scala
-_ <- client.exists("/zookeeper/test", false)
+client.exists("/zookeeper/test", false)
 ```
 - `/zookeeper/test` : the node that you want to test
 - `false` : Boolean if you don't want to set a watch this node
@@ -95,6 +102,13 @@ _ <- client.exists("/zookeeper/test", false)
 Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch: Option[Watcher])`, watch
 will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
 it will be `None`.
+
+##### AddAuth
+```scala
+client.get.addAuth("digest", "pat:pass".getBytes)
+```
+- `"digest"` : the authentication scheme
+- `"pat:pass".getBytes` : data associated to the scheme
 
 
 ##### Get ACL

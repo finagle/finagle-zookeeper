@@ -86,6 +86,6 @@ class ConnectionTest extends FunSuite {
     assert(ret._4 === "/zookeeper")
 
     Await.ready(client.closeSession())
-    Await.ready(client.closeService())
+    Await.ready(client.close())
   }
 }

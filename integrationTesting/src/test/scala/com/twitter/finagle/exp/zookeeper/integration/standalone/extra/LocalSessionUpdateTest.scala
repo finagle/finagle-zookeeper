@@ -26,6 +26,6 @@ class LocalSessionUpdateTest extends FunSuite with StandaloneIntegrationConfig {
     assert(exi2.stat.get.czxid - exi.stat.get.czxid === 1L)
 
     disconnect()
-    Await.ready(client.get.closeService())
+    Await.ready(client.get.close())
   }
 }
