@@ -43,9 +43,7 @@ private[finagle] class WatcherManager(
     val watcher = new Watcher(path, typ, Promise[WatchEvent]())
 
     map synchronized {
-      val watchers = map.getOrElse(path, {
-        Set.empty[Watcher]
-      })
+      val watchers = map.getOrElse(path, Set.empty[Watcher])
       map += path -> (watchers + watcher)
       watcher
     }
@@ -153,8 +151,7 @@ private[finagle] class WatcherManager(
         watchEvent.path.substring(chroot.length)
       else {
         ZkClient.logger.warning("Got server path " + watchEvent.path
-          + " which is too short for chroot path "
-          + chroot)
+          + " which is too short for chroot path " + chroot)
         watchEvent.path
       }
     } else watchEvent.path

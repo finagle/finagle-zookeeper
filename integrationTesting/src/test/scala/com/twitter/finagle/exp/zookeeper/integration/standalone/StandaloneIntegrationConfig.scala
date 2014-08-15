@@ -38,5 +38,5 @@ trait StandaloneIntegrationConfig extends FunSuite {
   }
 
   def connect() = { Await.result(client.get.connect()) }
-  def disconnect() = { Await.result(client.get.closeSession()) }
+  def disconnect() = { Await.result(client.get.disconnect()) }
 }

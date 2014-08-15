@@ -3,12 +3,10 @@ package com.twitter.finagle.exp.zookeeper.client.managers
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager.{CantReconnect, ConnectionFailed}
-import com.twitter.finagle.exp.zookeeper.connection.Connection.NoConnectionAvailable
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities
-import com.twitter.finagle.exp.zookeeper.session.Session.{NoSessionEstablished, SessionAlreadyEstablished, States}
-import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
-import com.twitter.util.{Future, Return, Throw}
+import com.twitter.finagle.exp.zookeeper.session.Session.{SessionAlreadyEstablished, States}
 import com.twitter.util.TimeConversions._
+import com.twitter.util.{Future, Return, Throw}
 
 trait ClientManager extends AutoLinkManager
 with ReadOnlyManager {slf: ZkClient =>
@@ -39,7 +37,8 @@ with ReadOnlyManager {slf: ZkClient =>
     if (conRep.timeOut <= 0.milliseconds) {
       sessionManager.session.currentState.set(States.CLOSED)
       Future.exception(new ConnectionFailed("Session timeout <= 0"))
-    } else {
+    }
+    else {
       sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession() before startJob() before
         Future(connectionManager.currentHost.getOrElse(""))
@@ -61,7 +60,8 @@ with ReadOnlyManager {slf: ZkClient =>
     if (conRep.timeOut <= 0.milliseconds) {
       sessionManager.session.currentState.set(States.NOT_CONNECTED)
       reconnectWithoutSession(host, tries + 1)
-    } else {
+    }
+    else {
       val seenRwBefore = !sessionManager.session.hasFakeSessionId.get()
       if (seenRwBefore) {
         if (conRep.isRO) {
@@ -102,7 +102,8 @@ with ReadOnlyManager {slf: ZkClient =>
     if (conRep.timeOut <= 0.milliseconds) {
       sessionManager.session.currentState.set(States.NOT_CONNECTED)
       reconnectWithoutSession(host, tries + 1)
-    } else {
+    }
+    else {
       sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession() before startJob() before
         Future(host.getOrElse(""))
@@ -153,9 +154,8 @@ with ReadOnlyManager {slf: ZkClient =>
         ReqPacket(None, Some(connectReq))
       ) transform {
       case Return(connectResponse) =>
-        val finalRep =
-          connectResponse.response.get.asInstanceOf[ConnectResponse]
-        actOnEvent(finalRep)
+        val finRep = connectResponse.response.get.asInstanceOf[ConnectResponse]
+        actOnEvent(finRep)
 
       case Throw(exc: Throwable) =>
         sessionManager.session.currentState.set(States.NOT_CONNECTED)
@@ -233,49 +233,6 @@ with ReadOnlyManager {slf: ZkClient =>
   }
 
   /**
-   * Should close the current session, however it should not
-   * close the service and factory.
-   *
-   * @return Future.Done or Exception
-   */
-  private[finagle] def disconnect(): Future[Unit] =
-    if (sessionManager.canCloseSession) {
-      stopJob() before {
-        connectionManager.hasAvailableService flatMap { available =>
-          if (available) {
-            sessionManager.session.prepareClose()
-            val closeReq = ReqPacket(
-              Some(RequestHeader(1, OpCode.CLOSE_SESSION))
-              , None
-            )
-
-            connectionManager.connection.get.serve(closeReq) transform {
-              case Return(closeRep) =>
-                if (closeRep.err.get == 0) {
-                  watcherManager.clearWatchers()
-                  sessionManager.session.close()
-                  Future.Done
-                } else Future.exception(
-                  ZookeeperException.create(
-                    "Error while closing session",
-                    closeRep.err.get
-                  )
-                )
-
-              case Throw(exc: Throwable) => Future.exception(exc)
-            }
-          } else Future.exception(
-            new NoConnectionAvailable(
-              "connection not available during close session"
-            )
-          )
-        }
-      }
-    } else Future.exception(
-      new NoSessionEstablished("client is not connected to server")
-    ) ensure stopJob()
-
-  /**
    * Should find a suitable server and connect to.
    * This operation will interrupt request sending until a new
    * connection and a new session are established
@@ -286,9 +243,9 @@ with ReadOnlyManager {slf: ZkClient =>
     if (sessionManager.canCreateSession) {
       val connectReq = sessionManager.buildConnectRequest(sessionTimeout)
       stopJob() before connect(connectReq, host, actOnConnect).unit
-    } else Future.exception(
-      new SessionAlreadyEstablished(
-        "client is already connected to server")) ensure stopJob()
+    }
+    else Future.exception(new SessionAlreadyEstablished(
+      "client is already connected to server")) ensure stopJob()
 
 
   /**
@@ -327,7 +284,6 @@ with ReadOnlyManager {slf: ZkClient =>
     host: Option[String] = None,
     tries: Int = 0
   ): Future[String] =
-
     reconnect(
       host,
       tries,
@@ -345,7 +301,6 @@ with ReadOnlyManager {slf: ZkClient =>
     host: Option[String] = None,
     tries: Int = 0
   ): Future[String] =
-
     reconnect(
       host,
       tries,

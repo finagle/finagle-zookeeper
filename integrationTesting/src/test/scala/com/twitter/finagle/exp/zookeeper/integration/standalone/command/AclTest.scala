@@ -114,10 +114,10 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
         _ <- client.get.addAuth("digest", "world:anyone".getBytes)
         _ <- client.get.create(
           "/apps", "hello".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
-        _ <- client.get.closeSession()
+        _ <- client.get.disconnect()
         _ <- client.get.connect()
         _ <- client.get.delete("/apps", -1)
-        _ <- client.get.closeSession()
+        _ <- client.get.disconnect()
         _ <- client.get.close()
       } yield None
     )

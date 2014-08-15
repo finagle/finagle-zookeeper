@@ -3,6 +3,7 @@ package com.twitter.finagle.exp.zookeeper.client
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.OpCode
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
+import com.twitter.finagle.exp.zookeeper.connection.Connection.NoConnectionAvailable
 import com.twitter.finagle.exp.zookeeper.connection.{ConnectionManager, HostUtilities}
 import com.twitter.finagle.exp.zookeeper.data.{ACL, Auth, Stat}
 import com.twitter.finagle.exp.zookeeper.session.{Session, SessionManager}
@@ -34,14 +35,18 @@ trait ZkClient extends Closable with ClientManager {
       label,
       canReadOnly,
       timeBetweenPrevSrch,
-      timeBetweenRwSrch)
-
+      timeBetweenRwSrch
+    )
   private[finagle] lazy val sessionManager = new SessionManager(canReadOnly)
-  lazy val watcherManager: WatcherManager =
-    new WatcherManager(chroot, autoWatchReset)
-  private[finagle] lazy val zkRequestService =
-    new PreProcessService(connectionManager, sessionManager, this)
-
+  lazy val watcherManager: WatcherManager = new WatcherManager(
+    chroot,
+    autoWatchReset
+  )
+  private[finagle] lazy val zkRequestService = new PreProcessService(
+    connectionManager,
+    sessionManager,
+    this
+  )
   @volatile protected[this] var authInfo: Set[Auth] = Set()
 
   def session: Session = sessionManager.session
@@ -60,7 +65,7 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) {
         authInfo += auth
-        Future.Unit
+        Future.Done
       } else if (rep.err.get == -115) {
         watcherManager.process(
           WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, "")
@@ -70,8 +75,7 @@ trait ZkClient extends Closable with ClientManager {
         )
       }
       else Future.exception(
-        ZookeeperException.create("Error while addAuth", rep.err.get)
-      )
+        ZookeeperException.create("Error while addAuth", rep.err.get))
     }
   }
 
@@ -99,8 +103,7 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
-        ZookeeperException.create("Error while removing watches", rep.err.get)
-      )
+        ZookeeperException.create("Error while removing watches", rep.err.get))
     }
   }
 
@@ -126,8 +129,7 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
-        ZookeeperException.create("Error while removing watches", rep.err.get)
-      )
+        ZookeeperException.create("Error while removing watches", rep.err.get))
     }
   }
 
@@ -154,7 +156,41 @@ trait ZkClient extends Closable with ClientManager {
    *
    * @return Future[Unit] or Exception
    */
-  def closeSession(): Future[Unit] = disconnect()
+  def disconnect(): Future[Unit] = stopJob() flatMap { _ =>
+    connectionManager.hasAvailableService flatMap { available =>
+      if (available) {
+        sessionManager.session.prepareClose()
+        val closeReq = ReqPacket(
+          Some(RequestHeader(1, OpCode.CLOSE_SESSION)),
+          None
+        )
+
+        connectionManager.connection.get.serve(closeReq) transform {
+          case Return(closeRep) =>
+            if (closeRep.err.get == 0) {
+              watcherManager.clearWatchers()
+              sessionManager.session.close()
+              zkRequestService.flushService()
+            }
+            else Future.exception(ZookeeperException.create(
+              "Error while closing session",
+              closeRep.err.get
+            ))
+
+          case Throw(exc: Throwable) => Future.exception(exc)
+        }
+      }
+      else Future.exception(new NoConnectionAvailable(
+        "connection not available during close session"))
+    }
+  } rescue { case exc =>
+    // Make sure everything is closed even if we had an exception
+    sessionManager.session.prepareClose()
+    watcherManager.clearWatchers()
+    sessionManager.session.close()
+    stopJob() before zkRequestService.flushService() before
+      Future.exception(exc)
+  }
 
   /**
    * We use this to configure the dispatcher, gives connectionManager,
@@ -186,8 +222,8 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     data: Array[Byte],
     acl: Seq[ACL],
-    createMode: Int): Future[String] = {
-
+    createMode: Int
+  ): Future[String] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
@@ -199,9 +235,7 @@ trait ZkClient extends Closable with ClientManager {
         Future(finalRep.path.substring(chroot.length))
       } else Future.exception(
         ZookeeperException.create(
-          s"Error while create for path: $path", rep.err.get
-        )
-      )
+          s"Error while create for path: $path", rep.err.get))
     }
   }
 
@@ -221,7 +255,8 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     data: Array[Byte],
     acl: Seq[ACL],
-    createMode: Int): Future[Create2Response] = {
+    createMode: Int
+  ): Future[Create2Response] = {
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath, createMode)
     ACL.check(acl)
@@ -232,11 +267,9 @@ trait ZkClient extends Closable with ClientManager {
         val finalRep = rep.response.get.asInstanceOf[Create2Response]
         val lastPath = finalRep.path.substring(chroot.length)
         Future(Create2Response(lastPath, finalRep.stat))
-      } else Future.exception(
-        ZookeeperException.create(
-          s"Error while create2 for path: $path", rep.err.get
-        )
-      )
+      }
+      else Future.exception(ZookeeperException.create(
+        s"Error while create2 for path: $path", rep.err.get))
     }
   }
 
@@ -255,12 +288,9 @@ trait ZkClient extends Closable with ClientManager {
     val req = DeleteRequest(finalPath, version)
 
     zkRequestService(req) flatMap { rep =>
-      if (rep.err.get == 0) Future.Unit
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while delete for path: $path", rep.err.get
-        )
-      )
+      if (rep.err.get == 0) Future.Done
+      else Future.exception(ZookeeperException.create(
+        s"Error while delete for path: $path", rep.err.get))
     }
   }
 
@@ -292,7 +322,8 @@ trait ZkClient extends Closable with ClientManager {
             )
             val finalRep = ExistsResponse(response.stat, Some(watcher))
             Future(finalRep)
-          } else Future(response)
+          }
+          else Future(response)
 
         case None =>
           if (rep.err.get == -101 && watch) {
@@ -301,16 +332,12 @@ trait ZkClient extends Closable with ClientManager {
               Watch.WatcherMapType.exists
             )
             Future(ExistsResponse(None, Some(watcher)))
-          } else Future.exception(
-            ZookeeperException.create(
-              s"Error while exists for path: $path", rep.err.get
-            )
-          )
+          }
+          else Future.exception(ZookeeperException.create(
+            s"Error while exists for path: $path", rep.err.get))
 
-        case _ =>
-          Future.exception(
-            ZookeeperException.create("Match error while exists")
-          )
+        case _ => Future.exception(ZookeeperException.create(
+          "Match error while exists"))
       }
     }
   }
@@ -329,11 +356,8 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0)
         Future(rep.response.get.asInstanceOf[GetACLResponse])
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while getACL for path: $path", rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while getACL for path: $path", rep.err.get))
     }
   }
 
@@ -353,6 +377,7 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     watch: Boolean = false
   ): Future[GetChildrenResponse] = {
+
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetChildrenRequest(finalPath, watch)
@@ -370,11 +395,8 @@ trait ZkClient extends Closable with ClientManager {
         }
         else Future(rep.response.get.asInstanceOf[GetChildrenResponse])
       }
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while getChildren for path: $path", rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while getChildren for path: $path", rep.err.get))
     }
   }
 
@@ -392,7 +414,9 @@ trait ZkClient extends Closable with ClientManager {
    */
   def getChildren2(
     path: String,
-    watch: Boolean = false): Future[GetChildren2Response] = {
+    watch: Boolean = false
+  ): Future[GetChildren2Response] = {
+
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetChildren2Request(finalPath, watch)
@@ -413,11 +437,8 @@ trait ZkClient extends Closable with ClientManager {
         }
         else Future(rep.response.get.asInstanceOf[GetChildren2Response])
       }
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while getChildren2 for path: $path", rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while getChildren2 for path: $path", rep.err.get))
     }
   }
 
@@ -452,9 +473,8 @@ trait ZkClient extends Closable with ClientManager {
         }
         else Future(res)
       }
-      else Future.exception(
-        ZookeeperException.create("Error while getConfig", rep.err.get)
-      )
+      else Future.exception(ZookeeperException.create(
+        "Error while getConfig", rep.err.get))
     }
   }
 
@@ -474,6 +494,7 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     watch: Boolean = false
   ): Future[GetDataResponse] = {
+
     val finalPath = prependChroot(path, chroot)
     validatePath(finalPath)
     val req = GetDataRequest(finalPath, watch)
@@ -491,11 +512,8 @@ trait ZkClient extends Closable with ClientManager {
         }
         else Future(res)
       }
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while getData for path: $path", rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while getData for path: $path", rep.err.get))
     }
   }
 
@@ -510,8 +528,7 @@ trait ZkClient extends Closable with ClientManager {
     connectionManager.connection.get.serve(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
-        ZookeeperException.create("Error while ping", rep.err.get)
-      )
+        ZookeeperException.create("Error while ping", rep.err.get))
     }
   }
 
@@ -537,6 +554,7 @@ trait ZkClient extends Closable with ClientManager {
     newMembers: String,
     fromConfig: Long
   ): Future[GetDataResponse] = {
+
     HostUtilities.formatAndTest(joiningServers)
     HostUtilities.formatAndTest(leavingServers)
     HostUtilities.formatAndTest(newMembers)
@@ -553,8 +571,7 @@ trait ZkClient extends Closable with ClientManager {
         Future(res)
       }
       else Future.exception(
-        ZookeeperException.create("Error while reconfig", rep.err.get)
-      )
+        ZookeeperException.create("Error while reconfig", rep.err.get))
     }
   }
 
@@ -569,18 +586,21 @@ trait ZkClient extends Closable with ClientManager {
         Some(RequestHeader(-4, OpCode.AUTH)),
         Some(new AuthRequest(0, auth))
       )
+
       connectionManager.connection.get.serve(req) flatMap { rep =>
         if (rep.err.get == 0) Future.Unit
         else if (rep.err.get == -115) {
           watcherManager.process(
-            WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, "")
-          )
+            WatchEvent(
+              Watch.EventType.NONE,
+              Watch.EventState.AUTH_FAILED,
+              ""
+            ))
           Future.exception(
             ZookeeperException.create("Error while addAuth", rep.err.get))
         }
         else Future.exception(
-          ZookeeperException.create("Error while addAuth", rep.err.get)
-        )
+          ZookeeperException.create("Error while addAuth", rep.err.get))
       }
     }
     Future.join(fetches)
@@ -603,6 +623,7 @@ trait ZkClient extends Closable with ClientManager {
     watcherType: Int,
     local: Boolean
   ): Future[RepPacket] = {
+
     PathUtils.validatePath(path)
     val finalPath = prependChroot(path, chroot)
 
@@ -653,9 +674,8 @@ trait ZkClient extends Closable with ClientManager {
           watcherManager.removeWatcher(watcher)
           Future.Done
         }
-        else Future.exception(
-          ZookeeperException.create("Error while removing watches", rep.err.get)
-        )
+        else Future.exception(ZookeeperException.create(
+          "Error while removing watches", rep.err.get))
       }
     }
   }
@@ -675,30 +695,26 @@ trait ZkClient extends Closable with ClientManager {
     path: String,
     watcherType: Int,
     local: Boolean
-  ): Future[Unit] =
-    removeWatches(
-      OpCode.REMOVE_WATCHES,
-      path,
-      watcherType,
-      local
-    ) flatMap { rep =>
-      if (rep.err.get == 0) {
-        watcherManager.removeWatchers(path, watcherType)
-        Future.Unit
-      }
-      else {
-        if (local) {
-          watcherManager.removeWatchers(path, watcherType)
-          Future.Done
-        }
-        else Future.exception(
-          ZookeeperException.create(
-            "Error while removing watches",
-            rep.err.get
-          )
-        )
-      }
+  ): Future[Unit] = removeWatches(
+    OpCode.REMOVE_WATCHES,
+    path,
+    watcherType,
+    local
+  ) flatMap { rep =>
+    if (rep.err.get == 0) {
+      watcherManager.removeWatchers(path, watcherType)
+      Future.Unit
     }
+    else {
+      if (local) {
+        watcherManager.removeWatchers(path, watcherType)
+        Future.Done
+      }
+      else Future.exception(ZookeeperException.create(
+        "Error while removing watches",
+        rep.err.get))
+    }
+  }
 
   /**
    * Set the ACL for the node of the given path if such a node exists and the
@@ -716,18 +732,14 @@ trait ZkClient extends Closable with ClientManager {
     ACL.check(acl)
     val req = SetACLRequest(finalPath, acl, version)
 
-    zkRequestService(req) flatMap {
-      rep =>
-        if (rep.err.get == 0) {
-          val res = rep.response.get.asInstanceOf[SetACLResponse]
-          Future(res.stat)
-        }
-        else Future.exception(
-          ZookeeperException.create(
-            s"Error while setACL for path: $path",
-            rep.err.get
-          )
-        )
+    zkRequestService(req) flatMap { rep =>
+      if (rep.err.get == 0) {
+        val res = rep.response.get.asInstanceOf[SetACLResponse]
+        Future(res.stat)
+      }
+      else Future.exception(ZookeeperException.create(
+        s"Error while setACL for path: $path",
+        rep.err.get))
     }
   }
 
@@ -760,12 +772,9 @@ trait ZkClient extends Closable with ClientManager {
         val res = rep.response.get.asInstanceOf[SetDataResponse]
         Future(res.stat)
       }
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while setData for path: $path",
-          rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while setData for path: $path",
+        rep.err.get))
     }
   }
 
@@ -810,11 +819,10 @@ trait ZkClient extends Closable with ClientManager {
         connectionManager.connection.get.serve(req) flatMap { rep =>
           if (rep.err.get == 0) Future.Done
           else {
-            val exc =
-              ZookeeperException.create("Error while setWatches", rep.err.get)
+            val exc = ZookeeperException.create(
+              "Error while setWatches", rep.err.get)
             ZkClient.logger.error(
-              s"Error after setting back watches: ${ exc.getMessage }"
-            )
+              s"Error after setting back watches: ${ exc.getMessage }")
             Future.exception(exc)
           }
         }
@@ -844,12 +852,9 @@ trait ZkClient extends Closable with ClientManager {
         val finalRep = SyncResponse(res.path.substring(chroot.length))
         Future(finalRep.path)
       }
-      else Future.exception(
-        ZookeeperException.create(
-          s"Error while sync for path: $path",
-          rep.err.get
-        )
-      )
+      else Future.exception(ZookeeperException.create(
+        s"Error while sync for path: $path",
+        rep.err.get))
     }
   }
 
@@ -873,18 +878,19 @@ trait ZkClient extends Closable with ClientManager {
     Transaction.prepareAndCheck(opList, chroot) match {
       case Return(res) =>
         val req = new TransactionRequest(res)
-
-        zkRequestService(req) flatMap {
-          rep =>
-            if (rep.err.get == 0) {
-              val res = rep.response.get.asInstanceOf[TransactionResponse]
-              val finalOpList = Transaction.formatPath(res.responseList, chroot)
-              Future(TransactionResponse(finalOpList))
-            }
-            else Future.exception(
-              ZookeeperException.create("Error while transaction", rep.err.get)
+        zkRequestService(req) flatMap { rep =>
+          if (rep.err.get == 0) {
+            val res = rep.response.get.asInstanceOf[TransactionResponse]
+            val finalOpList = Transaction.formatPath(
+              res.responseList,
+              chroot
             )
+            Future(TransactionResponse(finalOpList))
+          }
+          else Future.exception(ZookeeperException.create(
+            "Error while transaction", rep.err.get))
         }
+
       case Throw(exc) => Future.exception(exc)
     }
   }

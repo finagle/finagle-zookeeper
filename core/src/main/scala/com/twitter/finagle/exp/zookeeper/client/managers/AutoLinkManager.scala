@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
 
   private[this] val canCheckLink = new AtomicBoolean(false)
+  implicit val timer = DefaultTimer.twitter
   /**
    * Start the loop which will check connection and session
    * every timeBetweenLinkCheck
@@ -41,7 +42,6 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
   private[finagle] def tryCheckLink(): Unit =
     if (canCheckLink.get() && autoReconnect) checkLink()
 
-
   /**
    * Check session state before checking connection state
    *
@@ -51,18 +51,19 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
   private[this] def checkLink(tries: Int = 0): Future[Unit] = this.synchronized {
     checkSession() rescue {
       case exc: SessionMovedException => Future.exception(exc)
+
       case exc: ZookeeperException =>
         if (tries < maxReconnectAttempts)
-          checkLink(tries + 1)
-            .delayed(timeBetweenAttempts)(DefaultTimer.twitter)
+          checkLink(tries + 1).delayed(timeBetweenAttempts)
         else Future.exception(exc)
+
       case exc: Throwable => Future.exception(exc)
     } before checkConnection() rescue {
       case exc: ZookeeperException =>
         if (tries < maxReconnectAttempts)
-          checkLink(tries + 1)
-            .delayed(timeBetweenAttempts)(DefaultTimer.twitter)
+          checkLink(tries + 1).delayed(timeBetweenAttempts)
         else Future.exception(exc)
+
       case exc: Throwable => Future.exception(exc)
     }
   }
@@ -84,6 +85,7 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
           stopJob() before reconnectWithSession().unit
         }
         else Future.Done
+
       case None => Future.Done
     }
 
@@ -114,8 +116,7 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
         ZkClient.logger.warning(
           s"Session with ${
             connectionManager.currentHost.getOrElse("Unknown host")
-          } has expired, reconnecting without session..."
-        )
+          } has expired, reconnecting without session...")
         stopJob() before reconnectWithoutSession().unit
 
       case _ => Future.Done

@@ -19,7 +19,7 @@ class CRUDTest extends FunSuite with StandaloneIntegrationConfig {
 
     Thread.sleep(500)
 
-    val disconnect = client.get.closeSession() before client.get.close()
+    val disconnect = client.get.disconnect() before client.get.close()
     Await.ready(disconnect)
   }
 

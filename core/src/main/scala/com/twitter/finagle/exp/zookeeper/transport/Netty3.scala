@@ -24,5 +24,6 @@ object NettyTrans extends Netty3Transporter[ChannelBuffer, ChannelBuffer](
   "zookeeper", PipelineFactory)
 
 object ZookeeperTransporter {
-  def apply(params: Stack.Params) = Netty3Transporter[ChannelBuffer, ChannelBuffer](PipelineFactory, params)
+  def apply(params: Stack.Params) =
+    Netty3Transporter[ChannelBuffer, ChannelBuffer](PipelineFactory, params)
 }

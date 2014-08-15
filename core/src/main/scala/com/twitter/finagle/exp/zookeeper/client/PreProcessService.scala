@@ -1,12 +1,14 @@
 package com.twitter.finagle.exp.zookeeper.client
 
 import com.twitter.concurrent.{AsyncSemaphore, Permit}
-import com.twitter.finagle.Service
+import com.twitter.finagle.{CancelledRequestException, Service}
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.client.managers.AutoLinkManager
+import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
+import com.twitter.finagle.util.DefaultTimer
 import com.twitter.util._
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * LocalService is used to send ZooKeeper request to the endpoint.
@@ -19,12 +21,12 @@ import com.twitter.util._
 class PreProcessService(
   connectionManager: ConnectionManager,
   sessionManager: SessionManager,
-  linkChecker: AutoLinkManager
+  zkClient: ZkClient with ClientManager
 ) extends Service[Request, RepPacket] {
 
-  // todo use raiseWithin for requests timeout
   private[this] val semaphore = new AsyncSemaphore(1)
   private[this] var permit: Option[Permit] = None
+  private[this] val cancelAllRequests: AtomicBoolean = new AtomicBoolean(false)
 
   /**
    * Should send a request to the dispatcher, this request will be checked
@@ -41,24 +43,50 @@ class PreProcessService(
   def apply(req: Request): Future[RepPacket] = {
     isROCheck(req) match {
       case Return(unit) =>
-        linkChecker.tryCheckLink()
+        zkClient.tryCheckLink()
         val p = new Promise[RepPacket]
 
-        semaphore.acquire() onSuccess { permit =>
-          val preparedReq = prepareRequest(req)
-          connectionManager.connection.get.serve(preparedReq) respond {
-            case Throw(exc) =>
-              p.updateIfEmpty(Throw(exc))
-              permit.release()
-            case Return(rep) =>
-              p.setValue(rep)
-              permit.release()
-          }
-        } onFailure { p.setException }
+        semaphore.acquire() respond {
+          case Return(requestPermit) =>
+            if (cancelAllRequests.get()) {
+              p.updateIfEmpty(Throw(new CancelledRequestException))
+              requestPermit.release()
+            }
+            else sendRequest(req, p, requestPermit)
+
+          case Throw(exc) => p.setException(exc)
+        }
         p
 
       case Throw(exc) => Future.exception(exc)
     }
+  }
+
+  private[this] def sendRequest(
+    req: Request,
+    p: Promise[RepPacket],
+    requestPermit: Permit
+  ): Future[Unit] = {
+    implicit val timer = DefaultTimer.twitter
+    val preparedReq = prepareRequest(req)
+    connectionManager.connection.get.serve(preparedReq)
+      .raiseWithin(sessionManager.session.negotiatedTimeout * 2 / 3)
+      .respond {
+      case Return(rep) => p.setValue(rep)
+
+      case Throw(exc) => exc match {
+        case exc1: TimeoutException =>
+          zkClient.stopJob() before {
+            if (zkClient.autoReconnect) zkClient.reconnectWithSession().unit
+            else Future.Done
+          } before {
+            p.updateIfEmpty(Throw(exc1))
+            Future.Done
+          }
+
+        case _ => p.updateIfEmpty(Throw(exc))
+      }
+    }.unit ensure requestPermit.release()
   }
 
   /**
@@ -86,6 +114,17 @@ class PreProcessService(
       permit = None
     }
   }
+
+  /**
+   * Should cancel all the pending requests and lock the service
+   *
+   * @return Future.Done when the action is completed
+   */
+  private[finagle] def flushService(): Future[Unit] = this.synchronized {
+    cancelAllRequests.set(true)
+    unlockService()
+    lockService()
+  } ensure cancelAllRequests.set(false)
 
   /**
    * Should prepare a request by adding xid and request's op code

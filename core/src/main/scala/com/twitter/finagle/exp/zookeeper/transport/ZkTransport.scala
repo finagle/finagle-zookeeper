@@ -72,9 +72,7 @@ private[finagle] class BufTransport(trans: Transport[ChannelBuffer, ChannelBuffe
   def remoteAddress: SocketAddress = trans.remoteAddress
 
   def read(): Future[Buf] =
-    trans.read flatMap { chanBuf =>
-      Future(ChannelBufferBuf(chanBuf))
-    }
+    trans.read flatMap { chanBuf => Future(ChannelBufferBuf(chanBuf)) }
 
   def write(req: Buf): Future[Unit] = {
     val bytes = new Array[Byte](req.length)

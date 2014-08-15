@@ -64,7 +64,7 @@ class ReconnectionTest extends FunSuite with StandaloneIntegrationConfig {
 
     assert(rep === "/hello")
 
-    val disconnect = client.get.closeSession() before client.get.close()
+    val disconnect = client.get.disconnect() before client.get.close()
     Await.ready(disconnect)
   }
 }

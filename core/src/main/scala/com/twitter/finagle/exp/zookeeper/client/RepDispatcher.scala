@@ -50,6 +50,7 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
     val fullRep = if (!hasDispatcherFailed.get) {
       trans.read() transform {
         case Return(buffer) =>
+          sessionManager.get.session.PingScheduler.receivedEvent()
           val currentReq: Option[(RequestRecord, Promise[RepPacket])] =
             if (processedReq.size > 0) Some(processedReq.front) else None
 
@@ -112,7 +113,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
    */
   def write(req: ReqPacket): Future[RepPacket] = req match {
     // Dispatcher configuration request
-    case ReqPacket(None,
+    case ReqPacket(
+    None,
     Some(ConfigureRequest(conMngr, sessMngr, watchMngr))) =>
       connectionManager = Some(conMngr)
       sessionManager = Some(sessMngr)

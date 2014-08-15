@@ -2,8 +2,8 @@ package com.twitter.finagle.exp.zookeeper.unit
 
 import com.twitter.finagle.CancelledRequestException
 import com.twitter.finagle.exp.zookeeper._
-import com.twitter.finagle.exp.zookeeper.client.PreProcessService
-import com.twitter.finagle.exp.zookeeper.client.managers.AutoLinkManager
+import com.twitter.finagle.exp.zookeeper.client.{ZkClient, PreProcessService}
+import com.twitter.finagle.exp.zookeeper.client.managers.{ClientManager, AutoLinkManager}
 import com.twitter.finagle.exp.zookeeper.connection.{Connection, ConnectionManager}
 import com.twitter.finagle.exp.zookeeper.data.Ids
 import com.twitter.finagle.exp.zookeeper.session.SessionManager
@@ -32,7 +32,7 @@ class PreProcessServiceTest extends FunSuite with MockitoSugar {
     val conMgnr = new ConnectionManager("127.0.0.1:2181", None, false, None, None)
     conMgnr.connection = Some(con)
     val sessMngr = new SessionManager(false)
-    val autoMngr = mock[AutoLinkManager]
+    val autoMngr = mock[ZkClient with ClientManager]
     val preProcess = Mockito.spy(new PreProcessService(conMgnr, sessMngr, autoMngr))
   }
 

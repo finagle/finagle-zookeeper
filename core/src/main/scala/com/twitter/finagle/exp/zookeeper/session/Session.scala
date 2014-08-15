@@ -4,11 +4,10 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.session.Session._
 import com.twitter.finagle.util.DefaultTimer
-import com.twitter.util.{Try, Duration, Future, TimerTask}
+import com.twitter.util._
 import java.util
 import java.util.concurrent.atomic.{AtomicReference, AtomicLong, AtomicInteger, AtomicBoolean}
 import com.twitter.util.TimeConversions._
-
 
 /**
  * A Session contains ZooKeeper Session Ids and is in charge of sending
@@ -163,7 +162,7 @@ class Session(
     startPing()
     xid.set(2)
     ZkClient.logger.info(
-      s"Reconnected to session with ID: ${connectResponse.sessionId}")
+      s"Reconnected to session with ID: ${ connectResponse.sessionId }")
   }
 
   private[finagle] def stop() {
@@ -192,9 +191,15 @@ class Session(
      * currentTask - the last scheduled timer's task
      */
     var currentTask: Option[TimerTask] = None
+    var elapsedTime: Stopwatch.Elapsed = () => Duration.Bottom
 
     def apply(period: Duration)(f: => Unit) {
       currentTask = Some(DefaultTimer.twitter.schedule(period)(f))
+      elapsedTime = Stopwatch.start()
+    }
+
+    def canSendPing(f: => Unit): Unit = {
+      if (elapsedTime() >= pingTimeout) ()=>f
     }
 
     def isRunning: Boolean = {
@@ -210,8 +215,11 @@ class Session(
       stop()
       apply(period)(f)
     }
-  }
 
+    def receivedEvent(): Unit = {
+      elapsedTime = Stopwatch.start()
+    }
+  }
 }
 
 object Session {

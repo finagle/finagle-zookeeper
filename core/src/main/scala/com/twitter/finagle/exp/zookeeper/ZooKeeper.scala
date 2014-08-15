@@ -26,8 +26,23 @@ import org.jboss.netty.buffer.ChannelBuffer
 trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket] =>
   val params: Stack.Params
   def newRichClient(dest: String, label: String): ZkClient = {
-    val ZkConfiguration(autoWatch, canRO, chRoot, sessTime) = params[ZkConfiguration]
-    val AutoReconnect(autoReco, autoRw, prevS, tba, tblc, mcr, mra) = params[AutoReconnect]
+    val ZkConfiguration(
+    autoWatch,
+    canRO,
+    chRoot,
+    sessTime
+    ) = params[ZkConfiguration]
+
+    val AutoReconnect(
+    autoReco,
+    autoRw,
+    prevS,
+    tba,
+    tblc,
+    mcr,
+    mra
+    ) = params[AutoReconnect]
+
     ZkClient(
       autowatchReset = autoWatch,
       autoRecon = autoReco,
@@ -46,8 +61,23 @@ trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket
   }
 
   def newRichClient(dest: String): ZkClient = {
-    val ZkConfiguration(autoWatch, canRO, chRoot, sessTime) = params[ZkConfiguration]
-    val AutoReconnect(autoReco, autoRw, prevS, tba, tblc, mcr, mra) = params[AutoReconnect]
+    val ZkConfiguration(
+    autoWatch,
+    canRO,
+    chRoot,
+    sessTime
+    ) = params[ZkConfiguration]
+
+    val AutoReconnect(
+    autoReco,
+    autoRw,
+    prevS,
+    tba,
+    tblc,
+    mcr,
+    mra
+    ) = params[AutoReconnect]
+
     ZkClient(
       autowatchReset = autoWatch,
       autoRecon = autoReco,
@@ -85,6 +115,7 @@ object ZookeeperStackClient extends StackClient[ReqPacket, RepPacket] {
 class ZookeeperClient(client: StackClient[ReqPacket, RepPacket])
   extends StackClientLike[ReqPacket, RepPacket, ZookeeperClient](client)
   with ZookeeperRichClient {
+
   val params = client.params
   protected def newInstance(client: StackClient[ReqPacket, RepPacket]) =
     new ZookeeperClient(client)
@@ -135,7 +166,7 @@ object Zookeeper extends ZookeeperClient(
 
 /**
  * Simple client is used to send isro request ( not framed request )
- * and also to send connect and close requests to old servers ( version < 3.4.0 )
+ * and also to send connect and close requests to old servers (version < 3.4.0)
  * ( read-only mode not supported )
  * This is basically a Buf client, sending Buf and receiving Buf
  */

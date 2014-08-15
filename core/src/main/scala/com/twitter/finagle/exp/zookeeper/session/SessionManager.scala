@@ -19,7 +19,6 @@ class SessionManager(canBeRo: Boolean) {
    * @return a customized ConnectResponse
    */
   def buildConnectRequest(sessionTimeout: Duration): ConnectRequest = {
-
     ConnectRequest(
       0,
       0L,
@@ -41,8 +40,10 @@ class SessionManager(canBeRo: Boolean) {
   def buildReconnectRequest(
     sessionTimeout: Option[Duration] = None
   ): ConnectRequest = {
-    val sessionId = if (session.hasFakeSessionId.get) 0
-    else session.id
+    val sessionId = {
+      if (session.hasFakeSessionId.get) 0
+      else session.id
+    }
     val sessTimeout = sessionTimeout getOrElse session.diseredTimeout
 
     ConnectRequest(
@@ -178,7 +179,5 @@ class SessionManager(canBeRo: Boolean) {
   def reinit(
     conReq: ConnectResponse,
     pinger: PingSender
-  ): Try[Unit] = {
-    session.reinit(conReq, pinger)
-  }
+  ): Try[Unit] = { session.reinit(conReq, pinger) }
 }

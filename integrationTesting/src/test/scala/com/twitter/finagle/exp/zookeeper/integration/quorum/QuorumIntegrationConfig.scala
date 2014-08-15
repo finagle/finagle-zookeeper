@@ -71,8 +71,8 @@ trait QuorumIntegrationConfig extends FunSuite {
 
   def disconnectClients() {
     Await.ready{
-      client1.get.closeSession() before client2.get.closeSession() before
-        client3.get.closeSession()
+      client1.get.disconnect() before client2.get.disconnect() before
+        client3.get.disconnect()
     }
   }
 
