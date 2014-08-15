@@ -43,7 +43,7 @@ connect onSuccess { _ =>
 
 ##### Disconnect
 ```
-client.disconnect
+client.disconnect()
 ```
 
 Return value `Future[Unit]`
