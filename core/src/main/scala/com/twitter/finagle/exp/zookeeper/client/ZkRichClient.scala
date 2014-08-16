@@ -187,6 +187,7 @@ trait ZkClient extends Closable with ClientManager {
     // Make sure everything is closed even if we had an exception
     sessionManager.session.prepareClose()
     watcherManager.clearWatchers()
+    authInfo = Set.empty[Auth]
     sessionManager.session.close()
     stopJob() before zkRequestService.flushService() before
       Future.exception(exc)

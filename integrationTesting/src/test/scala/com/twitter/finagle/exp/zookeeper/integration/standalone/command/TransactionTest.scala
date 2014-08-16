@@ -145,4 +145,30 @@ class TransactionTest extends FunSuite with StandaloneIntegrationConfig {
     disconnect()
     Await.ready(client.get.close())
   }
+
+  test("Create, set and checkVersion with error") {
+    newClient()
+    connect()
+
+    val opList = Seq(
+      CreateRequest(
+        "/zookeeper/hello", "TRANS".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT),
+      SetDataRequest("/zookeeper/hello", "changing".getBytes, -1),
+      CheckVersionRequest("/zookeeper/hello", 1),
+      CreateRequest(
+        "/zookeeper/hello", "TRANS".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL),
+      SetDataRequest("/zookeeper/hello", "changing".getBytes, -1)
+    )
+
+    val res = client.get.transaction(opList)
+    val finalRep = Await.result(res)
+
+    assert(finalRep.responseList(3).isInstanceOf[ErrorResponse])
+    assert(finalRep.responseList(3)
+      .asInstanceOf[ErrorResponse]
+      .exception.isInstanceOf[NodeExistsException])
+
+    disconnect()
+    Await.ready(client.get.close())
+  }
 }

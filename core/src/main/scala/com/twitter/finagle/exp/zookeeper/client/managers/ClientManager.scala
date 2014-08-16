@@ -4,6 +4,7 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager.{CantReconnect, ConnectionFailed}
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities
+import com.twitter.finagle.exp.zookeeper.data.Auth
 import com.twitter.finagle.exp.zookeeper.session.Session.{SessionAlreadyEstablished, States}
 import com.twitter.util.TimeConversions._
 import com.twitter.util.{Future, Return, Throw}
@@ -104,6 +105,7 @@ with ReadOnlyManager {slf: ZkClient =>
       reconnectWithoutSession(host, tries + 1)
     }
     else {
+      authInfo = Set.empty[Auth]
       sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession() before startJob() before
         Future(host.getOrElse(""))
