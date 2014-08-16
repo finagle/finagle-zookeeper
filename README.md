@@ -7,7 +7,7 @@ finagle-zookeeper provides basic tools to communicate with a Zookeeper server as
 ##### Client
 - `Client` is based on Finagle 6 client model.
 
-##### Commands
+##### Request
 
 Every request returns a *twitter.util.Future* (see [Effective Scala](http://twitter.github.io/effectivescala/#Concurrency-Futures),
 [Finagle documentation](https://twitter.github.io/scala_school/finagle.html#Future) and [Scaladoc](http://twitter.github.io/util/util-core/target/doc/main/api/com/twitter/util/Future.html))
@@ -31,7 +31,7 @@ Every request returns a *twitter.util.Future* (see [Effective Scala](http://twit
 ```
 - `127.0.0.1:2181,10.0.0.10:2181,192.168.1.1:2181` is a String representing the server list, separated by a comma
 
-##### Connection
+##### Connect the client
 ```scala
 val connect = client.connect
 connect onSuccess { _ =>
@@ -41,19 +41,19 @@ connect onSuccess { _ =>
 }
 ```
 
-##### Disconnect
+##### Disconnect the client
 ```
 client.disconnect()
 ```
 
-Return value `Future[Unit]`
+Return value `Future[Unit]`. It will stop all background operations related to features (preventive search, link checker), will clean everything and disconnect from the server.
 
 ##### Close the service
 ```
 client.close()
 ```
 
-Return value `Future[Unit]`
+Return value `Future[Unit]`. It will definitely close the service and stop background jobs. Make sure to use `disconnect` to close the session correctly before.
 
 ##### First request
 Example of request with sequential composition :
@@ -66,7 +66,7 @@ val res = for {
 } yield (acl)
 ```
 
-##### Create
+##### create
 ```scala
 client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
 ```
@@ -83,7 +83,7 @@ Return value `Future[String]` representing the path you have just created
 - `CreateMode.EPHEMERAL_SEQUENTIAL` ephemeral and sequential mode
 
 
-##### Delete
+##### delete
 ```scala
 client.delete("/zookeeper/test", -1)
 ```
@@ -92,7 +92,7 @@ client.delete("/zookeeper/test", -1)
 
 Return value `Future[Unit]`
 
-##### Exists
+##### exists
 ```scala
 client.exists("/zookeeper/test", false)
 ```
@@ -103,15 +103,7 @@ Return value `Future[ExistsResponse]` `ExistsResponse(stat: Option[Stat], watch:
 will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
 it will be `None`.
 
-##### AddAuth
-```scala
-client.get.addAuth("digest", "pat:pass".getBytes)
-```
-- `"digest"` : the authentication scheme
-- `"pat:pass".getBytes` : data associated to the scheme
-
-
-##### Get ACL
+##### getACL
 ```scala
 client.getACL("/zookeeper")
 ```
@@ -119,7 +111,7 @@ client.getACL("/zookeeper")
 
 Return value `Future[GetACLResponse]` `GetACLResponse(acl: Array[ACL], stat: Stat)`
 
-##### Set ACL
+##### setACL
 ```scala
 client.setACL("/zookeeper/test", Ids.OPEN_ACL_UNSAFE, -1)
 ```
@@ -129,7 +121,7 @@ client.setACL("/zookeeper/test", Ids.OPEN_ACL_UNSAFE, -1)
 
 Return value `Future[Stat]`
 
-##### Get children
+##### getChildren
 ```scala
 client.getChildren("/zookeeper", false)
 ```
@@ -140,7 +132,7 @@ Return value `Future[GetChildrenResponse]` `GetChildrenResponse(children: Seq[St
 , watch will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
   it will be `None`.
 
-##### Get children2
+##### getChildren2
 ```scala
 client.getChildren2("/zookeeper", false)
 ```
@@ -151,7 +143,7 @@ Return value `Future[GetChildren2Response]` `GetChildren2Response(children: Seq[
 stat: Stat, watch: Option[Watcher])`, watch will be composed of `Some(watcher:Watcher)`
 if you previously asked to set a watch on the node, otherwise it will be `None`.
 
-##### Get Data
+##### getData
 ```scala
 client.getData("/zookeeper/test", false)
 ```
@@ -162,7 +154,7 @@ Return value `Future[GetDataResponse]` `GetDataResponse(data: Array[Byte], stat:
 watch will be composed of `Some(watcher:Watcher)` if you previously asked to set a watch on the node, otherwise
 it will be `None`.
 
-##### Set Data
+##### setData
 ```scala
 client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 ```
@@ -170,15 +162,24 @@ client.setData("/zookeeper/test", "CHANGE".getBytes, -1)
 - `"CHANGE".getBytes` : the data that you want to set on this node
 - `-1` : current node's version (-1 if you don't care)
 
-Return value `Future[Stat]`
+Return value `Future[Stat]`.
 
-##### Sync
+##### addAuth
+```scala
+client.get.addAuth("digest", "pat:pass".getBytes)
+```
+- `"digest"` : the authentication scheme
+- `"pat:pass".getBytes` : data associated to the scheme
+
+Return value `Future[Unit]`.
+
+##### sync
 ```scala
 client.sync("/zookeeper")
 ```
 - `/zookeeper` : the node that you want to sync
 
-Return value `Future[String]`
+Return value `Future[String]`.
 
 ##### Transaction
 
@@ -188,8 +189,22 @@ val opList = Seq(
     "/zookeeper/hello", "TRANS".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL),
   SetDataRequest("/zookeeper/hello", "changing".getBytes, -1),
   DeleteRequest("/zookeeper/hell", -1)
-  )
+)
+val res = client.transaction(opList)
 ```
+
+Return value: `Future[TransactionResponse]`. A `TransactionResponse` is composed of a responseList,
+it's a sequence of `OpResult`. This sequence is ordered in the same order than the original request sequence.
+
+If one of the resquest contained in the `TransactionRequest` produces an error during the transaction proccessing,
+all the operations of this transaction are cancelled, and the server will return a `TransactionResponse` where the
+sequence of responses is only composed by `ErrorResponse`. 
+
+An `ErrorResponse` will indicate the cause of the error
+with its `exception` value. By reading the sequence of response from the transaction, if the exception is `OkException`
+then the corresponding request is not the cause of the failure, you can go throught the list to find the problem
+(exception will be different of `OkException`)
+
 A transaction can be composed by one or more OpRequests :
 ```scala
 case class CheckVersionRequest(path: String, version: Int)
