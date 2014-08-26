@@ -34,6 +34,7 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
       }
     }
   }
+
   def close(time: Time): Future[Unit] = {
     service flatMap { svc =>
       isValid.set(false)
@@ -48,6 +49,7 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
       }
     }
   }
+
   def close(duration: Duration): Future[Unit] = {
     service flatMap { svc =>
       isValid.set(false)
@@ -62,6 +64,7 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
       }
     }
   }
+
   def isServiceFactoryAvailable: Boolean = serviceFactory.isAvailable
   def isServiceAvailable: Future[Boolean] = service flatMap
     (svc => Future(svc.isAvailable))

@@ -58,6 +58,7 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
         else Future.exception(exc)
 
       case exc: Throwable => Future.exception(exc)
+
     } before checkConnection() rescue {
       case exc: ZookeeperException =>
         if (tries < maxReconnectAttempts)
@@ -66,6 +67,11 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
 
       case exc: Throwable => Future.exception(exc)
     }
+  } rescue { case exc =>
+    // we want to make sure everything is stopped and cleaned
+    // if reconnection fails.
+    disconnect() rescue { case excp => Future.Done }
+    Future.exception(exc)
   }
 
   /**
@@ -98,13 +104,14 @@ private[finagle] trait AutoLinkManager {self: ZkClient with ClientManager =>
   private[this] def checkSession(): Future[Unit] =
     sessionManager.session.state match {
       case States.CONNECTION_LOSS
-           | States.NOT_CONNECTED
-           | States.AUTH_FAILED =>
+           | States.NOT_CONNECTED =>
         ZkClient.logger.warning(
           s"Connection loss with ${
             connectionManager.currentHost.getOrElse("Unknown host")
           } reconnecting with session...")
         stopJob() before reconnectWithSession().unit
+
+      case States.AUTH_FAILED => stopJob() rescue { case exc => Future.Done }
 
       case States.SESSION_MOVED =>
         ZkClient.logger.warning("Session with %s has moved, disconnecting."

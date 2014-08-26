@@ -4,8 +4,7 @@ import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager.{CantReconnect, ConnectionFailed}
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities
-import com.twitter.finagle.exp.zookeeper.data.Auth
-import com.twitter.finagle.exp.zookeeper.session.Session.{SessionAlreadyEstablished, States}
+import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.util.TimeConversions._
 import com.twitter.util.{Future, Return, Throw}
 
@@ -19,11 +18,10 @@ with ReadOnlyManager {slf: ZkClient =>
    * is defined.
    *
    */
-  private[this] def actIfRO(): Future[Unit] = {
+  private[this] def actIfRO(): Future[Unit] = this.synchronized {
     if (sessionManager.session.isRO.get()
-      && timeBetweenRwSrch.isDefined) {
+      && timeBetweenRwSrch.isDefined)
       startRwSearch()
-    }
     else Future.Done
   }
 
@@ -75,7 +73,9 @@ with ReadOnlyManager {slf: ZkClient =>
         }
         else {
           sessionManager.reinit(conRep, ping) match {
-            case Return(unit) => startJob() before Future(host.getOrElse(""))
+            case Return(unit) => configureNewSession() before
+              startJob() before Future(host.getOrElse(""))
+
             case Throw(exc) =>
               sessionManager
                 .newSession(conRep, sessionTimeout, ping)
@@ -105,12 +105,10 @@ with ReadOnlyManager {slf: ZkClient =>
       reconnectWithoutSession(host, tries + 1)
     }
     else {
-      authInfo = Set.empty[Auth]
       sessionManager.newSession(conRep, sessionTimeout, ping)
       configureNewSession() before startJob() before
         Future(host.getOrElse(""))
     }
-
   }
 
   /**
@@ -167,7 +165,7 @@ with ReadOnlyManager {slf: ZkClient =>
 
   /**
    * Should try to connect to a new host if possible.
-   * This operation will interrupt request sending until a new
+   * This operation will interrupt request processing until a new
    * connection and a new session are established
    *
    * @param host the server to connect to
@@ -219,10 +217,15 @@ with ReadOnlyManager {slf: ZkClient =>
     connectionManager.currentHost match {
       case Some(currentHost) =>
         if (hostsToRemove.contains(currentHost)) {
-          connectionManager.findAndConnect(Some(newList)) flatMap { _ =>
-            connectionManager.hostProvider.serverList_=(newList)
-            Future.Done
-          } rescue { case exc => Future.Done }
+          connectionManager.hostProvider.findServer(Some(newList)) transform {
+            case Return(server) =>
+              connectionManager.close() before
+                reconnectWithSession(Some(server)).unit before {
+                connectionManager.hostProvider.serverList_=(newList)
+                Future.Done
+              }
+            case Throw(exc) => Future.exception(exc)
+          }
         }
         else {
           connectionManager.hostProvider.serverList_=(newList)
@@ -241,13 +244,15 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    * @return Future.Done or Exception
    */
-  private[finagle] def newSession(host: Option[String]): Future[Unit] =
-    if (sessionManager.canCreateSession) {
-      val connectReq = sessionManager.buildConnectRequest(sessionTimeout)
-      stopJob() before connect(connectReq, host, actOnConnect).unit
-    }
-    else Future.exception(new SessionAlreadyEstablished(
-      "client is already connected to server")) ensure stopJob()
+  private[finagle] def newSession(host: Option[String]): Future[Unit] = {
+    val connectReq = sessionManager.buildConnectRequest(sessionTimeout)
+    stopJob() before connect(connectReq, host, actOnConnect).unit
+  } rescue { case exc =>
+    // make sure everything is stopped if connection fails
+    // watchers and auth infos are also cleaned
+    disconnect() rescue { case excp => Future.Done }
+    Future.exception(exc)
+  }
 
 
   /**
@@ -261,7 +266,7 @@ with ReadOnlyManager {slf: ZkClient =>
     tries: Int = 0,
     requestBuilder: => ConnectRequest,
     actOnEvent: (Option[String], Int) => ConnectResponseBehaviour
-  ): Future[String] =
+  ): Future[String] = {
     if (sessionManager.canReconnect && tries < maxConsecutiveRetries) {
       stopJob() before connect(
         requestBuilder,
@@ -272,7 +277,17 @@ with ReadOnlyManager {slf: ZkClient =>
           reconnect(host, tries + 1, requestBuilder, actOnEvent)
       }
     } else Future.exception(
-      new CantReconnect("Reconnection not allowed")) ensure stopJob()
+      new CantReconnect("Reconnection not allowed"))
+
+  } rescue { case exc =>
+    // make sure everything is closed is a reconnection fails
+    // we don't want to clean watchers and auth infos because
+    // another reconnection could happen after that failure.
+    sessionManager.session.prepareClose()
+    sessionManager.session.close()
+    stopJob() before zkRequestService.flushService() before
+      Future.exception(exc)
+  }
 
 
   /**
@@ -319,8 +334,7 @@ with ReadOnlyManager {slf: ZkClient =>
   private[finagle] def startJob(): Future[Unit] = {
     startStateLoop()
     connectionManager.hostProvider.startPreventiveSearch()
-    actIfRO() before
-      Future(zkRequestService.unlockService())
+    actIfRO() onSuccess { _ => zkRequestService.unlockService() }
   }
 
   /**
@@ -328,12 +342,11 @@ with ReadOnlyManager {slf: ZkClient =>
    *
    * @return Future.Done
    */
-  private[finagle] def stopJob(): Future[Unit] =
-    zkRequestService.lockService() before {
-      stopStateLoop()
-      stopRwSearch before
-        connectionManager.hostProvider.stopPreventiveSearch
-    }
+  private[finagle] def stopJob(): Future[Unit] = {
+    stopStateLoop()
+    connectionManager.hostProvider.stopPreventiveSearch()
+    stopRwSearch() before zkRequestService.lockService()
+  }
 
   /**
    * Should configure the dispatcher and session after reconnection

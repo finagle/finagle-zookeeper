@@ -9,7 +9,6 @@ import com.twitter.io.Buf
 import com.twitter.io.Buf.ByteArray
 import com.twitter.util.TimeConversions._
 import com.twitter.util._
-import java.util.concurrent.atomic.AtomicBoolean
 import scala.util.Random
 
 private[finagle] class HostProvider(
@@ -20,8 +19,6 @@ private[finagle] class HostProvider(
 ) {
 
   type TestMethod = String => Future[String]
-  val canSearchRwServer = new AtomicBoolean(false)
-  var hasStoppedRwServerSearch = Promise[Unit]()
   private[this] var hostList: Seq[String] =
     HostUtilities.shuffleSeq(HostUtilities.formatHostList(dest))
   var seenRwServer: Option[String] = None
@@ -117,24 +114,6 @@ private[finagle] class HostProvider(
     }
   }
 
-  def startRwServerSearch(): Future[String] = this.synchronized {
-    if (!canSearchRwServer.get() && timeBetweenRwServerSearch.isDefined) {
-      canSearchRwServer.set(true)
-      hasStoppedRwServerSearch = Promise()
-      findRwServer(timeBetweenRwServerSearch.get)
-    } else Future.exception(
-      new RuntimeException("RW mode server search in progress")
-    )
-  }
-
-  def stopRwServerSearch(): Future[Unit] = {
-    if (!canSearchRwServer.get()) Future.Done
-    else {
-      canSearchRwServer.set(false)
-      hasStoppedRwServerSearch
-    }
-  }
-
   /**
    * If we are currently connected to a RO mode server, it will try to search
    * a new RW server every timeInterval until success
@@ -143,26 +122,15 @@ private[finagle] class HostProvider(
    * @return address of an available RW server
    */
   def findRwServer(timeInterval: Duration): Future[String] =
-    scanHostList(
-      HostUtilities.shuffleSeq(hostList)
+    scanHostList(HostUtilities.shuffleSeq(hostList)
     )(withIsroRequest) transform {
       // Found a RW server, best choice
-      case Return(server) =>
-        canSearchRwServer.set(false)
-        hasStoppedRwServerSearch.setDone()
-        Future(server)
+      case Return(server) => Future(server)
 
       // isro request not supported, will search by connecting to server
       case Throw(exc: Throwable) =>
-        if (canSearchRwServer.get())
-          findRwServer(timeInterval)
-            .delayed(timeInterval)(DefaultTimer.twitter)
-        else {
-          hasStoppedRwServerSearch.setDone()
-          Future.exception(
-            new RuntimeException("RW mode server search interrupted")
-          )
-        }
+        findRwServer(timeInterval)
+          .delayed(timeInterval)(DefaultTimer.twitter)
     }
 
   /**
@@ -220,8 +188,7 @@ private[finagle] class HostProvider(
    * Should cancel the preventive search task
    * @return Future.Done when the task is cancelled
    */
-  def stopPreventiveSearch(): Future[Unit] =
-    Future(PreventiveSearchScheduler.stop())
+  def stopPreventiveSearch() { PreventiveSearchScheduler.stop() }
 
   /**
    * Sends a "isro" request to the server. If the server responds "rw" then

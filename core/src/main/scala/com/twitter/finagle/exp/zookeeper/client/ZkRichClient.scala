@@ -47,7 +47,7 @@ trait ZkClient extends Closable with ClientManager {
     sessionManager,
     this
   )
-  @volatile protected[this] var authInfo: Set[Auth] = Set()
+  @volatile protected[this] var authInfos: Set[Auth] = Set()
 
   def session: Session = sessionManager.session
 
@@ -55,24 +55,22 @@ trait ZkClient extends Closable with ClientManager {
    * Add the specified Auth(scheme:data) information to this connection.
    *
    * @param scheme authentication scheme
-   * @param data corresponding data for this node
+   * @param auth corresponding data for this node
    * @return Future[Unit] or Exception
    */
-  def addAuth(scheme: String, data: Array[Byte]): Future[Unit] = {
-    val auth = Auth(scheme, data)
-    val req = new AuthRequest(0, auth)
+  def addAuth(scheme: String, auth: Array[Byte]): Future[Unit] = {
+    val authInfo = Auth(scheme, auth)
+    val req = new AuthRequest(0, authInfo)
 
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) {
-        authInfo += auth
+        authInfos += authInfo
         Future.Done
       } else if (rep.err.get == -115) {
-        watcherManager.process(
-          WatchEvent(Watch.EventType.NONE, Watch.EventState.AUTH_FAILED, "")
-        )
-        Future.exception(
-          ZookeeperException.create("Error while addAuth", rep.err.get)
-        )
+        stopJob() before disconnect() rescue { case exc =>
+          Future.exception(ZookeeperException.create(
+            "Error while addAuth", rep.err.get))
+        }
       }
       else Future.exception(
         ZookeeperException.create("Error while addAuth", rep.err.get))
@@ -148,8 +146,15 @@ trait ZkClient extends Closable with ClientManager {
    * @param deadline a deadline for closing
    * @return Future[Unit] or Exception
    */
-  def close(deadline: Time): Future[Unit] =
-    stopJob() ensure connectionManager.close(deadline)
+  def close(deadline: Time): Future[Unit] = {
+    stopJob() before {
+      sessionManager.session.prepareClose()
+      sessionManager.session.close()
+      authInfos = Set.empty[Auth]
+      watcherManager.clearWatchers()
+      zkRequestService.flushService()
+    }
+  } ensure connectionManager.close(deadline)
 
   /**
    * Closes the session and stops background jobs.
@@ -168,6 +173,7 @@ trait ZkClient extends Closable with ClientManager {
         connectionManager.connection.get.serve(closeReq) transform {
           case Return(closeRep) =>
             if (closeRep.err.get == 0) {
+              authInfos = Set.empty[Auth]
               watcherManager.clearWatchers()
               sessionManager.session.close()
               zkRequestService.flushService()
@@ -181,13 +187,13 @@ trait ZkClient extends Closable with ClientManager {
         }
       }
       else Future.exception(new NoConnectionAvailable(
-        "connection not available during close session"))
+        "connection was not available during close session"))
     }
   } rescue { case exc =>
     // Make sure everything is closed even if we had an exception
     sessionManager.session.prepareClose()
     watcherManager.clearWatchers()
-    authInfo = Set.empty[Auth]
+    authInfos = Set.empty[Auth]
     sessionManager.session.close()
     stopJob() before zkRequestService.flushService() before
       Future.exception(exc)
@@ -301,12 +307,12 @@ trait ZkClient extends Closable with ClientManager {
    *
    * If the watch is non-null and the call is successful (no exception is thrown),
    * a watch will be left on the node with the given path. The watch will be
-   * triggered by a successful operation that creates/delete the node or sets
+
    * the data on the node.
    *
    * @param path the node path
    * @param watch a boolean to set a watch or not
-   * @return an ExistsReponse
+   * @return an ExistsResponse
    */
   def exists(path: String, watch: Boolean = false): Future[ExistsResponse] = {
     val finalPath = prependChroot(path, chroot)
@@ -582,7 +588,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future.Done if request worked, or exception
    */
   private[finagle] def recoverAuth(): Future[Unit] = {
-    val fetches = authInfo.toSeq map { auth =>
+    val fetches = authInfos.toSeq map { auth =>
       val req = ReqPacket(
         Some(RequestHeader(-4, OpCode.AUTH)),
         Some(new AuthRequest(0, auth))

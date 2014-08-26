@@ -228,10 +228,10 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
         case -1 =>
           WatchEvent(rem) match {
             case Return((event@WatchEvent(_, _, _), rem2)) =>
-              // check session state
-              sessionManager.get.parseWatchEvent(event)
               // Notifies the watch manager we have a new watchEvent
               watchManager.get.process(event)
+              // check session state
+              sessionManager.get.parseWatchEvent(event)
               val packet = ResponsePacket(Some(header), Some(event))
               Future(packet)
             case Throw(exc) =>

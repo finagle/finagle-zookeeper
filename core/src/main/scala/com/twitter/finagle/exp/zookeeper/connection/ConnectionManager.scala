@@ -43,12 +43,12 @@ class ConnectionManager(
   def close(): Future[Unit] = {
     if (connection.isDefined) {
       isInitiated.set(false)
-      connection.get.close() before hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch()
+      hostProvider.stopPreventiveSearch()
+      connection.get.close()
     } else {
       isInitiated.set(false)
-      hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch()
+      hostProvider.stopPreventiveSearch()
+      Future.Done
     }
   }
 
@@ -60,13 +60,9 @@ class ConnectionManager(
    */
   def close(deadline: Time): Future[Unit] = {
     isInitiated.set(false)
-    if (connection.isDefined)
-      connection.get.close(deadline) before
-        hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch()
-    else
-      hostProvider.stopPreventiveSearch() before
-        hostProvider.stopRwServerSearch()
+    hostProvider.stopPreventiveSearch()
+    if (connection.isDefined) connection.get.close(deadline)
+    else Future.Done
   }
 
   /**

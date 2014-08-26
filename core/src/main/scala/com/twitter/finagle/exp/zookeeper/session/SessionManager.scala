@@ -116,7 +116,7 @@ class SessionManager(canBeRo: Boolean) {
       case -115 =>
         session.currentState.set(States.AUTH_FAILED)
         session.stop()
-        ZkClient.logger.warning("Authentication to server has failed." +
+        ZkClient.logger.warning("Authentication to server has failed. " +
           "Connection closed by server.")
       case -118 => session.currentState.set(States.SESSION_MOVED)
         session.stop()
@@ -152,7 +152,7 @@ class SessionManager(canBeRo: Boolean) {
       case 4 =>
         session.currentState.set(States.AUTH_FAILED)
         session.stop()
-        ZkClient.logger.warning("Authentication to server has failed." +
+        ZkClient.logger.warning("Authentication to server has failed. " +
           "Connection closed by server.")
       case 5 =>
         session.isRO.compareAndSet(false, true)

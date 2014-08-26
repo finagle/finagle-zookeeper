@@ -17,11 +17,11 @@ private[finagle] class WatcherManager(
   chroot: String,
   autoWatchReset: Boolean
 ) {
-  val dataWatchers: mutable.HashMap[String, Set[Watcher]] =
+  val dataWatchers: mutable.HashMap[String, Set[Promise[WatchEvent]]] =
     mutable.HashMap()
-  val existsWatchers: mutable.HashMap[String, Set[Watcher]] =
+  val existsWatchers: mutable.HashMap[String, Set[Promise[WatchEvent]]] =
     mutable.HashMap()
-  val childrenWatchers: mutable.HashMap[String, Set[Watcher]] =
+  val childrenWatchers: mutable.HashMap[String, Set[Promise[WatchEvent]]] =
     mutable.HashMap()
 
   def getDataWatchers = this.synchronized(dataWatchers)
@@ -31,20 +31,21 @@ private[finagle] class WatcherManager(
   /**
    * Should register a new watcher in the corresponding map
    *
-   * @param map HashMap[String, Promise[WatchEvent]
+   * @param map map of paths and associated promises
    * @param path watcher's path
    * @return a new Watcher
    */
   private[this] def addWatcher(
-    map: mutable.HashMap[String, Set[Watcher]],
+    map: mutable.HashMap[String, Set[Promise[WatchEvent]]],
     typ: Int,
     path: String
   ): Watcher = {
-    val watcher = new Watcher(path, typ, Promise[WatchEvent]())
+    val p = Promise[WatchEvent]()
+    val watcher = new Watcher(path, typ, p)
 
     map synchronized {
-      val watchers = map.getOrElse(path, Set.empty[Watcher])
-      map += path -> (watchers + watcher)
+      val promises = map.getOrElse(path, Set.empty[Promise[WatchEvent]])
+      map += path -> (promises + p)
       watcher
     }
   }
@@ -122,15 +123,13 @@ private[finagle] class WatcherManager(
    * @param event a watched event
    */
   private[this] def findAndSatisfy(
-    map: mutable.HashMap[String, Set[Watcher]],
-    event: WatchEvent) {
-
+    map: mutable.HashMap[String, Set[Promise[WatchEvent]]],
+    event: WatchEvent
+  ) {
     map synchronized {
       map.get(event.path) match {
         case Some(set) =>
-          set map { watcher =>
-            watcher.event.setValue(event)
-          }
+          set map { _.setValue(event) }
           map -= event.path
         case None =>
       }
@@ -144,17 +143,18 @@ private[finagle] class WatcherManager(
    * @return Unit
    */
   private[finagle] def process(watchEvent: WatchEvent) {
-    val path: String = if (chroot.length > 0) {
-      val serverPath = watchEvent.path
-      if (serverPath == chroot) "/"
-      else if (serverPath.length > chroot.length)
-        watchEvent.path.substring(chroot.length)
-      else {
-        ZkClient.logger.warning("Got server path " + watchEvent.path
-          + " which is too short for chroot path " + chroot)
-        watchEvent.path
-      }
-    } else watchEvent.path
+    val path: String =
+      if (chroot.length > 0) {
+        val serverPath = watchEvent.path
+        if (serverPath == chroot) "/"
+        else if (serverPath.length > chroot.length)
+          watchEvent.path.substring(chroot.length)
+        else {
+          ZkClient.logger.error("Got server path " + watchEvent.path
+            + " which is too short for chroot path " + chroot)
+          watchEvent.path
+        }
+      } else watchEvent.path
 
     val event = WatchEvent(
       watchEvent.typ,
@@ -209,13 +209,9 @@ private[finagle] class WatcherManager(
    */
   def removeWatchers(path: String, watcherType: Int) {
     def removeAllWatchers(
-      map: mutable.HashMap[String, Set[Watcher]],
+      map: mutable.HashMap[String, Set[Promise[WatchEvent]]],
       path: String
-    ) {
-      map synchronized {
-        map.remove(path)
-      }
-    }
+    ) { map synchronized { map.remove(path) } }
 
     if (!isWatcherDefined(path, watcherType))
       throw new IllegalArgumentException("No watch registered for this node")
@@ -242,15 +238,15 @@ private[finagle] class WatcherManager(
    */
   def removeWatcher(watcher: Watcher) {
     def removeFromMap(
-      map: mutable.HashMap[String, Set[Watcher]],
+      map: mutable.HashMap[String, Set[Promise[WatchEvent]]],
       watcher: Watcher
     ) {
       map synchronized {
         map.get(watcher.path) match {
-          case Some(watchers) =>
-            val newWatchers = watchers - watcher
-            if (newWatchers.isEmpty) map.remove(watcher.path)
-            else map += watcher.path -> (watchers - watcher)
+          case Some(promises) =>
+            val newPromises = promises filter { _ != watcher.event }
+            if (newPromises.isEmpty) map.remove(watcher.path)
+            else map += watcher.path -> newPromises
           case None =>
         }
       }

@@ -1,6 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.client
 
 import com.twitter.concurrent.{AsyncSemaphore, Permit}
+import com.twitter.finagle.exp.zookeeper.session.Session.States
 import com.twitter.finagle.{CancelledRequestException, Service}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.managers.ClientManager
@@ -44,12 +45,16 @@ class PreProcessService(
     isROCheck(req) match {
       case Return(unit) =>
         zkClient.tryCheckLink()
+        if (sessionManager.session.state == States.CLOSED)
+          throw new ZookeeperException("Not connected to a server!")
+
         val p = new Promise[RepPacket]
 
         semaphore.acquire() respond {
           case Return(requestPermit) =>
             if (cancelAllRequests.get()) {
-              p.updateIfEmpty(Throw(new CancelledRequestException))
+              p.updateIfEmpty(Throw(
+                new CancelledRequestException))
               requestPermit.release()
             }
             else sendRequest(req, p, requestPermit)
@@ -116,7 +121,10 @@ class PreProcessService(
   }
 
   /**
-   * Should cancel all the pending requests and lock the service
+   * Should cancel all the pending requests and lock the service.
+   * After unlocking the service, it remains opened so that each
+   * requests sent in a non-connected state will receive a
+   * CancelledRequestException caused by "not connected to a server".
    *
    * @return Future.Done when the action is completed
    */

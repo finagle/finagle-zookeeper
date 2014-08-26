@@ -1,11 +1,11 @@
 package com.twitter.finagle.exp.zookeeper.client.managers
 
+import com.twitter.finagle.CancelledRequestException
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
-import com.twitter.util.{Future, Return, Throw}
-import java.util.concurrent.atomic.AtomicBoolean
+import com.twitter.util.{Future, Promise, Return, Throw}
 
 private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
-  private[this] val canSearch = new AtomicBoolean(true)
+  private[this] var rwSearchOp: Option[Future[Unit]] = None
 
   /**
    * Should search a RW mode server and connect to it.
@@ -13,11 +13,25 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
    * @return Future.Done
    */
   private[this] def findAndConnectRwServer(): Future[Unit] = {
+    var interrupt = false
+    var search: Future[String] = new Promise[String]()
+    val p = new Promise[Unit]()
+    p.setInterruptHandler {
+      case exc: CancelledRequestException =>
+        interrupt = true
+        search.raise(new CancelledRequestException)
+        p.setDone()
+      case exc =>
+        p.updateIfEmpty(Throw(exc))
+    }
+
     ZkClient.logger.info(
       "Client has started looking for a Read-Write server in background.")
-    connectionManager.hostProvider.startRwServerSearch() transform {
-      case Return(server) =>
-        if (sessionManager.session.isRO.get() && canSearch.get()) {
+
+    if (!interrupt) {
+      search = connectionManager.hostProvider.findRwServer(timeBetweenRwSrch.get)
+      search transform {
+        case Return(server) if sessionManager.session.isRO.get() && !interrupt =>
           if (sessionManager.session.hasFakeSessionId.get) {
             ZkClient.logger.info(
               "Client has found a Read-Write server" +
@@ -32,13 +46,15 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
                 " with session.")
             reconnectWithSession(Some(server)).unit
           }
-        } else Future.Done
 
-      case Throw(exc) =>
-        if (sessionManager.session.isRO.get() && canSearch.get())
-          findAndConnectRwServer()
-        else Future.Done
+        case _ => Future.Done
+      }
+
+      p.updateIfEmpty(Return(search))
     }
+    else p.setDone()
+
+    p
   }
 
   /**
@@ -46,17 +62,20 @@ private[finagle] trait ReadOnlyManager {self: ZkClient with ClientManager =>
    *
    * @return Future.Done
    */
-  def startRwSearch(): Future[Unit] =
-    if (canSearch.getAndSet(false)) findAndConnectRwServer()
-    else Future.Done
+  private[finagle] def startRwSearch(): Future[Unit] =
+    stopRwSearch() onSuccess { _ =>
+      rwSearchOp = Some(findAndConnectRwServer())
+    }
 
   /**
    * Should stop Rw mode server search.
    *
    * @return Future.Done
    */
-  def stopRwSearch(): Future[Unit] =
-    if (!canSearch.getAndSet(true))
-      connectionManager.hostProvider.stopRwServerSearch()
+  private[finagle] def stopRwSearch(): Future[Unit] =
+    if (rwSearchOp.isDefined) {
+      rwSearchOp.get.raise(new CancelledRequestException)
+      rwSearchOp.get
+    }
     else Future.Done
 }

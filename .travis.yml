@@ -7,14 +7,14 @@ jdk:
   - openjdk7
 
 script:
-  - "sbt core/test"
-  - "sbt runTests"
+  - "sbt ++$TRAVIS_SCALA_VERSION core/test"
+  - "sbt ++$TRAVIS_SCALA_VERSION runTests"
   
 before_install:
-  - sudo chmod +x integrationTesting/src/main/resources/scripts/runQuorumMode.sh
-  - sudo chmod +x integrationTesting/src/main/resources/scripts/runStandaloneMode.sh
-  - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanQuorumMode.sh
-  - sudo chmod +x integrationTesting/src/main/resources/scripts/stopAndCleanStandaloneMode.sh
+  - sudo chmod +x integration/src/main/resources/scripts/runQuorumMode.sh
+  - sudo chmod +x integration/src/main/resources/scripts/runStandaloneMode.sh
+  - sudo chmod +x integration/src/main/resources/scripts/stopAndCleanQuorumMode.sh
+  - sudo chmod +x integration/src/main/resources/scripts/stopAndCleanStandaloneMode.sh
 
 notifications:
   email: false

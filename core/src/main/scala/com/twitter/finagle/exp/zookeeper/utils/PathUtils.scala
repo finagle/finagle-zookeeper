@@ -5,11 +5,13 @@ import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 object PathUtils {
 
   def validatePath(path: String, createMod: Int): Unit = {
-    if (createMod == 0 || createMod == 1 || createMod == 2 || createMod == 0) {
-      if (createMod == CreateMode.EPHEMERAL_SEQUENTIAL || createMod == CreateMode.PERSISTENT_SEQUENTIAL)
+    if (createMod == 0 || createMod == 1 || createMod == 2 || createMod == 3) {
+      if (createMod == CreateMode.EPHEMERAL_SEQUENTIAL
+        || createMod == CreateMode.PERSISTENT_SEQUENTIAL)
         validatePath(path + 1)
-      else
-        validatePath(path)
+
+      else validatePath(path)
+
     } else throw new IllegalArgumentException("Create mode is not correct")
   }
 

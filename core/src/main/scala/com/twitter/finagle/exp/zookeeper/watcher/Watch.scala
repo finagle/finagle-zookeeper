@@ -1,7 +1,7 @@
 package com.twitter.finagle.exp.zookeeper.watcher
 
 import com.twitter.finagle.exp.zookeeper.WatchEvent
-import com.twitter.util.Promise
+import com.twitter.util.Future
 
 /**
  * A watcher represents a Watch which is a Future[WatchEvent] and a path,
@@ -14,7 +14,7 @@ import com.twitter.util.Promise
 case class Watcher(
   path: String,
   private[finagle] val typ: Int,
-  event: Promise[WatchEvent]
+  event: Future[WatchEvent]
 )
 
 private[finagle] object Watch {
