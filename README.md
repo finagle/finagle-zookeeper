@@ -24,6 +24,8 @@ Every request returns a *twitter.util.Future* (see [Effective Scala](http://twit
 
 * [Watcher manager](https://github.com/finagle/finagle-zookeeper/wiki/5.-Watcher-manager)
 
+* [More about requests](https://github.com/finagle/finagle-zookeeper/wiki/6.-More-about-requests)
+
 
 ##### Client creation ( more details [here](https://github.com/finagle/finagle-zookeeper/wiki/1.-Create-a-ZkClient) )
 ```scala
