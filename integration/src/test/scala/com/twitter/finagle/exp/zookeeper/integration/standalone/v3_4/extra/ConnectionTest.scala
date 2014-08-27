@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.extra
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.extra
 
 import com.twitter.finagle.ChannelWriteException
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.{CreateMode, OpCode}

@@ -95,8 +95,9 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
    */
   def readLoop(): Future[Unit] = {
     if (sessionManager.isDefined &&
-      !sessionManager.get.session.isClosingSession.get &&
-      !hasDispatcherFailed.get) read() before readLoop()
+      !sessionManager.get.session.hasSessionClosed.get &&
+      !hasDispatcherFailed.get)
+      read() before readLoop()
     else {
       isReading.set(false)
       Future.Done
@@ -174,7 +175,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
      */
     def read(
       pendingRequest: Option[(RequestRecord, Promise[RepPacket])],
-      buffer: Buf): Future[ResponsePacket] = {
+      buffer: Buf
+    ): Future[ResponsePacket] = {
       /**
        * if Some(record) then a request is waiting for a response
        * if None then this is a watchEvent
@@ -195,7 +197,6 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
         case Throw(exc1) => exc1 match {
           case exc: Exception if exc.isInstanceOf[ZkDecodingException]
             | exc.isInstanceOf[ZkDispatchingException] =>
-
             readNotification(buffer) match {
               case Return(watch) => watch
               case Throw(exc2) =>
@@ -259,7 +260,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
      */
     def readFromRequest(
       req: (RequestRecord, Promise[RepPacket]),
-      buf: Buf): Try[Future[ResponsePacket]] = Try {
+      buf: Buf
+    ): Try[Future[ResponsePacket]] = Try {
 
       val (reqRecord, _) = req
       reqRecord.opCode match {
@@ -272,7 +274,10 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
             case Return((body, rem)) => Future(ResponsePacket(None, Some(body)))
             case Throw(exception) => throw exception
           }
-        case OpCode.CLOSE_SESSION => decodeHeader(reqRecord, buf)
+        case OpCode.CLOSE_SESSION => decodeHeader(reqRecord, buf) flatMap { rep =>
+          sessionManager.get.session.hasSessionClosed.set(true)
+          Future(rep)
+        }
         case OpCode.DELETE => decodeHeader(reqRecord, buf)
         case OpCode.EXISTS => decodeResponse(reqRecord, buf, ExistsResponse.apply)
         case OpCode.GET_ACL => decodeResponse(reqRecord, buf, GetACLResponse.apply)
@@ -302,7 +307,8 @@ class RepDispatcher(trans: Transport[Buf, Buf]) {
      */
     def decodeHeader(
       reqRecord: RequestRecord,
-      buf: Buf): Future[ResponsePacket] =
+      buf: Buf
+    ): Future[ResponsePacket] =
 
       ReplyHeader(buf) match {
         case Return((header, rem)) =>

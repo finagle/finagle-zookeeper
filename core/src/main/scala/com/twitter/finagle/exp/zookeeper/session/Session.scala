@@ -27,11 +27,10 @@ class Session(
   var isRO: AtomicBoolean = new AtomicBoolean(false),
   var pingSender: Option[PingSender] = None
 ) {
-
   private[finagle]
   var currentState =
     new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)
-  private[finagle] val isClosingSession = new AtomicBoolean(false)
+  private[finagle] val hasSessionClosed = new AtomicBoolean(true)
   private[finagle] var hasFakeSessionId = new AtomicBoolean(true)
   private[finagle] val lastZxid = new AtomicLong(0L)
   private[this] val xid = new AtomicInteger(2)
@@ -90,7 +89,8 @@ class Session(
    * Called after the close session response decoding
    */
   private[finagle] def close() {
-    isClosingSession.set(false)
+    stopPing()
+    hasSessionClosed.set(true)
     currentState.set(States.CLOSED)
   }
 
@@ -110,7 +110,7 @@ class Session(
       xid.set(2)
       lastZxid.set(0L)
       startPing()
-      isClosingSession.set(false)
+      hasSessionClosed.set(false)
       if (isRO.get()) {
         currentState.set(States.CONNECTED_READONLY)
         ZkClient.logger.info("Server is in Read Only mode")
@@ -122,14 +122,6 @@ class Session(
       }
     } else throw new RuntimeException(
       "Pinger is not initiated or PingScheduler is already running in Session")
-  }
-
-  /**
-   * Called before the close session request is written
-   */
-  private[finagle] def prepareClose() {
-    stopPing()
-    isClosingSession.set(true)
   }
 
   /**
@@ -146,7 +138,7 @@ class Session(
     assert(util.Arrays.equals(connectResponse.passwd, password))
 
     stopPing()
-    isClosingSession.set(false)
+    hasSessionClosed.set(false)
     isRO.set(connectResponse.isRO)
     if (isRO.get()) {
       currentState.set(States.CONNECTED_READONLY)
@@ -199,7 +191,7 @@ class Session(
     }
 
     def canSendPing(f: => Unit): Unit = {
-      if (elapsedTime() >= pingTimeout) ()=>f
+      if (elapsedTime() >= pingTimeout) () => f
     }
 
     def isRunning: Boolean = {

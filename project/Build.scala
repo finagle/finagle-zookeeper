@@ -35,15 +35,15 @@ object finaglezk extends Build {
       "junit" % "junit" % "4.11",
       "com.google.guava" % "guava" % "17.0",
       "org.mockito" % "mockito-all" % "1.9.5" % "test"
-    ),
-    scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
+    )
   )
 
   lazy val buildSettings = Seq(
     name := "finagle-ZooKeeper",
     organization := "com.twitter",
     version := clientVersion,
-    crossScalaVersions := Seq("2.10.4")
+    crossScalaVersions := Seq("2.10.4"),
+    scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
   )
 
   lazy val runTests = taskKey[Unit]("Runs configurations and tests")

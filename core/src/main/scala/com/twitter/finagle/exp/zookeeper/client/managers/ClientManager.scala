@@ -149,6 +149,7 @@ with ReadOnlyManager {slf: ZkClient =>
     actOnEvent: ConnectResponseBehaviour
   ): Future[String] = {
     sessionManager.session.currentState.set(States.CONNECTING)
+    sessionManager.session.hasSessionClosed.set(false)
     configureDispatcher() before
       connectionManager.connection.get.serve(
         ReqPacket(None, Some(connectReq))
@@ -283,7 +284,6 @@ with ReadOnlyManager {slf: ZkClient =>
     // make sure everything is closed is a reconnection fails
     // we don't want to clean watchers and auth infos because
     // another reconnection could happen after that failure.
-    sessionManager.session.prepareClose()
     sessionManager.session.close()
     stopJob() before zkRequestService.flushService() before
       Future.exception(exc)

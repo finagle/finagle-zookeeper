@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.extra
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.extra
 
 import com.twitter.finagle.exp.zookeeper.connection.ConnectionManager
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities.ServerNotAvailable

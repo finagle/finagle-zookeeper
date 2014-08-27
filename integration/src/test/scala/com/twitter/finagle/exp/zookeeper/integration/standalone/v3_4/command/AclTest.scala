@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.command
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.command
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.ACL.Perms
@@ -51,7 +51,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
     newClient()
     connect()
 
-    Await.ready(
+    Await.result(
       for {
         _ <- client.get.addAuth("digest", "pat:test".getBytes)
         _ <- client.get.setACL("/", Ids.CREATOR_ALL_ACL, -1)
@@ -141,7 +141,11 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
 
     intercept[InvalidAclException] {
       Await.result {
-        client.get.create("/acltest", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)
+        client.get.create(
+          "/acltest",
+          "".getBytes,
+          Ids.CREATOR_ALL_ACL,
+          CreateMode.PERSISTENT)
       }
     }
 
@@ -155,6 +159,7 @@ class AclTest extends FunSuite with StandaloneIntegrationConfig {
         client.get.create("/acltest", "".getBytes, acls, CreateMode.PERSISTENT)
       }
     }
+
     Await.result {
       client.get.addAuth("digest", "ben:passwd".getBytes) before
         client.get.create("/acltest", "".getBytes, Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT)

@@ -60,7 +60,6 @@ class ConnectionManager(
    */
   def close(deadline: Time): Future[Unit] = {
     isInitiated.set(false)
-    hostProvider.stopPreventiveSearch()
     if (connection.isDefined) connection.get.close(deadline)
     else Future.Done
   }
@@ -70,7 +69,7 @@ class ConnectionManager(
    *
    * @param server the server address
    */
-  private[this] def connect(server: String): Unit = {
+  private[this] def connect(server: String): Unit = this.synchronized {
     if (connection.isDefined) connection.get.close()
     activeHost = Some(server)
     connection = Some(new Connection(newServiceFactory(server)))

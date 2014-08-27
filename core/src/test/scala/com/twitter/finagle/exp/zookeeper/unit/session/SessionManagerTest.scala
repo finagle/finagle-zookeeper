@@ -67,7 +67,7 @@ class SessionManagerTest extends FunSuite {
     assert(sessionManager.session.nextXid === 3)
     assert(sessionManager.session.lastZxid.get() === 0L)
     assert(sessionManager.session.isReadOnly === true)
-    assert(sessionManager.session.isClosingSession.get() === false)
+    assert(sessionManager.session.hasSessionClosed.get() === false)
     assert(sessionManager.session.currentState.get() === States.CONNECTED_READONLY)
     assert(sessionManager.session.hasFakeSessionId.get() === true)
   }
@@ -137,7 +137,7 @@ class SessionManagerTest extends FunSuite {
     assert(sessionManager.session.nextXid === 2)
     assert(sessionManager.session.nextXid === 3)
     assert(sessionManager.session.lastZxid.get() === 0L)
-    assert(sessionManager.session.isClosingSession.get() === false)
+    assert(sessionManager.session.hasSessionClosed.get() === false)
     assert(sessionManager.session.isReadOnly === true)
     assert(sessionManager.session.currentState.get() === States.CONNECTED_READONLY)
     assert(sessionManager.session.hasFakeSessionId.get() === true)
@@ -155,7 +155,7 @@ class SessionManagerTest extends FunSuite {
     assert(sessionManager.session.nextXid === 3)
     assert(sessionManager.session.lastZxid.get() === 0L)
     assert(sessionManager.session.isReadOnly === false)
-    assert(sessionManager.session.isClosingSession.get() === false)
+    assert(sessionManager.session.hasSessionClosed.get() === false)
     assert(sessionManager.session.currentState.get() === States.CONNECTED)
     assert(sessionManager.session.hasFakeSessionId.get() === false)
   }

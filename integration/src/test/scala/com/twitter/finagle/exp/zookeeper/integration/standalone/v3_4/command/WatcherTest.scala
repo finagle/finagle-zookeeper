@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.command
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.command
 
 import com.twitter.finagle.exp.zookeeper.Zookeeper
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
@@ -53,6 +53,22 @@ class WatcherTest extends StandaloneIntegrationConfig {
       assert(rep.state === Watch.EventState.SYNC_CONNECTED)
       assert(rep.path === "/zookeeper/test")
     }
+
+    disconnect()
+    Await.ready(client.get.close())
+  }
+
+  test("Create, getData with watches") {
+    newClient()
+    connect()
+
+    val res = for {
+      _ <- client.get.create("/zookeeper/test", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+      getdata <- client.get.getData("/zookeeper/test", true)
+    } yield getdata
+
+
+    val ret = Await.result(res)
 
     disconnect()
     Await.ready(client.get.close())

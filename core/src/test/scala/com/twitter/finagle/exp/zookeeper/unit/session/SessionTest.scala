@@ -26,7 +26,7 @@ class SessionTest extends FunSuite {
     assert(session.nextXid === 3)
     assert(session.lastZxid.get() === 0L)
     assert(session.isReadOnly === false)
-    assert(session.isClosingSession.get() === false)
+    assert(session.hasSessionClosed.get() === false)
     assert(session.currentState.get() === States.CONNECTED)
     assert(session.hasFakeSessionId.get() === false)
 
@@ -43,7 +43,7 @@ class SessionTest extends FunSuite {
     assert(session2.nextXid === 3)
     assert(session2.lastZxid.get() === 0L)
     assert(session2.isReadOnly === true)
-    assert(session2.isClosingSession.get() === false)
+    assert(session2.hasSessionClosed.get() === false)
     assert(session2.currentState.get() === States.CONNECTED_READONLY)
     assert(session2.hasFakeSessionId.get() === true)
   }
@@ -78,7 +78,7 @@ class SessionTest extends FunSuite {
     assert(session.nextXid === 3)
     assert(session.lastZxid.get() === 0L)
     assert(session.isReadOnly === false)
-    assert(session.isClosingSession.get() === false)
+    assert(session.hasSessionClosed.get() === false)
     assert(session.currentState.get() === States.CONNECTED)
     assert(session.hasFakeSessionId.get() === false)
     val conRep = ConnectResponse(
@@ -94,7 +94,7 @@ class SessionTest extends FunSuite {
     assert(session.nextXid === 3)
     assert(session.lastZxid.get() === 0L)
     assert(session.isReadOnly === true)
-    assert(session.isClosingSession.get() === false)
+    assert(session.hasSessionClosed.get() === false)
     assert(session.currentState.get() === States.CONNECTED_READONLY)
     assert(session.hasFakeSessionId.get() === false)
 
@@ -110,7 +110,7 @@ class SessionTest extends FunSuite {
     assert(session2.nextXid === 2)
     assert(session2.nextXid === 3)
     assert(session2.lastZxid.get() === 0L)
-    assert(session2.isClosingSession.get() === false)
+    assert(session2.hasSessionClosed.get() === false)
     assert(session2.isReadOnly === true)
     assert(session2.currentState.get() === States.CONNECTED_READONLY)
     assert(session2.hasFakeSessionId.get() === true)
@@ -128,7 +128,7 @@ class SessionTest extends FunSuite {
     assert(session2.nextXid === 3)
     assert(session2.lastZxid.get() === 0L)
     assert(session2.isReadOnly === false)
-    assert(session2.isClosingSession.get() === false)
+    assert(session2.hasSessionClosed.get() === false)
     assert(session2.currentState.get() === States.CONNECTED)
     assert(session2.hasFakeSessionId.get() === false)
   }
@@ -164,20 +164,8 @@ class SessionTest extends FunSuite {
     )
     session.init()
     session.close()
-    assert(session.isClosingSession.get() === false)
-    assert(session.currentState.get() === States.CLOSED)
-  }
-
-  test("should prepareClose correctly") {
-    val session = new Session(
-      sessionID = 12315641L,
-      sessionTimeout = 3000.milliseconds,
-      negotiateTimeout = 2000.milliseconds,
-      pingSender = Some(() => Future.Done)
-    )
-    session.init()
-    session.prepareClose()
     assert(!session.PingScheduler.isRunning)
-    assert(session.isClosingSession.get() === true)
+    assert(session.hasSessionClosed.get() === true)
+    assert(session.currentState.get() === States.CLOSED)
   }
 }

@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.quorum.command
+package com.twitter.finagle.exp.zookeeper.integration.quorum.v3_4.command
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids

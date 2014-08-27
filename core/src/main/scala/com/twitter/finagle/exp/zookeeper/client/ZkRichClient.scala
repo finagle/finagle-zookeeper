@@ -87,7 +87,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit] if the watches are ok, or else ZooKeeperException
    * @since 3.5.0
    */
-  private[this] def checkWatches(
+  def checkWatches(
     path: String,
     watcherType: Int
   ): Future[Unit] = {
@@ -101,7 +101,8 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
-        ZookeeperException.create("Error while removing watches", rep.err.get))
+        ZookeeperException.create(
+          s"Error while checking watches for path: $path", rep.err.get))
     }
   }
 
@@ -112,7 +113,7 @@ trait ZkClient extends Closable with ClientManager {
    * @param watcher a watcher to test
    * @return Future[Unit] if the watcher is ok, or else ZooKeeperException
    */
-  private[this] def checkWatcher(watcher: Watcher): Future[Unit] = {
+  def checkWatcher(watcher: Watcher): Future[Unit] = {
     if (!watcherManager.isWatcherDefined(watcher))
       throw new IllegalArgumentException("No watch registered for this node")
 
@@ -127,7 +128,7 @@ trait ZkClient extends Closable with ClientManager {
     zkRequestService(req) flatMap { rep =>
       if (rep.err.get == 0) Future.Unit
       else Future.exception(
-        ZookeeperException.create("Error while removing watches", rep.err.get))
+        ZookeeperException.create("Error while checking a watcher", rep.err.get))
     }
   }
 
@@ -148,7 +149,6 @@ trait ZkClient extends Closable with ClientManager {
    */
   def close(deadline: Time): Future[Unit] = {
     stopJob() before {
-      sessionManager.session.prepareClose()
       sessionManager.session.close()
       authInfos = Set.empty[Auth]
       watcherManager.clearWatchers()
@@ -164,7 +164,6 @@ trait ZkClient extends Closable with ClientManager {
   def disconnect(): Future[Unit] = stopJob() flatMap { _ =>
     connectionManager.hasAvailableService flatMap { available =>
       if (available) {
-        sessionManager.session.prepareClose()
         val closeReq = ReqPacket(
           Some(RequestHeader(1, OpCode.CLOSE_SESSION)),
           None
@@ -191,10 +190,9 @@ trait ZkClient extends Closable with ClientManager {
     }
   } rescue { case exc =>
     // Make sure everything is closed even if we had an exception
-    sessionManager.session.prepareClose()
+    sessionManager.session.close()
     watcherManager.clearWatchers()
     authInfos = Set.empty[Auth]
-    sessionManager.session.close()
     stopJob() before zkRequestService.flushService() before
       Future.exception(exc)
   }
@@ -462,7 +460,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return configuration node data
    * @since 3.5.0
    */
-  private[this] def getConfig(
+  def getConfig(
     watch: Boolean = false
   ): Future[GetDataResponse] = {
     val req = GetDataRequest(ZookeeperDefs.CONFIG_NODE, watch)
@@ -654,7 +652,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit]
    * @since 3.5.0
    */
-  private[this] def removeWatches(
+  def removeWatches(
     watcher: Watcher,
     local: Boolean
   ): Future[Unit] = {
@@ -698,7 +696,7 @@ trait ZkClient extends Closable with ClientManager {
    * @return Future[Unit]
    * @since 3.5.0
    */
-  private[this] def removeAllWatches(
+  def removeAllWatches(
     path: String,
     watcherType: Int,
     local: Boolean

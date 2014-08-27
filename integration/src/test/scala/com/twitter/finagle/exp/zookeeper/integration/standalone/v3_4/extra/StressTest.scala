@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.extra
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.extra
 
 import com.twitter.finagle.exp.zookeeper.ZookeeperDefs.CreateMode
 import com.twitter.finagle.exp.zookeeper.data.Ids
@@ -11,9 +11,7 @@ import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
 class StressTest extends FunSuite with StandaloneIntegrationConfig {
-
-  test("watcher test") {
-    pending
+  ignore("intensive test, run manually : watcher test") {
     newClient()
     connect()
 
@@ -57,8 +55,7 @@ class StressTest extends FunSuite with StandaloneIntegrationConfig {
     Await.result(client.get.close())
   }
 
-  test("connect-disconnect test") {
-    pending
+  ignore("intensive test, run manually : connect-disconnect test") {
     newClient()
 
     for (i <- 0 until 500) {
@@ -69,8 +66,7 @@ class StressTest extends FunSuite with StandaloneIntegrationConfig {
     Await.ready(client.get.close())
   }
 
-  test("change host test") {
-    pending
+  ignore("intensive test, run manually : change host test") {
     newClient()
     connect()
 

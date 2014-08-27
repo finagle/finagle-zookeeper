@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.quorum.extra
+package com.twitter.finagle.exp.zookeeper.integration.quorum.v3_4.extra
 
 import com.twitter.finagle.exp.zookeeper.integration.quorum.QuorumIntegrationConfig
 import com.twitter.util.Await

@@ -1,4 +1,4 @@
-package com.twitter.finagle.exp.zookeeper.integration.standalone.command
+package com.twitter.finagle.exp.zookeeper.integration.standalone.v3_4.command
 
 import java.util
 
