@@ -30,7 +30,7 @@ class Session(
   private[finagle]
   var currentState =
     new AtomicReference[States.ConnectionState](States.NOT_CONNECTED)
-  private[finagle] val hasSessionClosed = new AtomicBoolean(true)
+  private[finagle] val hasSessionClosed = new AtomicBoolean(false)
   private[finagle] var hasFakeSessionId = new AtomicBoolean(true)
   private[finagle] val lastZxid = new AtomicLong(0L)
   private[this] val xid = new AtomicInteger(2)
