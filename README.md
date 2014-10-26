@@ -70,7 +70,7 @@ val res = for {
 
 ##### create
 ```scala
-client.get.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
+client.create("/zookeeper/hello", "HELLO".getBytes, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
 ```
 - `/zookeeper/hello` : the node that you want to create
 - `"HELLO".getBytes` : the data associated to this node
@@ -168,7 +168,7 @@ Return value `Future[Stat]`.
 
 ##### addAuth
 ```scala
-client.get.addAuth("digest", "pat:pass".getBytes)
+client.addAuth("digest", "pat:pass".getBytes)
 ```
 - `"digest"` : the authentication scheme
 - `"pat:pass".getBytes` : data associated to the scheme
