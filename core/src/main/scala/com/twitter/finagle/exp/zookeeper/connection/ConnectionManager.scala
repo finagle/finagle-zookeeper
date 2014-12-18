@@ -1,6 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.connection
 
-import com.twitter.finagle.ServiceFactory
+import com.twitter.finagle.{ServiceFactory, Status}
 import com.twitter.finagle.exp.zookeeper._
 import com.twitter.finagle.exp.zookeeper.client.ZkClient
 import com.twitter.finagle.exp.zookeeper.connection.HostUtilities.ServerNotAvailable
@@ -69,13 +69,15 @@ class ConnectionManager(
    *
    * @param server the server address
    */
-  private[this] def connect(server: String): Unit = this.synchronized {
+  private[this] def connect(server: String): Future[Unit] = this.synchronized {
     if (connection.isDefined) connection.get.close()
     activeHost = Some(server)
     connection = Some(new Connection(newServiceFactory(server)))
     isInitiated.set(true)
 
     ZkClient.logger.info(s"Now connected to $server")
+
+    Status.whenOpen(connection.get.serviceFactoryStatus)
   }
 
   /**
@@ -86,7 +88,7 @@ class ConnectionManager(
    */
   def findAndConnect(hostList: Option[Seq[String]] = None): Future[Unit] =
     hostProvider.findServer(hostList) transform {
-      case Return(server) => Future(connect(server))
+      case Return(server) => connect(server)
       case Throw(exc) => Future.exception(exc)
     }
 
@@ -96,8 +98,8 @@ class ConnectionManager(
    * @return a brand new service factory
    */
   def newServiceFactory(server: String): ServiceFactory[ReqPacket, RepPacket] =
-    if (label.isDefined) ZookeeperStackClient.newClient(server, label.get)
-    else ZookeeperStackClient.newClient(server)
+    if (label.isDefined) Zookeeper.newClient(server, label.get)
+    else Zookeeper.newClient(server)
 
   /**
    * Test a server with isro request and connect request, then connect to it
@@ -112,7 +114,6 @@ class ConnectionManager(
         if (available) {
           hostProvider.addHost(host)
           connect(host)
-          Future.Done
         }
         else Future.exception(new ServerNotAvailable(
           "%s is not available for connection".format(host)))
@@ -155,9 +156,7 @@ class ConnectionManager(
   def initConnectionManager(): Future[Unit] =
     if (!isInitiated.get())
       hostProvider.findServer() flatMap { server =>
-        connect(server)
-        hostProvider.startPreventiveSearch()
-        Future.Unit
+        connect(server).before(Future(hostProvider.startPreventiveSearch())).unit
       }
     else Future.exception(
       new RuntimeException("ConnectionManager is already initiated"))

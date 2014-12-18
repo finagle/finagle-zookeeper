@@ -216,7 +216,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
       } yield None
     }
 
-    val client2 = Zookeeper
+    val client2 = Zookeeper.client
       .withZkConfiguration(true, true, "/ch1")
       .newRichClient(ipAddress + ":" + port)
 
@@ -265,7 +265,7 @@ class WatcherTest extends StandaloneIntegrationConfig {
       } yield None
     }
 
-    val client2 = Zookeeper
+    val client2 = Zookeeper.client
       .withZkConfiguration(true, true, "/ch1/here/we")
       .newRichClient(ipAddress + ":" + port)
 

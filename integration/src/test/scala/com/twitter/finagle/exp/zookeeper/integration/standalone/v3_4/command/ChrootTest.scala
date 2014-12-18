@@ -15,13 +15,13 @@ import org.scalatest.junit.JUnitRunner
 class ChrootTest extends FunSuite with StandaloneIntegrationConfig {
   test("Chroot works") {
     val clientWCh = Some(
-      Zookeeper
+      Zookeeper.client
         .withAutoReconnect()
         .withZkConfiguration(chroot = "/ch1")
         .newRichClient(ipAddress + ":" + port)
     )
     val client = Some(
-      Zookeeper
+      Zookeeper.client
         .withAutoReconnect()
         .newRichClient(ipAddress + ":" + port)
     )
