@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.transport
 
+import com.twitter.finagle.Status
 import com.twitter.finagle.netty3.ChannelBufferBuf
 import com.twitter.finagle.transport.Transport
 import com.twitter.io.Buf
@@ -13,7 +14,7 @@ class ZkTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
   @volatile private[this] var buf = Buf.Empty
   def remoteAddress: SocketAddress = trans.remoteAddress
   def localAddress: SocketAddress = trans.localAddress
-  def isOpen: Boolean = trans.isOpen
+  def status: Status = trans.status
   val onClose: Future[Throwable] = trans.onClose
   def close(deadline: Time): Future[Unit] = trans.close(deadline)
 
@@ -55,7 +56,7 @@ class BufTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
 
   def remoteAddress: SocketAddress = trans.remoteAddress
   def localAddress: SocketAddress = trans.localAddress
-  def isOpen: Boolean = trans.isOpen
+  def status: Status = trans.status
   val onClose: Future[Throwable] = trans.onClose
   def close(deadline: Time): Future[Unit] = trans.close(deadline)
 
