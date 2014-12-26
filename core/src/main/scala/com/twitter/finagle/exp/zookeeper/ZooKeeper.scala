@@ -5,7 +5,8 @@ import com.twitter.finagle.dispatch.PipeliningDispatcher
 import com.twitter.finagle.exp.zookeeper.client.Params.{AutoReconnect, ZkConfiguration}
 import com.twitter.finagle.exp.zookeeper.client.{Params, ZkClient, ZkDispatcher}
 import com.twitter.finagle.exp.zookeeper.transport.{BufTransport, NettyTrans, ZkTransport, ZookeeperTransporter}
-import com.twitter.finagle.{Client, Name, ServiceFactory, Stack}
+import com.twitter.finagle.transport.Transport
+import com.twitter.finagle.{Client, Name, Service, ServiceFactory, Stack}
 import com.twitter.io.Buf
 import com.twitter.util.Duration
 import com.twitter.util.TimeConversions._
@@ -96,73 +97,68 @@ trait ZookeeperRichClient {self: com.twitter.finagle.Client[ReqPacket, RepPacket
   }
 }
 
-object ZookeeperStackClient extends StackClient[ReqPacket, RepPacket] {
-  type In = ChannelBuffer
-  type Out = ChannelBuffer
-  protected val newTransporter = ZookeeperTransporter(_)
-  protected val newDispatcher: Stack.Params => Dispatcher = { params =>
-    trans => new ZkDispatcher(new ZkTransport(trans))
-  }
+object Zookeeper extends Client[ReqPacket, RepPacket] with ZookeeperRichClient {
 
-  override def newClient(
-    dest: Name,
-    label: String
-  ): ServiceFactory[ReqPacket, RepPacket] = {
-    super.newClient(dest, label)
-  }
-}
-
-class ZookeeperClient(client: StackClient[ReqPacket, RepPacket])
-  extends StackClientLike[ReqPacket, RepPacket, ZookeeperClient](client)
-  with ZookeeperRichClient {
-
-  val params = client.params
-  protected def newInstance(client: StackClient[ReqPacket, RepPacket]) =
-    new ZookeeperClient(client)
-
-  def withAutoReconnect(
-    autoRwServerSearch: Option[Duration] = Some(1.minute),
-    preventiveSearch: Option[Duration] = Some(10.minutes),
-    timeBetweenAttempts: Duration = 30.seconds,
-    timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
-    maxConsecutiveRetries: Int = 10,
-    maxReconnectAttempts: Int = 5
-  ) = configured(
-    Params.AutoReconnect(
-      true,
-      autoRwServerSearch,
-      preventiveSearch,
-      timeBetweenAttempts,
-      timeBetweenLinkCheck,
-      maxConsecutiveRetries,
-      maxReconnectAttempts
-    )
-  )
-
-  def withZkConfiguration(
-    autoWatchReset: Boolean = true,
-    canReadOnly: Boolean = true,
-    chroot: String = "",
-    sessionTimeout: Duration = 3000.milliseconds
-  ) = configured(
-    Params.ZkConfiguration(
-      autoWatchReset,
-      canReadOnly,
-      chroot,
-      sessionTimeout
-    )
-  )
-}
-
-object Zookeeper extends ZookeeperClient(
-  ZookeeperStackClient.configured(
-    DefaultPool.Param(
+  case class Client(
+    stack: Stack[ServiceFactory[ReqPacket, RepPacket]] = StackClient.newStack,
+    params: Stack.Params = StackClient.defaultParams + DefaultPool.Param(
       low = 0, high = 1, bufferSize = 0,
       idleTime = Duration.Top,
-      maxWaiters = Int.MaxValue
+      maxWaiters = Int.MaxValue)
+    ) extends StdStackClient[ReqPacket, RepPacket, Client] with ZookeeperRichClient {
+    protected def copy1(
+      stack: Stack[ServiceFactory[ReqPacket, RepPacket]] = this.stack,
+      params: Stack.Params = this.params
+    ): Client = copy(stack, params)
+
+    type In = ChannelBuffer
+    type Out = ChannelBuffer
+    protected def newTransporter() = ZookeeperTransporter(params)
+    protected def newDispatcher(
+      transport: Transport[ChannelBuffer, ChannelBuffer]
+    ): Service[ReqPacket, RepPacket] =
+      new ZkDispatcher(new ZkTransport(transport))
+
+    def withAutoReconnect(
+      autoRwServerSearch: Option[Duration] = Some(1.minute),
+      preventiveSearch: Option[Duration] = Some(10.minutes),
+      timeBetweenAttempts: Duration = 30.seconds,
+      timeBetweenLinkCheck: Option[Duration] = Some(30.seconds),
+      maxConsecutiveRetries: Int = 10,
+      maxReconnectAttempts: Int = 5
+    ) = configured(
+      Params.AutoReconnect(
+        true,
+        autoRwServerSearch,
+        preventiveSearch,
+        timeBetweenAttempts,
+        timeBetweenLinkCheck,
+        maxConsecutiveRetries,
+        maxReconnectAttempts
+      )
     )
-  )
-)
+
+    def withZkConfiguration(
+      autoWatchReset: Boolean = true,
+      canReadOnly: Boolean = true,
+      chroot: String = "",
+      sessionTimeout: Duration = 3000.milliseconds
+    ) = configured(
+      Params.ZkConfiguration(
+        autoWatchReset,
+        canReadOnly,
+        chroot,
+        sessionTimeout
+      )
+    )
+  }
+
+  val client = Client()
+  val params = client.params
+
+  def newClient(dest: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
+    Client(StackClient.newStack, Stack.Params.empty).newClient(dest, label)
+}
 
 /**
  * Simple client is used to send isro request ( not framed request )

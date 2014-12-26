@@ -1,15 +1,17 @@
 language: scala
 scala:
   - 2.10.4
+  - 2.11.4
 
 jdk:
   - oraclejdk7
+  - oraclejdk8
   - openjdk7
 
 script:
   - "sbt ++$TRAVIS_SCALA_VERSION core/test"
   - "sbt ++$TRAVIS_SCALA_VERSION runTests"
-  
+
 before_install:
   - sudo chmod +x integration/src/main/resources/scripts/runQuorumMode.sh
   - sudo chmod +x integration/src/main/resources/scripts/runStandaloneMode.sh

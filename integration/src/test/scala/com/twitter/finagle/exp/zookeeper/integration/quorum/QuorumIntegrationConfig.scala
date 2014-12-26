@@ -30,7 +30,7 @@ trait QuorumIntegrationConfig extends FunSuite {
     client1 = {
       if (!isPortAvailable(2181))
         Some(
-          Zookeeper
+          Zookeeper.client
             .withAutoReconnect()
             .withZkConfiguration(sessionTimeout = timeOut)
             .newRichClient(ipAddress + ":" + 2181)
@@ -41,7 +41,7 @@ trait QuorumIntegrationConfig extends FunSuite {
     client2 = {
       if (!isPortAvailable(2182))
         Some(
-          Zookeeper
+          Zookeeper.client
             .withAutoReconnect()
             .withZkConfiguration(sessionTimeout = timeOut)
             .newRichClient(ipAddress + ":" + 2182)
@@ -52,7 +52,7 @@ trait QuorumIntegrationConfig extends FunSuite {
     client3 = {
       if (!isPortAvailable(2183))
         Some(
-          Zookeeper
+          Zookeeper.client
             .withAutoReconnect()
             .withZkConfiguration(sessionTimeout = timeOut)
             .newRichClient(ipAddress + ":" + 2183)

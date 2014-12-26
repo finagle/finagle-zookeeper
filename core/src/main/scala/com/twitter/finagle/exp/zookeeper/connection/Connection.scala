@@ -1,5 +1,6 @@
 package com.twitter.finagle.exp.zookeeper.connection
 
+import com.twitter.finagle.Status
 import com.twitter.finagle.exp.zookeeper.{RepPacket, ReqPacket}
 import com.twitter.finagle.{Service, ServiceFactory}
 import com.twitter.util.{Duration, Future, Time}
@@ -65,6 +66,7 @@ class Connection(serviceFactory: ServiceFactory[ReqPacket, RepPacket]) {
     }
   }
 
+  def serviceFactoryStatus: Status = serviceFactory.status
   def isServiceFactoryAvailable: Boolean = serviceFactory.isAvailable
   def isServiceAvailable: Future[Boolean] = service flatMap
     (svc => Future(svc.isAvailable))
