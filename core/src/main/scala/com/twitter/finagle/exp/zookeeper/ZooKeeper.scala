@@ -158,6 +158,9 @@ object Zookeeper extends Client[ReqPacket, RepPacket] with ZookeeperRichClient {
 
   def newClient(dest: Name, label: String): ServiceFactory[ReqPacket, RepPacket] =
     Client(StackClient.newStack, Stack.Params.empty).newClient(dest, label)
+
+  def newService(dest: Name, label: String): Service[ReqPacket, RepPacket] =
+    Client(StackClient.newStack, Stack.Params.empty).newService(dest, label)
 }
 
 /**
@@ -177,6 +180,9 @@ private[finagle] object SimpleClient extends DefaultClient[Buf, Buf](
 private[finagle] object BufClient extends Client[Buf, Buf] {
   override def newClient(dest: Name, label: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest, label)
+
+  override def newService(dest: Name, label: String): Service[Buf, Buf] =
+    SimpleClient.newService(dest, label)
 
   def newSimpleClient(dest: String): ServiceFactory[Buf, Buf] =
     SimpleClient.newClient(dest)
