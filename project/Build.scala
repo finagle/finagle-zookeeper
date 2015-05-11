@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object finaglezk extends Build {
-  val finagleVersion = "6.24.0"
+  val finagleVersion = "6.25.0"
   val clientVersion = "0.2.0"
 
   lazy val root = Project(
@@ -30,10 +30,10 @@ object finaglezk extends Build {
 
   lazy val baseSettings = Seq(
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "2.2.2",
+      "org.scalatest" %% "scalatest" % "2.2.4",
       "com.twitter" %% "finagle-core" % finagleVersion,
       "junit" % "junit" % "4.12",
-      "org.mockito" % "mockito-all" % "1.10.8" % "test"
+      "org.mockito" % "mockito-all" % "1.10.19" % "test"
     )
   )
 
@@ -41,8 +41,8 @@ object finaglezk extends Build {
     name := "finagle-ZooKeeper",
     organization := "com.twitter",
     version := clientVersion,
-    scalaVersion := "2.10.4",
-    crossScalaVersions := Seq("2.10.4", "2.11.4"),
+    scalaVersion := "2.10.5",
+    crossScalaVersions := Seq("2.10.5", "2.11.6"),
     scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
   )
 
